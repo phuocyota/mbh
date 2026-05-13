@@ -92,14 +92,6 @@ export class OrderController {
     return this.orderService.addItemToOrder(id, createOrderItemDto);
   }
 
-  @ApiOperation({ summary: 'Process payment for order' })
-  @ApiParam({ name: 'id', description: 'Order ID' })
-  @ApiResponse({ status: 200, description: 'Payment processed' })
-  @Post(':id/payments')
-  async processPayment(@Param('id') id: string, @Body() paymentDto: any) {
-    return this.orderService.processPayment(id, paymentDto);
-  }
-
   @ApiOperation({ summary: 'Receive cash payment from customer (PENDING_PAYMENT -> READY_TO_PICKUP)' })
   @ApiParam({ name: 'id', description: 'Order ID' })
   @ApiResponse({ status: 200, description: 'Cash payment received, order status updated to ready-to-pickup' })

@@ -13,9 +13,11 @@ import {
   Wallet,
   WalletTransaction,
   Customer,
+  Coupon,
 } from 'src/entities';
 import { ERROR_MESSAGES } from '../../common/constant/error-messages.constant';
 import { OrderNumberService } from './order-number.service';
+import { CouponService } from '../coupon/coupon.service';
 
 @Injectable()
 export class OrderService {
@@ -32,7 +34,10 @@ export class OrderService {
     private walletTransactionRepository: Repository<WalletTransaction>,
     @InjectRepository(Customer)
     private customerRepository: Repository<Customer>,
+    @InjectRepository(Coupon)
+    private couponRepository: Repository<Coupon>,
     private orderNumberService: OrderNumberService,
+    private couponService: CouponService,
   ) {}
 
   async createOrder(createOrderDto: any) {
@@ -155,8 +160,34 @@ export class OrderService {
       );
     }
 
-    // Handle wallet payment
-    if (paymentDto.method === 'WALLET') {
+    let couponDiscount = 0;
+    let couponId: string | null = null;
+    let remainingAmount = Number(paymentDto.amount || 0);
+
+    // Step 1: Apply coupon discount first if provided
+    if (paymentDto.couponId && paymentDto.customerId) {
+      const coupon = await this.couponService.validateAndUseCoupon(
+        paymentDto.couponId,
+        paymentDto.customerId,
+      );
+
+      couponDiscount = Number(coupon.reducePrice);
+      couponId = paymentDto.couponId;
+
+      // Use the coupon
+      const newUsedQuantity = coupon.usedQuantity + 1;
+      const isFullyUsed = newUsedQuantity >= coupon.quantity;
+      await this.couponRepository.update(paymentDto.couponId, {
+        usedQuantity: newUsedQuantity,
+        status: isFullyUsed ? 'USED' : 'ACTIVE',
+      });
+
+      // Reduce the amount to be paid by coupon discount
+      remainingAmount = Math.max(0, remainingAmount - couponDiscount);
+    }
+
+    // Step 2: Handle wallet payment for remaining amount
+    if (remainingAmount > 0 && paymentDto.method === 'WALLET') {
       if (!paymentDto.customerId) {
         throw new BadRequestException('Customer is required for wallet payment');
       }
@@ -171,11 +202,11 @@ export class OrderService {
       if (wallet.status !== 'ACTIVE') {
         throw new BadRequestException('Wallet is not active');
       }
-      if (Number(wallet.balance) < Number(paymentDto.amount)) {
+      if (Number(wallet.balance) < remainingAmount) {
         throw new BadRequestException('Insufficient wallet balance');
       }
 
-      const newBalance = Number(wallet.balance) - Number(paymentDto.amount);
+      const newBalance = Number(wallet.balance) - remainingAmount;
       await this.walletRepository.update(wallet.id, { balance: newBalance });
 
       // Log transaction
@@ -185,7 +216,7 @@ export class OrderService {
         walletId: wallet.id,
         customerId: paymentDto.customerId,
         type: 'PAYMENT',
-        amount: paymentDto.amount,
+        amount: remainingAmount,
         balanceBefore: wallet.balance,
         balanceAfter: newBalance,
         refType: 'ORDER',
@@ -202,19 +233,27 @@ export class OrderService {
 
     await this.paymentRepository.save(payment);
 
-    // Update order status
-    const paidAmount = Number(order.paidAmount || 0) + Number(paymentDto.amount || 0);
+    // Update order status with coupon information
+    const paidAmount =
+      Number(order.paidAmount || 0) + Number(paymentDto.amount || 0);
     const totalAmount = Number(order.totalAmount || 0);
     const isPaid = paidAmount >= totalAmount;
 
-    await this.orderRepository.update(orderId, {
+    const updateData: any = {
       paidAmount: paidAmount,
       changeAmount: paidAmount - totalAmount,
       paymentStatus: isPaid ? 'PAID' : 'PARTIAL',
       paymentMethod: paymentDto.method,
       status: isPaid ? 'PREPARING' : 'DRAFT',
       paidAt: isPaid ? new Date() : undefined,
-    });
+    };
+
+    if (couponId) {
+      updateData.couponId = couponId;
+      updateData.couponDiscount = couponDiscount;
+    }
+
+    await this.orderRepository.update(orderId, updateData);
 
     return payment;
   }

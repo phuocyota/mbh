@@ -35,6 +35,12 @@ export class CompleteCartDto {
   @IsIn(['TAKEAWAY', 'PRE_ORDER'])
   orderType?: 'TAKEAWAY' | 'PRE_ORDER';
 
+  @ApiProperty({ description: 'Coupon ID', required: false })
+  @Transform(({ value }) => value || undefined)
+  @IsOptional()
+  @IsUUID()
+  couponId?: string;
+
   @ApiProperty({ description: 'Order note', required: false })
   @IsOptional()
   @IsString()

@@ -209,6 +209,7 @@ export class CartService {
       method: paymentMethod,
       amount: totalAmount,
       customerId: cartWithItems.customerId,
+      couponId: dto.couponId,
       createdBy: userId,
     });
 

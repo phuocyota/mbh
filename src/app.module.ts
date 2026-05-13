@@ -30,6 +30,7 @@ import { StockTransactionModule } from './modules/stock-transaction/stock-transa
 import { InventoryItemModule } from './modules/inventory-item/inventory-item.module';
 import { ReportsModule } from './modules/reports/reports.module';
 import { CartModule } from './modules/cart/cart.module';
+import { CouponModule } from './modules/coupon/coupon.module';
 
 @Module({
   imports: [
@@ -62,6 +63,7 @@ import { CartModule } from './modules/cart/cart.module';
     InventoryItemModule,
     ReportsModule,
     CartModule,
+    CouponModule,
   ],
   controllers: [AppController],
   providers: [
