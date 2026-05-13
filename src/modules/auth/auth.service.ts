@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -53,5 +53,59 @@ export class AuthService {
     await this.userRepository.save(user);
     const { passwordHash, ...result } = user;
     return result;
+  }
+
+  async loginByCard(cardId: string) {
+    const user = await this.userRepository.findOne({
+      where: { cardId },
+    });
+
+    if (!user) {
+      throw new UnauthorizedException('Card not found or not registered');
+    }
+
+    if (user.status !== 'ACTIVE') {
+      throw new UnauthorizedException('User account is inactive');
+    }
+
+    const { passwordHash, ...userWithoutPassword } = user;
+    return this.login(userWithoutPassword);
+  }
+
+  async loginStudent(dto: { cardId?: string; email?: string; password?: string }) {
+    let user: User | null = null;
+
+    // Login by cardId
+    if (dto.cardId) {
+      user = await this.userRepository.findOne({
+        where: { cardId: dto.cardId },
+      });
+    }
+    // Login by email/password
+    else if (dto.email && dto.password) {
+      user = await this.userRepository.findOne({
+        where: { email: dto.email },
+      });
+      if (user && !(await bcrypt.compare(dto.password, user.passwordHash))) {
+        throw new UnauthorizedException('Invalid credentials');
+      }
+    } else {
+      throw new UnauthorizedException('Please provide cardId or email with password');
+    }
+
+    if (!user) {
+      throw new UnauthorizedException('Student not found');
+    }
+
+    if (user.role !== 'STUDENT') {
+      throw new UnauthorizedException('This endpoint is only for students');
+    }
+
+    if (user.status !== 'ACTIVE') {
+      throw new UnauthorizedException('Student account is inactive');
+    }
+
+    const { passwordHash, ...userWithoutPassword } = user;
+    return this.login(userWithoutPassword);
   }
 }

@@ -43,6 +43,7 @@ export class SeedService {
     const cashierId = uuid();
     const kitchenStaffId = uuid();
 
+    const studentId = uuid();
     const users = [
       {
         id: adminId,
@@ -70,6 +71,16 @@ export class SeedService {
         passwordHash: await bcrypt.hash('kitchen123', 10),
         role: 'KITCHEN',
         status: 'ACTIVE',
+      },
+      {
+        id: studentId,
+        fullName: 'Student User',
+        email: 'student1@pos.local',
+        phone: '0901000004',
+        passwordHash: await bcrypt.hash('student123', 10),
+        role: 'STUDENT',
+        status: 'ACTIVE',
+        cardId: '0089280076',
       },
     ];
 

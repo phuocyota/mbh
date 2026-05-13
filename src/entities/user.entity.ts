@@ -16,10 +16,13 @@ export class User extends BaseEntity {
   passwordHash: string;
 
   @Column('varchar', { default: 'STAFF' })
-  role: string; // ADMIN, MANAGER, CASHIER, KITCHEN, STAFF
+  role: string; // ADMIN, MANAGER, CASHIER, KITCHEN, STAFF, STUDENT
 
   @Column('varchar', { default: 'ACTIVE' })
   status: string; // ACTIVE, INACTIVE
+
+  @Column('uuid', { nullable: true, name: 'card_id' })
+  cardId: string;
 
   // Relations
   @OneToMany('Order', 'cashier')

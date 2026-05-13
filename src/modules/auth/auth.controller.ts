@@ -2,6 +2,8 @@ import { Controller, Post, Body, Request, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBody } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
 import { LocalAuthGuard } from './guards/local-auth.guard';
+import { CardLoginDto } from './dto/card-login.dto';
+import { StudentLoginDto } from './dto/student-login.dto';
 
 @ApiTags('Auth')
 @Controller('api/auth')
@@ -56,5 +58,29 @@ export class AuthController {
       registerDto.password,
       registerDto.fullName,
     );
+  }
+
+  @ApiOperation({ summary: 'Login with card ID' })
+  @ApiBody({ type: CardLoginDto })
+  @ApiResponse({
+    status: 200,
+    description: 'Login successful, returns JWT token',
+  })
+  @ApiResponse({ status: 401, description: 'Unauthorized - Card not found or inactive' })
+  @Post('login-card')
+  async loginByCard(@Body() dto: CardLoginDto) {
+    return this.authService.loginByCard(dto.cardId);
+  }
+
+  @ApiOperation({ summary: 'Student login with card or email/password' })
+  @ApiBody({ type: StudentLoginDto })
+  @ApiResponse({
+    status: 200,
+    description: 'Student login successful, returns JWT token',
+  })
+  @ApiResponse({ status: 401, description: 'Unauthorized - Only students can use this endpoint' })
+  @Post('login/student')
+  async loginStudent(@Body() dto: StudentLoginDto) {
+    return this.authService.loginStudent(dto);
   }
 }

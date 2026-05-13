@@ -41,11 +41,11 @@ export class CreateUserDto {
 
   @ApiProperty({
     description: 'User role',
-    enum: ['ADMIN', 'MANAGER', 'CASHIER', 'KITCHEN', 'STAFF'],
+    enum: ['ADMIN', 'MANAGER', 'CASHIER', 'KITCHEN', 'STAFF', 'STUDENT'],
     default: 'STAFF',
   })
   @IsOptional()
-  @IsEnum(['ADMIN', 'MANAGER', 'CASHIER', 'KITCHEN', 'STAFF'])
+  @IsEnum(['ADMIN', 'MANAGER', 'CASHIER', 'KITCHEN', 'STAFF', 'STUDENT'])
   role?: string;
 
   @ApiProperty({
@@ -56,4 +56,13 @@ export class CreateUserDto {
   @IsOptional()
   @IsEnum(['ACTIVE', 'INACTIVE'])
   status?: string;
+
+  @ApiProperty({
+    description: 'Card ID for RFID/card login',
+    example: '0089280076',
+    required: false,
+  })
+  @IsOptional()
+  @IsString()
+  cardId?: string;
 }
