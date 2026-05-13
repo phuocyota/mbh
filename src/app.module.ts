@@ -31,6 +31,7 @@ import { StockLevelModule } from './modules/stock-level/stock-level.module';
 import { StockTransactionModule } from './modules/stock-transaction/stock-transaction.module';
 import { InventoryItemModule } from './modules/inventory-item/inventory-item.module';
 import { ReportsModule } from './modules/reports/reports.module';
+import { CartModule } from './modules/cart/cart.module';
 
 @Module({
   imports: [
@@ -64,6 +65,7 @@ import { ReportsModule } from './modules/reports/reports.module';
     StockTransactionModule,
     InventoryItemModule,
     ReportsModule,
+    CartModule,
   ],
   controllers: [AppController],
   providers: [

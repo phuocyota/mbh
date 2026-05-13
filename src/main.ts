@@ -5,7 +5,7 @@ import { AppModule } from './app.module';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
-  const port = process.env.PORT || 3001;
+  const port = process.env.PORT || 3002;
 
   // Enable CORS for frontend (cho phép mọi origin local trong dev)
   const corsOrigins = process.env.CORS_ORIGIN

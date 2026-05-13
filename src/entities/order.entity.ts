@@ -10,25 +10,25 @@ export class Order extends BaseEntity {
   @Column('varchar', { unique: true, name: 'order_code' })
   orderCode: string;
 
-  @Column('uuid', { name: 'branch_id' })
+  @Column('uuid', { nullable: true, name: 'branch_id' })
   branchId: string;
 
-  @Column('uuid', { name: 'pos_device_id' })
+  @Column('uuid', { nullable: true, name: 'pos_device_id' })
   posDeviceId: string;
 
   @Column('uuid', { nullable: true, name: 'customer_id' })
   customerId: string;
 
-  @Column('uuid', { name: 'cashier_id' })
+  @Column('uuid', { nullable: true, name: 'cashier_id' })
   cashierId: string;
 
-  @Column('varchar', { name: 'order_type' })
+  @Column('varchar', { nullable: true, name: 'order_type' })
   orderType: string; // DINE_IN, TAKEAWAY, PRE_ORDER
 
-  @Column('varchar', { default: 'DRAFT' })
-  status: string; // DRAFT, PENDING_PAYMENT, PAID, PREPARING, COMPLETED, CANCELLED, REFUNDED
+  @Column('varchar', { default: 'Pending' })
+  status: string; // Pending, DONE, waiting
 
-  @Column('numeric', { precision: 12, scale: 2 })
+  @Column('numeric', { nullable: true, precision: 12, scale: 2 })
   subtotal: number;
 
   @Column('numeric', {
@@ -39,7 +39,7 @@ export class Order extends BaseEntity {
   })
   discountAmount: number;
 
-  @Column('numeric', { precision: 12, scale: 2, name: 'total_amount' })
+  @Column('numeric', { nullable: true, precision: 12, scale: 2, name: 'total_amount' })
   totalAmount: number;
 
   @Column('numeric', {

@@ -20,3 +20,5 @@ export { KitchenTicketItem } from './kitchen-ticket-item.entity';
 export { StockLevel } from './stock-level.entity';
 export { StockTransaction } from './stock-transaction.entity';
 export { InventoryItem } from './inventory-item.entity';
+export { Cart } from './cart.entity';
+export { CartItem } from './cart-item.entity';

@@ -22,6 +22,9 @@ export class Customer extends BaseEntity {
   @Column('varchar', { default: 'ACTIVE' })
   status: string;
 
+  @Column('uuid', { nullable: true, name: 'user_id', unique: true })
+  userId: string;
+
   // Relations
   @OneToMany(() => Card, (card) => card.customer)
   cards: Card[];
