@@ -18,7 +18,7 @@ import { KioskCheckoutDto } from './dto/kiosk-checkout.dto';
 import { CustomerService } from '../customer/customer.service';
 
 @ApiTags('Kiosk')
-@Controller('api/kiosk')
+@Controller('kiosk')
 export class KioskController {
   constructor(
     private orderService: OrderService,

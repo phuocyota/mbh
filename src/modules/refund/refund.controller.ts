@@ -29,7 +29,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
 @ApiTags('Refunds')
 @ApiBearerAuth()
-@Controller('api/refunds')
+@Controller('refunds')
 export class RefundController {
   constructor(private refundService: RefundService) {}
 

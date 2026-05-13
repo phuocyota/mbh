@@ -22,7 +22,7 @@ import { CashMovementDto } from './dto/cash-movement.dto';
 
 @ApiTags('Cash Movements')
 @ApiBearerAuth()
-@Controller('api/cash-movements')
+@Controller('cash-movements')
 export class CashMovementController {
   constructor(private cashMovementService: CashMovementService) {}
 

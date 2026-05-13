@@ -22,7 +22,7 @@ import { KitchenTicketItemDto } from './dto/kitchen-ticket-item.dto';
 
 @ApiTags('Kitchen Ticket Items')
 @ApiBearerAuth()
-@Controller('api/kitchen-ticket-items')
+@Controller('kitchen-ticket-items')
 export class KitchenTicketItemController {
   constructor(private kitchenTicketItemService: KitchenTicketItemService) {}
 

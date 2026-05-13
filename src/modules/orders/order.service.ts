@@ -445,7 +445,26 @@ export class OrderService {
     return query.getMany();
   }
 
-  async cancelOrder(orderId: string) {
+  async updateStatus(orderId: string, status: string) {
+    const order = await this.orderRepository.findOne({
+      where: { id: orderId },
+    });
+
+    if (!order) {
+      throw new NotFoundException(
+        ERROR_MESSAGES.NOT_FOUND_WITH_ID('Order', orderId),
+      );
+    }
+
+    await this.orderRepository.update(orderId, {
+      status,
+      updatedAt: new Date(),
+    });
+
+    return this.getOrderWithItems(orderId);
+  }
+
+  async cancelOrder(orderId: string, dto?: { reason?: string; isRefunded?: boolean }) {
     const order = await this.orderRepository.findOne({
       where: { id: orderId },
     });
@@ -461,10 +480,36 @@ export class OrderService {
     }
 
     await this.orderRepository.update(orderId, {
-      status: 'Pending',
+      status: 'cancelled',
       cancelledAt: new Date(),
     });
 
-    return this.getOrderWithItems(orderId);
+    // Return order with cancel info (for FE compatibility)
+    const updatedOrder = await this.getOrderWithItems(orderId);
+    return {
+      ...updatedOrder,
+      isRefunded: dto?.isRefunded ?? true,
+      cancelReason: dto?.reason ?? 'Không có lý do',
+    };
+  }
+
+  async deleteOrder(orderId: string) {
+    const order = await this.orderRepository.findOne({
+      where: { id: orderId },
+    });
+
+    if (!order) {
+      throw new NotFoundException(
+        ERROR_MESSAGES.NOT_FOUND_WITH_ID('Order', orderId),
+      );
+    }
+
+    // Delete order items first (if cascade not set)
+    await this.orderItemRepository.delete({ orderId });
+
+    // Delete order
+    await this.orderRepository.delete(orderId);
+
+    return { message: 'Order deleted successfully' };
   }
 }

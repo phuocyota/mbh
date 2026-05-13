@@ -22,7 +22,7 @@ import { PaymentDto } from './dto/payment.dto';
 
 @ApiTags('Payments')
 @ApiBearerAuth()
-@Controller('api/payments')
+@Controller('payments')
 export class PaymentController {
   constructor(private paymentService: PaymentService) {}
 

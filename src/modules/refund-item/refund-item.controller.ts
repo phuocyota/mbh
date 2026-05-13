@@ -22,7 +22,7 @@ import { RefundItemDto } from './dto/refund-item.dto';
 
 @ApiTags('Refund Items')
 @ApiBearerAuth()
-@Controller('api/refund-items')
+@Controller('refund-items')
 export class RefundItemController {
   constructor(private refundItemService: RefundItemService) {}
 

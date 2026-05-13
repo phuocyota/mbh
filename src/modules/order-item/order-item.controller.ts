@@ -22,7 +22,7 @@ import { OrderItemDto } from './dto/order-item.dto';
 
 @ApiTags('Order Items')
 @ApiBearerAuth()
-@Controller('api/order-items')
+@Controller('order-items')
 export class OrderItemController {
   constructor(private orderItemService: OrderItemService) {}
 

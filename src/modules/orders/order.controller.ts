@@ -7,6 +7,7 @@ import {
   UseGuards,
   Query,
   Put,
+  Delete,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -15,13 +16,15 @@ import {
   ApiBearerAuth,
   ApiParam,
   ApiQuery,
+  ApiBody,
 } from '@nestjs/swagger';
 import { OrderService } from './order.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { CancelOrderDto } from './dto/cancel-order.dto';
 
 @ApiTags('Orders')
 @ApiBearerAuth()
-@Controller('api/orders')
+@Controller('orders')
 @UseGuards(JwtAuthGuard)
 export class OrderController {
   constructor(private orderService: OrderService) {}
@@ -72,19 +75,41 @@ export class OrderController {
     return this.orderService.processPayment(id, paymentDto);
   }
 
-  @ApiOperation({ summary: 'Complete order' })
+  // FE Actions APIs
+
+  @ApiOperation({ summary: 'Set order status to pending' })
+  @ApiParam({ name: 'id', description: 'Order ID' })
+  @ApiResponse({ status: 200, description: 'Order status set to pending' })
+  @Put(':id/pending')
+  async setPending(@Param('id') id: string) {
+    return this.orderService.updateStatus(id, 'Pending');
+  }
+
+  @ApiOperation({ summary: 'Set order status to done (complete)' })
   @ApiParam({ name: 'id', description: 'Order ID' })
   @ApiResponse({ status: 200, description: 'Order completed' })
-  @Put(':id/complete')
-  async completeOrder(@Param('id') id: string) {
+  @Put(':id/done')
+  async setDone(@Param('id') id: string) {
     return this.orderService.completeOrder(id);
   }
 
-  @ApiOperation({ summary: 'Cancel order' })
+  @ApiOperation({ summary: 'Cancel order with refund info' })
   @ApiParam({ name: 'id', description: 'Order ID' })
-  @ApiResponse({ status: 200, description: 'Order cancelled' })
+  @ApiBody({ type: CancelOrderDto })
+  @ApiResponse({ status: 200, description: 'Order cancelled with refund info' })
   @Put(':id/cancel')
-  async cancelOrder(@Param('id') id: string) {
-    return this.orderService.cancelOrder(id);
+  async cancelOrder(
+    @Param('id') id: string,
+    @Body() dto: CancelOrderDto,
+  ) {
+    return this.orderService.cancelOrder(id, dto);
+  }
+
+  @ApiOperation({ summary: 'Remove/delete order' })
+  @ApiParam({ name: 'id', description: 'Order ID' })
+  @ApiResponse({ status: 200, description: 'Order removed' })
+  @Delete(':id')
+  async removeOrder(@Param('id') id: string) {
+    return this.orderService.deleteOrder(id);
   }
 }

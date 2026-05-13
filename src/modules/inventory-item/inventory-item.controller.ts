@@ -22,7 +22,7 @@ import { InventoryItemDto } from './dto/inventory-item.dto';
 
 @ApiTags('Inventory Items')
 @ApiBearerAuth()
-@Controller('api/inventory-items')
+@Controller('inventory-items')
 export class InventoryItemController {
   constructor(private inventoryItemService: InventoryItemService) {}
 

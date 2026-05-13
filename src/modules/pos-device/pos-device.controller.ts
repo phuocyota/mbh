@@ -22,7 +22,7 @@ import { POSDeviceDto } from './dto/pos-device.dto';
 
 @ApiTags('POS Devices')
 @ApiBearerAuth()
-@Controller('api/pos-devices')
+@Controller('pos-devices')
 export class POSDeviceController {
   constructor(private posDeviceService: POSDeviceService) {}
 

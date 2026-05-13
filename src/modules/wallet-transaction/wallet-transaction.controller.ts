@@ -22,7 +22,7 @@ import { WalletTransactionDto } from './dto/wallet-transaction.dto';
 
 @ApiTags('Wallet Transactions')
 @ApiBearerAuth()
-@Controller('api/wallet-transactions')
+@Controller('wallet-transactions')
 export class WalletTransactionController {
   constructor(private walletTransactionService: WalletTransactionService) {}
 

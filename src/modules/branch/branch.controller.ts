@@ -22,7 +22,7 @@ import { BranchDto } from './dto/branch.dto';
 
 @ApiTags('Branches')
 @ApiBearerAuth()
-@Controller('api/branches')
+@Controller('branches')
 export class BranchController {
   constructor(private branchService: BranchService) {}
 

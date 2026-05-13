@@ -22,7 +22,7 @@ import { StudentProfileDto } from './dto/student-profile.dto';
 
 @ApiTags('Student Profiles')
 @ApiBearerAuth()
-@Controller('api/student-profiles')
+@Controller('student-profiles')
 export class StudentProfileController {
   constructor(private studentProfileService: StudentProfileService) {}
 

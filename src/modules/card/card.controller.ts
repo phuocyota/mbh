@@ -22,7 +22,7 @@ import { CardDto } from './dto/card.dto';
 
 @ApiTags('Cards')
 @ApiBearerAuth()
-@Controller('api/cards')
+@Controller('cards')
 export class CardController {
   constructor(private cardService: CardService) {}
 

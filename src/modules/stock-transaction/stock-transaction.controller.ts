@@ -22,7 +22,7 @@ import { StockTransactionDto } from './dto/stock-transaction.dto';
 
 @ApiTags('Stock Transactions')
 @ApiBearerAuth()
-@Controller('api/stock-transactions')
+@Controller('stock-transactions')
 export class StockTransactionController {
   constructor(private stockTransactionService: StockTransactionService) {}
 

@@ -160,10 +160,10 @@ npm install
 npm run start:dev
 ```
 
-Mặc định backend chạy ở port `3001`. Swagger ở:
+Mặc định backend chạy ở port `3002`. Swagger ở:
 
 ```text
-http://localhost:3001/api/docs
+http://localhost:3002/api/docs
 ```
 
 Frontend:

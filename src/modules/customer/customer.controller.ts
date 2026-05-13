@@ -24,7 +24,7 @@ import { CustomerDto } from './dto/customer.dto';
 
 @ApiTags('Customers')
 @ApiBearerAuth()
-@Controller('api/customers')
+@Controller('customers')
 export class CustomerController {
   constructor(private customerService: CustomerService) {}
 

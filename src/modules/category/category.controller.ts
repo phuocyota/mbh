@@ -22,7 +22,7 @@ import { CategoryDto } from './dto/category.dto';
 
 @ApiTags('Categories')
 @ApiBearerAuth()
-@Controller('api/categories')
+@Controller('categories')
 export class CategoryController {
   constructor(private categoryService: CategoryService) {}
 

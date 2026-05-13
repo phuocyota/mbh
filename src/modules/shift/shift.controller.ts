@@ -22,7 +22,7 @@ import { ShiftDto } from './dto/shift.dto';
 
 @ApiTags('Shifts')
 @ApiBearerAuth()
-@Controller('api/shifts')
+@Controller('shifts')
 export class ShiftController {
   constructor(private shiftService: ShiftService) {}
 

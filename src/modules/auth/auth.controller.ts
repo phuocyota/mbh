@@ -6,7 +6,7 @@ import { CardLoginDto } from './dto/card-login.dto';
 import { StudentLoginDto } from './dto/student-login.dto';
 
 @ApiTags('Auth')
-@Controller('api/auth')
+@Controller('auth')
 export class AuthController {
   constructor(private authService: AuthService) {}
 
