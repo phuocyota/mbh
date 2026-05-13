@@ -126,14 +126,6 @@ export class OrderController {
     return this.orderService.completeOrder(id);
   }
 
-  @ApiOperation({ summary: 'Complete order' })
-  @ApiParam({ name: 'id', description: 'Order ID' })
-  @ApiResponse({ status: 200, description: 'Order completed' })
-  @Put(':id/complete')
-  async complete(@Param('id') id: string) {
-    return this.orderService.completeOrder(id);
-  }
-
   @ApiOperation({ summary: 'Student confirms they received their order' })
   @ApiParam({ name: 'id', description: 'Order ID' })
   @ApiResponse({ status: 200, description: 'Order marked as received by student' })
