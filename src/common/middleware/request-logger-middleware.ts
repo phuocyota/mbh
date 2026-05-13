@@ -8,7 +8,7 @@ export class RequestLoggerMiddleware implements NestMiddleware {
       method: req.method,
       url: req.originalUrl,
       ip: req.ip,
-      body: req.body ? JSON.stringify(req.body) : null,
+      body: req.body && Object.keys(req.body).length > 0 ? req.body : null,
     });
     next();
   }

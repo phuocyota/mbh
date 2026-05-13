@@ -20,7 +20,7 @@ Login bằng thẻ:
 
 ```json
 {
-  "cardId": "0089280076",
+  "cardId": "0089615227",
   "deviceId": "student-app"
 }
 ```

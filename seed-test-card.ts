@@ -64,114 +64,165 @@ const seedTestCard = async () => {
       console.log('✅ Class already exists:', classEntity.id);
     }
 
-    // 3. Create User (STUDENT)
-    const userEmail = 'teststudent@test.local';
-    let user = await connection.getRepository(User).findOne({
-      where: { email: userEmail },
-    });
-    if (!user) {
-      const hashedPassword = await bcrypt.hash('password123', 10);
-      user = connection.getRepository(User).create({
-        id: uuidv4(),
-        email: userEmail,
-        passwordHash: hashedPassword,
-        fullName: 'Test Student',
-        role: 'STUDENT',
-        status: 'ACTIVE',
-      });
-      await connection.getRepository(User).save(user);
-      console.log('✅ User created:', user.id, '(email:', userEmail + ')');
-    } else {
-      console.log('✅ User already exists:', user.id);
-    }
+    const seedStudents = [
+      {
+        cardId: '5000',
+        walletBalance: 5000,
+        email: 'teststudent5000@test.local',
+        fullName: 'Test Student 5000',
+        customerCode: 'CUST-TEST-5000',
+        phone: '0500050000',
+        studentCode: 'STU5000',
+      },
+      {
+        cardId: '10000',
+        walletBalance: 10000,
+        email: 'teststudent10000@test.local',
+        fullName: 'Test Student 10000',
+        customerCode: 'CUST-TEST-10000',
+        phone: '0100010000',
+        studentCode: 'STU10000',
+      },
+    ];
 
-    // 4. Create Customer
-    let customer = await connection.getRepository(Customer).findOne({
-      where: { userId: user.id },
-    });
-    if (!customer) {
-      customer = connection.getRepository(Customer).create({
-        customerCode: 'CUST-' + uuidv4().substring(0, 8),
-        fullName: 'Test Student Customer',
-        phone: '0123456789',
-        type: 'STUDENT',
-        status: 'ACTIVE',
-        userId: user.id,
-      });
-      await connection.getRepository(Customer).save(customer);
-      console.log('✅ Customer created:', customer.id);
-    } else {
-      console.log('✅ Customer already exists:', customer.id);
-    }
+    const seededRecords: Array<{
+      user: User;
+      customer: Customer;
+      wallet: Wallet;
+      studentProfile: StudentProfile;
+      studentCard: StudentCard;
+      cardId: string;
+    }> = [];
 
-    // 5. Create Wallet
-    let wallet = await connection.getRepository(Wallet).findOne({
-      where: { customerId: customer.id },
-    });
-    if (!wallet) {
-      wallet = connection.getRepository(Wallet).create({
-        id: uuidv4(),
-        customerId: customer.id,
-        balance: 500000, // 500k initial balance
-        status: 'ACTIVE',
-      });
-      await connection.getRepository(Wallet).save(wallet);
-      console.log('✅ Wallet created:', wallet.id, '(balance: 500,000)');
-    } else {
-      console.log('✅ Wallet already exists:', wallet.id);
-    }
+    for (const seedStudent of seedStudents) {
+      console.log('\nSeeding test student for card:', seedStudent.cardId);
 
-    // 6. Create StudentProfile
-    let studentProfile = await connection.getRepository(StudentProfile).findOne({
-      where: { customerId: customer.id },
-    });
-    if (!studentProfile) {
-      studentProfile = connection.getRepository(StudentProfile).create({
-        id: uuidv4(),
-        customerId: customer.id,
-        classId: classEntity.id,
-        studentCode: 'STU001',
-        fullName: 'Test Student Profile',
+      let user = await connection.getRepository(User).findOne({
+        where: { email: seedStudent.email },
       });
-      await connection.getRepository(StudentProfile).save(studentProfile);
-      console.log('✅ StudentProfile created:', studentProfile.id);
-    } else {
-      console.log('✅ StudentProfile already exists:', studentProfile.id);
-    }
+      if (!user) {
+        const hashedPassword = await bcrypt.hash('password123', 10);
+        user = connection.getRepository(User).create({
+          id: uuidv4(),
+          email: seedStudent.email,
+          passwordHash: hashedPassword,
+          fullName: seedStudent.fullName,
+          role: 'STUDENT',
+          status: 'ACTIVE',
+        });
+        await connection.getRepository(User).save(user);
+        console.log('✅ User created:', user.id, '(email:', seedStudent.email + ')');
+      } else {
+        console.log('✅ User already exists:', user.id);
+      }
 
-    // 7. Create StudentCard
-    const cardUid = '0089280076';
-    let studentCard = await connection.getRepository(StudentCard).findOne({
-      where: [{ cardUid }, { cardNumber: cardUid }],
-    });
-    if (!studentCard) {
-      studentCard = connection.getRepository(StudentCard).create({
-        id: uuidv4(),
-        studentProfileId: studentProfile.id,
-        cardUid,
-        cardNumber: cardUid,
-        status: 'ACTIVE',
-        issuedAt: new Date(),
-        expiredAt: new Date(new Date().getTime() + 365 * 24 * 60 * 60 * 1000), // 1 year from now
+      let customer = await connection.getRepository(Customer).findOne({
+        where: { userId: user.id },
       });
-      await connection.getRepository(StudentCard).save(studentCard);
-      console.log('✅ StudentCard created:', studentCard.id);
-    } else {
-      console.log('✅ StudentCard already exists:', studentCard.id);
+      if (!customer) {
+        customer = connection.getRepository(Customer).create({
+          customerCode: seedStudent.customerCode,
+          fullName: seedStudent.fullName,
+          phone: seedStudent.phone,
+          type: 'STUDENT',
+          status: 'ACTIVE',
+          userId: user.id,
+        });
+        await connection.getRepository(Customer).save(customer);
+        console.log('✅ Customer created:', customer.id);
+      } else {
+        console.log('✅ Customer already exists:', customer.id);
+      }
+
+      let wallet = await connection.getRepository(Wallet).findOne({
+        where: { customerId: customer.id },
+      });
+      if (!wallet) {
+        wallet = connection.getRepository(Wallet).create({
+          id: uuidv4(),
+          customerId: customer.id,
+          balance: seedStudent.walletBalance,
+          status: 'ACTIVE',
+        });
+        await connection.getRepository(Wallet).save(wallet);
+        console.log('✅ Wallet created:', wallet.id, '(balance:', seedStudent.walletBalance + ')');
+      } else {
+        wallet.balance = seedStudent.walletBalance;
+        wallet.status = 'ACTIVE';
+        await connection.getRepository(Wallet).save(wallet);
+        console.log('✅ Wallet updated:', wallet.id, '(balance:', seedStudent.walletBalance + ')');
+      }
+
+      let studentProfile = await connection.getRepository(StudentProfile).findOne({
+        where: { customerId: customer.id },
+      });
+      if (!studentProfile) {
+        studentProfile = connection.getRepository(StudentProfile).create({
+          id: uuidv4(),
+          customerId: customer.id,
+          classId: classEntity.id,
+          studentCode: seedStudent.studentCode,
+          fullName: seedStudent.fullName,
+        });
+        await connection.getRepository(StudentProfile).save(studentProfile);
+        console.log('✅ StudentProfile created:', studentProfile.id);
+      } else {
+        studentProfile.classId = classEntity.id;
+        studentProfile.studentCode = seedStudent.studentCode;
+        studentProfile.fullName = seedStudent.fullName;
+        await connection.getRepository(StudentProfile).save(studentProfile);
+        console.log('✅ StudentProfile updated:', studentProfile.id);
+      }
+
+      let studentCard = await connection.getRepository(StudentCard).findOne({
+        where: [{ cardUid: seedStudent.cardId }, { cardNumber: seedStudent.cardId }],
+      });
+      if (!studentCard) {
+        studentCard = connection.getRepository(StudentCard).create({
+          id: uuidv4(),
+          studentProfileId: studentProfile.id,
+          cardUid: seedStudent.cardId,
+          cardNumber: seedStudent.cardId,
+          status: 'ACTIVE',
+          issuedAt: new Date(),
+          expiredAt: new Date(new Date().getTime() + 365 * 24 * 60 * 60 * 1000),
+        });
+        await connection.getRepository(StudentCard).save(studentCard);
+        console.log('✅ StudentCard created:', studentCard.id, '(card:', seedStudent.cardId + ')');
+      } else {
+        studentCard.studentProfileId = studentProfile.id;
+        studentCard.cardUid = seedStudent.cardId;
+        studentCard.cardNumber = seedStudent.cardId;
+        studentCard.status = 'ACTIVE';
+        await connection.getRepository(StudentCard).save(studentCard);
+        console.log('✅ StudentCard updated:', studentCard.id, '(card:', seedStudent.cardId + ')');
+      }
+
+      seededRecords.push({
+        user,
+        customer,
+        wallet,
+        studentProfile,
+        studentCard,
+        cardId: seedStudent.cardId,
+      });
     }
 
     console.log('\n✅ Seed completed successfully!');
     console.log('\n📋 Test Data Summary:');
-    console.log('├─ User Email:', userEmail);
-    console.log('├─ User ID:', user.id);
-    console.log('├─ Customer ID:', customer.id);
-    console.log('├─ StudentProfile ID:', studentProfile.id);
-    console.log('├─ RFID/Card ID string:', cardUid);
-    console.log('├─ StudentCard ID:', studentCard.id);
-    console.log('└─ Wallet Balance:', '500,000');
+    for (const record of seededRecords) {
+      console.log('├─ Card ID:', record.cardId);
+      console.log('│  ├─ User Email:', record.user.email);
+      console.log('│  ├─ User ID:', record.user.id);
+      console.log('│  ├─ Customer ID:', record.customer.id);
+      console.log('│  ├─ StudentProfile ID:', record.studentProfile.id);
+      console.log('│  ├─ StudentCard ID:', record.studentCard.id);
+      console.log('│  └─ Wallet Balance:', record.wallet.balance);
+    }
     console.log('\n🧪 Test Login:');
     console.log('POST http://localhost:3002/auth/login-card');
-    console.log('Body: {"cardId":"0089280076"}');
+    console.log('Body: {"cardId":"5000"}');
+    console.log('Body: {"cardId":"10000"}');
   } catch (error) {
     console.error('❌ Seed error:', error);
   } finally {

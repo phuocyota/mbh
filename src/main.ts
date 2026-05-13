@@ -3,6 +3,8 @@ import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { ValidationPipe } from '@nestjs/common';
 import { AppModule } from './app.module';
 import { ResponseInterceptor } from './common/interceptors/response.interceptor';
+import { ResponseLoggerInterceptor } from './common/interceptors/response-logger.interceptor';
+import { RequestLoggerMiddleware } from './common/middleware/request-logger-middleware';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -27,8 +29,15 @@ async function bootstrap() {
     }),
   );
 
+  // Global request/response logs
+  const requestLogger = new RequestLoggerMiddleware();
+  app.use(requestLogger.use.bind(requestLogger));
+
   // Global response interceptor (success, message, data format)
-  app.useGlobalInterceptors(new ResponseInterceptor());
+  app.useGlobalInterceptors(
+    new ResponseLoggerInterceptor(),
+    new ResponseInterceptor(),
+  );
 
   // Swagger configuration
   const config = new DocumentBuilder()
