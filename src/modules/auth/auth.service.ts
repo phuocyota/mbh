@@ -122,12 +122,43 @@ export class AuthService {
   }
 
   async loginByCard(cardId: string, deviceId?: string) {
+    const studentCard = await this.studentCardRepository
+      .createQueryBuilder('studentCard')
+      .innerJoinAndSelect('studentCard.card', 'card')
+      .innerJoinAndSelect('studentCard.studentProfile', 'studentProfile')
+      .innerJoinAndSelect('studentProfile.customer', 'customer')
+      .where('(card.cardUid = :cardId OR card.cardNumber = :cardId)', {
+        cardId,
+      })
+      .getOne();
+
+    if (!studentCard) {
+      throw new UnauthorizedException('Card not found or not registered');
+    }
+
+    if (studentCard.status !== 'ACTIVE') {
+      throw new UnauthorizedException(`Student card is ${studentCard.status}`);
+    }
+
+    if (studentCard.card.status !== 'ACTIVE') {
+      throw new UnauthorizedException(`Card is ${studentCard.card.status}`);
+    }
+
+    if (studentCard.expiredAt && studentCard.expiredAt < new Date()) {
+      throw new UnauthorizedException('Student card is expired');
+    }
+
+    const customer = studentCard.studentProfile.customer;
+    if (!customer?.userId) {
+      throw new UnauthorizedException('Card is not linked to a user account');
+    }
+
     const user = await this.userRepository.findOne({
-      where: { cardId },
+      where: { id: customer.userId },
     });
 
     if (!user) {
-      throw new UnauthorizedException('Card not found or not registered');
+      throw new UnauthorizedException('User not found');
     }
 
     if (user.status !== 'ACTIVE') {

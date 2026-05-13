@@ -21,9 +21,6 @@ export class User extends BaseEntity {
   @Column('varchar', { default: 'ACTIVE' })
   status: string; // ACTIVE, INACTIVE
 
-  @Column('varchar', { nullable: true, name: 'card_id', unique: true })
-  cardId: string;
-
   @Column('varchar', { nullable: true })
   avatar: string;
 
