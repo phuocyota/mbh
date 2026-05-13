@@ -330,9 +330,8 @@ export class OrderService {
     const payment = this.paymentRepository.create({
       orderId: orderId,
       method: 'CASH',
-      amount: paymentDto.amount,
+      amount: Number(paymentDto.amount),
       status: 'SUCCESS',
-      createdBy: paymentDto.createdBy,
     });
     await this.paymentRepository.save(payment);
 
