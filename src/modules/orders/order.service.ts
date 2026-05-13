@@ -37,6 +37,7 @@ export class OrderService {
 
   async createOrder(createOrderDto: any) {
     const orderCode = `ORD${Date.now()}${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
+    const orderNumber = await this.orderNumberService.generateNextOrderNumber();
 
     const items = Array.isArray(createOrderDto.items)
       ? createOrderDto.items.map((item: any) => {
@@ -80,6 +81,7 @@ export class OrderService {
       ...createOrderDto,
       items: undefined,
       orderCode: orderCode,
+      orderNumber: orderNumber,
       status: 'Pending',
       paymentStatus: 'UNPAID',
       paymentMethod: createOrderDto.paymentMethod ?? null,
@@ -232,13 +234,9 @@ export class OrderService {
       throw new BadRequestException('Order must be fully paid before completion');
     }
 
-    // Generate order number (auto-assign with gap-filling logic)
-    const orderNumber = await this.orderNumberService.generateNextOrderNumber();
-
     await this.orderRepository.update(orderId, {
       status: 'DONE',
       completedAt: new Date(),
-      orderNumber,
     });
 
     return this.getOrderWithItems(orderId);
