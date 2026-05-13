@@ -42,6 +42,13 @@ export class ProductController {
     return this.productService.findAllCategories();
   }
 
+  @ApiOperation({ summary: 'Get active categories with active products' })
+  @ApiResponse({ status: 200, description: 'List of categories with products' })
+  @Get('full')
+  async findAllCategoriesWithProducts() {
+    return this.productService.findAllCategoriesWithProducts();
+  }
+
   @ApiOperation({ summary: 'Get product by ID' })
   @ApiParam({ name: 'id', description: 'Product ID' })
   @ApiResponse({ status: 200, description: 'Product details' })

@@ -14,6 +14,7 @@ import { CartService } from './cart.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { AddCartItemDto } from './dto/add-cart-item.dto';
 import { UpdateCartItemDto } from './dto/update-cart-item.dto';
+import { CompleteCartDto } from './dto/complete-cart.dto';
 
 @ApiTags('Cart')
 @ApiBearerAuth()
@@ -30,25 +31,6 @@ export class CartController {
     return this.cartService.getOrCreateCart(undefined, undefined, undefined, userId);
   }
 
-  @ApiOperation({ summary: 'Get cart by ID' })
-  @ApiParam({ name: 'id', description: 'Cart ID' })
-  @ApiResponse({ status: 200, description: 'Cart details' })
-  @Get(':id')
-  async getCart(@Param('id') id: string) {
-    return this.cartService.getCart(id);
-  }
-
-  @ApiOperation({ summary: 'Add item to cart' })
-  @ApiParam({ name: 'id', description: 'Cart ID' })
-  @ApiResponse({ status: 201, description: 'Item added to cart' })
-  @Post(':id/items')
-  async addItem(
-    @Param('id') id: string,
-    @Body() dto: AddCartItemDto,
-  ) {
-    return this.cartService.addItem(id, dto.productId, dto.quantity, dto.note);
-  }
-
   @ApiOperation({ summary: 'Add item to my cart (via JWT token)' })
   @ApiResponse({ status: 201, description: 'Item added to cart' })
   @Post('me/items')
@@ -58,23 +40,36 @@ export class CartController {
     return this.cartService.addItem(cart.id, dto.productId, dto.quantity, dto.note);
   }
 
-  @ApiOperation({ summary: 'Update item quantity' })
+  @ApiOperation({ summary: 'Update item quantity in my cart' })
   @ApiParam({ name: 'itemId', description: 'Cart Item ID' })
   @ApiResponse({ status: 200, description: 'Item updated' })
-  @Put('items/:itemId')
+  @Put('me/items/:itemId')
   async updateItemQuantity(
+    @Req() req: any,
     @Param('itemId') itemId: string,
     @Body() dto: UpdateCartItemDto,
   ) {
-    return this.cartService.updateItemQuantity(itemId, dto.quantity);
+    const userId = req.user?.userId;
+    const cart = await this.cartService.getOrCreateCart(undefined, undefined, undefined, userId);
+    return this.cartService.updateItemQuantity(cart.id, itemId, dto.quantity);
   }
 
-  @ApiOperation({ summary: 'Remove item from cart' })
+  @ApiOperation({ summary: 'Remove item from my cart' })
   @ApiParam({ name: 'itemId', description: 'Cart Item ID' })
   @ApiResponse({ status: 200, description: 'Item removed' })
-  @Delete('items/:itemId')
-  async removeItem(@Param('itemId') itemId: string) {
-    return this.cartService.removeItem(itemId);
+  @Delete('me/items/:itemId')
+  async removeItem(@Req() req: any, @Param('itemId') itemId: string) {
+    const userId = req.user?.userId;
+    const cart = await this.cartService.getOrCreateCart(undefined, undefined, undefined, userId);
+    return this.cartService.removeItem(cart.id, itemId);
+  }
+
+  @ApiOperation({ summary: 'Complete my cart and create an order' })
+  @ApiResponse({ status: 201, description: 'Order created from cart' })
+  @Post('me/complete')
+  async completeMyCart(@Req() req: any, @Body() dto: CompleteCartDto) {
+    const userId = req.user?.userId;
+    return this.cartService.completeCart(userId, dto);
   }
 
   @ApiOperation({ summary: 'Clear my cart (via JWT token)' })

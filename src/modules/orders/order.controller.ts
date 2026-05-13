@@ -8,6 +8,7 @@ import {
   Query,
   Put,
   Delete,
+  Req,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -39,6 +40,22 @@ export class OrderController {
     @Query('status') status?: string,
   ) {
     return this.orderService.findAll(branchId, status);
+  }
+
+  @ApiOperation({ summary: 'Get orders waiting for cash payment' })
+  @ApiQuery({ name: 'branchId', required: false })
+  @ApiResponse({ status: 200, description: 'List of cash payment pending orders' })
+  @Get('pending-cash')
+  async findPendingCash(@Query('branchId') branchId?: string) {
+    return this.orderService.findPendingCashOrders(branchId);
+  }
+
+  @ApiOperation({ summary: 'Get orders currently preparing' })
+  @ApiQuery({ name: 'branchId', required: false })
+  @ApiResponse({ status: 200, description: 'List of preparing orders' })
+  @Get('preparing')
+  async findPreparing(@Query('branchId') branchId?: string) {
+    return this.orderService.findPreparingOrders(branchId);
   }
 
   @ApiOperation({ summary: 'Get order with items and payments' })
@@ -91,6 +108,31 @@ export class OrderController {
   @Put(':id/done')
   async setDone(@Param('id') id: string) {
     return this.orderService.completeOrder(id);
+  }
+
+  @ApiOperation({ summary: 'Complete order' })
+  @ApiParam({ name: 'id', description: 'Order ID' })
+  @ApiResponse({ status: 200, description: 'Order completed' })
+  @Put(':id/complete')
+  async complete(@Param('id') id: string) {
+    return this.orderService.completeOrder(id);
+  }
+
+  @ApiOperation({ summary: 'Student confirms they received their order' })
+  @ApiParam({ name: 'id', description: 'Order ID' })
+  @ApiResponse({ status: 200, description: 'Order marked as received by student' })
+  @Put('me/:id/received')
+  async confirmMyReceived(@Req() req: any, @Param('id') id: string) {
+    const userId = req.user?.userId;
+    return this.orderService.confirmReceivedByCustomer(id, userId);
+  }
+
+  @ApiOperation({ summary: 'Cashier confirms customer received order' })
+  @ApiParam({ name: 'id', description: 'Order ID' })
+  @ApiResponse({ status: 200, description: 'Order marked as received by cashier' })
+  @Put(':id/received')
+  async confirmReceivedByCashier(@Param('id') id: string) {
+    return this.orderService.confirmReceivedByCashier(id);
   }
 
   @ApiOperation({ summary: 'Cancel order with refund info' })

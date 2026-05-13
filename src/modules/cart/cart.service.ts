@@ -1,7 +1,9 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Cart, CartItem, Product, Customer } from 'src/entities';
+import { OrderService } from '../orders/order.service';
+import { CompleteCartDto } from './dto/complete-cart.dto';
 
 @Injectable()
 export class CartService {
@@ -14,6 +16,7 @@ export class CartService {
     private productRepository: Repository<Product>,
     @InjectRepository(Customer)
     private customerRepository: Repository<Customer>,
+    private orderService: OrderService,
   ) {}
 
   async getOrCreateCart(customerId?: string, sessionId?: string, branchId?: string, userId?: string): Promise<Cart> {
@@ -74,6 +77,9 @@ export class CartService {
     if (!product) {
       throw new NotFoundException('Product not found');
     }
+    if (!product.isActive) {
+      throw new BadRequestException(`Product ${product.name} is not available`);
+    }
 
     // Check if item already exists in cart
     let cartItem = await this.cartItemRepository.findOne({
@@ -102,8 +108,10 @@ export class CartService {
     return cartItem;
   }
 
-  async updateItemQuantity(cartItemId: string, quantity: number): Promise<CartItem> {
-    const cartItem = await this.cartItemRepository.findOne({ where: { id: cartItemId } });
+  async updateItemQuantity(cartId: string, cartItemId: string, quantity: number): Promise<CartItem> {
+    const cartItem = await this.cartItemRepository.findOne({
+      where: { id: cartItemId, cartId },
+    });
     if (!cartItem) {
       throw new NotFoundException('Cart item not found');
     }
@@ -121,8 +129,10 @@ export class CartService {
     return cartItem;
   }
 
-  async removeItem(cartItemId: string): Promise<void> {
-    const cartItem = await this.cartItemRepository.findOne({ where: { id: cartItemId } });
+  async removeItem(cartId: string, cartItemId: string): Promise<void> {
+    const cartItem = await this.cartItemRepository.findOne({
+      where: { id: cartItemId, cartId },
+    });
     if (!cartItem) {
       throw new NotFoundException('Cart item not found');
     }
@@ -142,6 +152,67 @@ export class CartService {
     cart.totalAmount = 0;
     cart.itemCount = 0;
     await this.cartRepository.save(cart);
+  }
+
+  async completeCart(userId: string, dto: CompleteCartDto) {
+    if (!userId) {
+      throw new BadRequestException('User is required');
+    }
+
+    const cart = await this.getOrCreateCart(undefined, undefined, undefined, userId);
+    const cartWithItems = await this.getCart(cart.id);
+
+    if (!cartWithItems.items?.length) {
+      throw new BadRequestException('Cart is empty');
+    }
+
+    const totalAmount = Number(cartWithItems.totalAmount);
+    const paymentMethod = dto.paymentMethod ?? 'WALLET';
+
+    const order = await this.orderService.createOrder({
+      branchId: dto.branchId ?? cartWithItems.branchId,
+      posDeviceId: dto.posDeviceId,
+      customerId: cartWithItems.customerId,
+      cashierId: userId,
+      orderType: dto.orderType ?? 'TAKEAWAY',
+      note: dto.note,
+      items: cartWithItems.items.map((item) => ({
+        productId: item.productId,
+        productName: item.productName,
+        unitPrice: Number(item.unitPrice),
+        quantity: item.quantity,
+        discountAmount: 0,
+      })),
+    });
+    if (!order) {
+      throw new BadRequestException('Could not create order from cart');
+    }
+
+    if (paymentMethod === 'CASH') {
+      const waitingOrder = await this.orderService.updateStatus(order.id, 'PENDING_PAYMENT');
+      await this.clearCart(cartWithItems.id);
+
+      return {
+        order: waitingOrder,
+        payment: null,
+        nextAction: 'WAITING_FOR_CASHIER_PAYMENT',
+      };
+    }
+
+    const payment = await this.orderService.processPayment(order.id, {
+      method: paymentMethod,
+      amount: totalAmount,
+      customerId: cartWithItems.customerId,
+      createdBy: userId,
+    });
+
+    const completedOrder = await this.orderService.completeOrder(order.id);
+    await this.clearCart(cartWithItems.id);
+
+    return {
+      order: completedOrder,
+      payment,
+    };
   }
 
   async getCart(cartId: string): Promise<Cart> {

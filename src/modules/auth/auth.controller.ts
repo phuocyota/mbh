@@ -1,35 +1,12 @@
-import { Controller, Post, Body, Request, UseGuards } from '@nestjs/common';
+import { Controller, Post, Body } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBody } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
-import { LocalAuthGuard } from './guards/local-auth.guard';
-import { CardLoginDto } from './dto/card-login.dto';
 import { StudentLoginDto } from './dto/student-login.dto';
 
 @ApiTags('Auth')
 @Controller('auth')
 export class AuthController {
   constructor(private authService: AuthService) {}
-
-  @ApiOperation({ summary: 'Login with email and password' })
-  @ApiBody({
-    schema: {
-      type: 'object',
-      properties: {
-        email: { type: 'string' },
-        password: { type: 'string' },
-      },
-    },
-  })
-  @ApiResponse({
-    status: 200,
-    description: 'Login successful, returns JWT token',
-  })
-  @ApiResponse({ status: 401, description: 'Unauthorized' })
-  @UseGuards(LocalAuthGuard)
-  @Post('login')
-  async login(@Request() req, @Body('deviceId') deviceId?: string) {
-    return this.authService.login(req.user, deviceId);
-  }
 
   @ApiOperation({ summary: 'Register a new user' })
   @ApiBody({
@@ -58,18 +35,6 @@ export class AuthController {
       registerDto.password,
       registerDto.fullName,
     );
-  }
-
-  @ApiOperation({ summary: 'Login with card ID' })
-  @ApiBody({ type: CardLoginDto })
-  @ApiResponse({
-    status: 200,
-    description: 'Login successful, returns JWT token',
-  })
-  @ApiResponse({ status: 401, description: 'Unauthorized - Card not found or inactive' })
-  @Post('login-card')
-  async loginByCard(@Body() dto: CardLoginDto) {
-    return this.authService.loginByCard(dto.cardId, dto.deviceId);
   }
 
   @ApiOperation({ summary: 'Student login with card or email/password' })

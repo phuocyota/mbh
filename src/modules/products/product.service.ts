@@ -67,4 +67,19 @@ export class ProductService extends BaseService<Product> {
       order: { sortOrder: 'ASC' },
     });
   }
+
+  async findAllCategoriesWithProducts() {
+    return this.categoryRepository
+      .createQueryBuilder('category')
+      .leftJoinAndSelect(
+        'category.products',
+        'product',
+        'product.is_active = :isActive',
+        { isActive: true },
+      )
+      .where('category.status = :status', { status: 'ACTIVE' })
+      .orderBy('category.sort_order', 'ASC')
+      .addOrderBy('product.name', 'ASC')
+      .getMany();
+  }
 }

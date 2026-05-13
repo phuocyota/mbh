@@ -351,6 +351,45 @@ export class OrderService {
       );
     }
 
+    // Handle wallet payment
+    if (paymentDto.method === 'WALLET') {
+      if (!paymentDto.customerId) {
+        throw new BadRequestException('Customer is required for wallet payment');
+      }
+
+      const wallet = await this.walletRepository.findOne({
+        where: { customerId: paymentDto.customerId },
+      });
+
+      if (!wallet) {
+        throw new BadRequestException('Customer wallet not found');
+      }
+      if (wallet.status !== 'ACTIVE') {
+        throw new BadRequestException('Wallet is not active');
+      }
+      if (Number(wallet.balance) < Number(paymentDto.amount)) {
+        throw new BadRequestException('Insufficient wallet balance');
+      }
+
+      const newBalance = Number(wallet.balance) - Number(paymentDto.amount);
+      await this.walletRepository.update(wallet.id, { balance: newBalance });
+
+      // Log transaction
+      const txId = uuid();
+      const walletTx = this.walletTransactionRepository.create({
+        id: txId,
+        walletId: wallet.id,
+        customerId: paymentDto.customerId,
+        type: 'PAYMENT',
+        amount: paymentDto.amount,
+        balanceBefore: wallet.balance,
+        balanceAfter: newBalance,
+        refType: 'ORDER',
+        refId: orderId,
+      });
+      await this.walletTransactionRepository.save(walletTx);
+    }
+
     const payment = this.paymentRepository.create({
       ...paymentDto,
       orderId: orderId,
@@ -358,33 +397,6 @@ export class OrderService {
     });
 
     await this.paymentRepository.save(payment);
-
-    // Handle wallet payment
-    if (paymentDto.method === 'WALLET' && paymentDto.customerId) {
-      const wallet = await this.walletRepository.findOne({
-        where: { customerId: paymentDto.customerId },
-      });
-
-      if (wallet && wallet.balance >= paymentDto.amount) {
-        const newBalance = wallet.balance - paymentDto.amount;
-        await this.walletRepository.update(wallet.id, { balance: newBalance });
-
-        // Log transaction
-        const txId = uuid();
-        const walletTx = this.walletTransactionRepository.create({
-          id: txId,
-          walletId: wallet.id,
-          customerId: paymentDto.customerId,
-          type: 'PAYMENT',
-          amount: paymentDto.amount,
-          balanceBefore: wallet.balance,
-          balanceAfter: newBalance,
-          refType: 'ORDER',
-          refId: orderId,
-        });
-        await this.walletTransactionRepository.save(walletTx);
-      }
-    }
 
     // Update order status
     const paidAmount = (order.paidAmount || 0) + paymentDto.amount;
@@ -413,7 +425,7 @@ export class OrderService {
     }
 
     if (order.paymentStatus !== 'PAID') {
-      throw new Error('Order must be fully paid before completion');
+      throw new BadRequestException('Order must be fully paid before completion');
     }
 
     await this.orderRepository.update(orderId, {
@@ -422,6 +434,34 @@ export class OrderService {
     });
 
     return this.getOrderWithItems(orderId);
+  }
+
+  async confirmReceivedByCustomer(orderId: string, userId: string) {
+    if (!userId) {
+      throw new BadRequestException('User is required');
+    }
+
+    const order = await this.orderRepository.findOne({
+      where: { id: orderId },
+    });
+    if (!order) {
+      throw new NotFoundException(
+        ERROR_MESSAGES.NOT_FOUND_WITH_ID('Order', orderId),
+      );
+    }
+
+    const customer = await this.customerRepository.findOne({
+      where: { userId },
+    });
+    if (!customer || order.customerId !== customer.id) {
+      throw new BadRequestException('Order does not belong to this customer');
+    }
+
+    return this.completeOrder(orderId);
+  }
+
+  async confirmReceivedByCashier(orderId: string) {
+    return this.completeOrder(orderId);
   }
 
   async getOrderWithItems(orderId: string) {
@@ -447,6 +487,14 @@ export class OrderService {
     }
 
     return query.getMany();
+  }
+
+  async findPendingCashOrders(branchId?: string) {
+    return this.findAll(branchId, 'PENDING_PAYMENT');
+  }
+
+  async findPreparingOrders(branchId?: string) {
+    return this.findAll(branchId, 'PREPARING');
   }
 
   async updateStatus(orderId: string, status: string) {
