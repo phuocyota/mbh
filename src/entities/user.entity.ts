@@ -21,7 +21,7 @@ export class User extends BaseEntity {
   @Column('varchar', { default: 'ACTIVE' })
   status: string; // ACTIVE, INACTIVE
 
-  @Column('uuid', { nullable: true, name: 'card_id' })
+  @Column('varchar', { nullable: true, name: 'card_id', unique: true })
   cardId: string;
 
   // Relations
