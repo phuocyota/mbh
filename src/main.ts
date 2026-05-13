@@ -56,12 +56,12 @@ async function bootstrap() {
     .build();
 
   const document = SwaggerModule.createDocument(app, config);
-  SwaggerModule.setup('api/docs', app, document);
+  SwaggerModule.setup('docs', app, document);
 
   await app.listen(port, '0.0.0.0');
   console.log(`✅ Application running on port ${port}`);
   console.log(
-    `📚 Swagger documentation available at http://localhost:${port}/api/docs`,
+    `📚 Swagger documentation available at http://localhost:${port}/docs`,
   );
 }
 void bootstrap();

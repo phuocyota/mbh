@@ -59,9 +59,15 @@ Lấy toàn bộ category đang active kèm products đang active.
 
 ```http
 GET /api/products/full
+GET /api/products/full?minPrice=10000&maxPrice=20000
 ```
 
 Auth: cần JWT.
+
+Query filter:
+
+- `minPrice`: gia nho nhat, optional.
+- `maxPrice`: gia lon nhat, optional.
 
 Response:
 
