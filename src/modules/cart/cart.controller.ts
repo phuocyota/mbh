@@ -37,7 +37,8 @@ export class CartController {
   async addItemToMyCart(@Req() req: any, @Body() dto: AddCartItemDto) {
     const userId = req.user?.userId;
     const cart = await this.cartService.getOrCreateCart(undefined, undefined, undefined, userId);
-    return this.cartService.addItem(cart.id, dto.productId, dto.quantity, dto.note);
+    await this.cartService.addItem(cart.id, dto.productId, dto.quantity, dto.note);
+    return this.cartService.getCart(cart.id);
   }
 
   @ApiOperation({ summary: 'Update item quantity in my cart' })
