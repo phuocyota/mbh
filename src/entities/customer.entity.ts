@@ -4,6 +4,7 @@ import { Card } from './card.entity';
 import { Order } from './order.entity';
 import { Wallet } from './wallet.entity';
 import { StudentProfile } from './student-profile.entity';
+import { StudentClass } from './student-class.entity';
 
 @Entity('customers')
 export class Customer extends BaseEntity {
@@ -37,4 +38,7 @@ export class Customer extends BaseEntity {
 
   @OneToOne(() => StudentProfile, (profile) => profile.customer)
   studentProfile: StudentProfile;
+
+  @OneToMany(() => StudentClass, (sc) => sc.student)
+  classes: StudentClass[];
 }

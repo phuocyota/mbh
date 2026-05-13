@@ -3,7 +3,7 @@ import { JwtService } from '@nestjs/jwt';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import * as bcrypt from 'bcrypt';
-import { User, Customer, Wallet, StudentProfile } from 'src/entities';
+import { User, Customer, Wallet, StudentProfile, School, Class } from 'src/entities';
 
 @Injectable()
 export class AuthService {
@@ -16,6 +16,10 @@ export class AuthService {
     private walletRepository: Repository<Wallet>,
     @InjectRepository(StudentProfile)
     private studentProfileRepository: Repository<StudentProfile>,
+    @InjectRepository(School)
+    private schoolRepository: Repository<School>,
+    @InjectRepository(Class)
+    private classRepository: Repository<Class>,
     private jwtService: JwtService,
   ) {}
 
@@ -71,14 +75,26 @@ export class AuthService {
       };
     }
 
-    // Get school and class names (for now using IDs as placeholders)
-    // TODO: Replace with actual school/class entity lookups when available
+    // Get actual school and class names
     const schoolId = customer.studentProfile?.schoolId;
     const classId = customer.studentProfile?.classId;
 
+    let schoolName: string | null = null;
+    let className: string | null = null;
+
+    if (schoolId) {
+      const school = await this.schoolRepository.findOne({ where: { id: schoolId } });
+      schoolName = school?.name || null;
+    }
+
+    if (classId) {
+      const classEntity = await this.classRepository.findOne({ where: { id: classId } });
+      className = classEntity?.name || null;
+    }
+
     return {
-      school: schoolId ? `School-${schoolId.substring(0, 8)}` : null,
-      class: classId ? `Class-${classId.substring(0, 8)}` : null,
+      school: schoolName,
+      class: className,
       walletBalance: customer.wallet?.balance || 0,
     };
   }

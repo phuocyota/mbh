@@ -22,3 +22,6 @@ export { StockTransaction } from './stock-transaction.entity';
 export { InventoryItem } from './inventory-item.entity';
 export { Cart } from './cart.entity';
 export { CartItem } from './cart-item.entity';
+export { School } from './school.entity';
+export { Class } from './class.entity';
+export { StudentClass } from './student-class.entity';

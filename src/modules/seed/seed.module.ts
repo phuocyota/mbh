@@ -12,6 +12,9 @@ import {
   Category,
   Product,
   StudentProfile,
+  School,
+  Class,
+  StudentClass,
 } from '../../entities';
 
 @Module({
@@ -26,6 +29,9 @@ import {
       Category,
       Product,
       StudentProfile,
+      School,
+      Class,
+      StudentClass,
     ]),
   ],
   providers: [SeedService],

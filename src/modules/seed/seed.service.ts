@@ -12,6 +12,9 @@ import {
   Category,
   Product,
   StudentProfile,
+  School,
+  Class,
+  StudentClass,
 } from '../../entities';
 import { v4 as uuid } from 'uuid';
 
@@ -36,6 +39,12 @@ export class SeedService {
     private productRepository: Repository<Product>,
     @InjectRepository(StudentProfile)
     private studentProfileRepository: Repository<StudentProfile>,
+    @InjectRepository(School)
+    private schoolRepository: Repository<School>,
+    @InjectRepository(Class)
+    private classRepository: Repository<Class>,
+    @InjectRepository(StudentClass)
+    private studentClassRepository: Repository<StudentClass>,
   ) {}
 
   async seed(): Promise<void> {
@@ -163,9 +172,48 @@ export class SeedService {
     }
     console.log('✅ POS Devices seeded');
 
+    // Create school: Trường Tiểu học Chi Lăng
+    let schoolId = uuid();
+    const existingSchool = await this.schoolRepository.findOne({
+      where: { name: 'Trường Tiểu học Chi Lăng' },
+    });
+    if (!existingSchool) {
+      await this.schoolRepository.save({
+        id: schoolId,
+        name: 'Trường Tiểu học Chi Lăng',
+        address: 'Xã Chi Lăng, Huyện Chi Lăng, Tỉnh Lạng Sơn',
+        phone: '0205-xxx-xxxx',
+        status: 'ACTIVE',
+      });
+    } else {
+      schoolId = existingSchool.id;
+    }
+    console.log('✅ School seeded: Trường Tiểu học Chi Lăng');
+
+    // Create classes for the school
+    const classNames = ['1A', '1B', '2A', '2B', '3A', '3B', '4A', '4B', '4/3', '5A', '5B'];
+    const classIds: string[] = [];
+    for (const className of classNames) {
+      const classId = uuid();
+      const existingClass = await this.classRepository.findOne({
+        where: { name: className, schoolId },
+      });
+      if (!existingClass) {
+        await this.classRepository.save({
+          id: classId,
+          name: className,
+          schoolId,
+          grade: className[0],
+          status: 'ACTIVE',
+        });
+        classIds.push(classId);
+      } else {
+        classIds.push(existingClass.id);
+      }
+    }
+    console.log(`✅ Classes seeded: ${classNames.length} classes`);
+
     // Create customers
-    const schoolId = uuid();
-    const classId = uuid();
     const customers: any[] = [];
     for (let i = 1; i <= 10; i++) {
       const customerId = uuid();
@@ -229,16 +277,27 @@ export class SeedService {
     const savedStudents = await this.customerRepository.find({
       where: { type: 'STUDENT' },
     });
+
+    // Find class 4/3 index for first student
+    const class43Index = classNames.indexOf('4/3');
+    const class43Id = classIds[class43Index];
+
     for (const customer of savedStudents) {
       const existingProfile = await this.studentProfileRepository.findOne({
         where: { customerId: customer.id },
       });
       if (!existingProfile) {
+        // Assign first student (STU00001) to class 4/3
+        const isFirstStudent = customer.customerCode === 'STU00001';
+        const assignedClassId = isFirstStudent && class43Id
+          ? class43Id
+          : (classIds[Math.floor(Math.random() * classIds.length)] || classIds[0]);
+
         const profile = {
           id: uuid(),
           customerId: customer.id,
           schoolId: schoolId,
-          classId: classId,
+          classId: assignedClassId,
           studentCode: customer.customerCode,
           parentPhone: `090200000${Math.floor(Math.random() * 9) + 1}`,
         };
@@ -246,6 +305,37 @@ export class SeedService {
       }
     }
     console.log('✅ Student Profiles seeded');
+
+    // Create student-class relationships (n-n)
+    const allStudents = await this.customerRepository.find({
+      where: { type: 'STUDENT' },
+    });
+    const allClasses = await this.classRepository.find();
+
+    // Find class 4/3 specifically
+    const class43 = allClasses.find(c => c.name === '4/3');
+
+    for (const student of allStudents) {
+      const existingStudentClass = await this.studentClassRepository.findOne({
+        where: { studentId: student.id, year: '2024-2025' },
+      });
+      if (!existingStudentClass && allClasses.length > 0) {
+        // Assign first student (STU00001, linked to test user) to class 4/3
+        const isFirstStudent = student.customerCode === 'STU00001';
+        const classId = isFirstStudent && class43
+          ? class43.id
+          : allClasses[Math.floor(Math.random() * allClasses.length)].id;
+
+        await this.studentClassRepository.save({
+          id: uuid(),
+          studentId: student.id,
+          classId: classId,
+          year: '2024-2025',
+          status: 'ACTIVE',
+        });
+      }
+    }
+    console.log('✅ Student-Class relationships seeded');
 
     // Create categories
     const categoryData = [
