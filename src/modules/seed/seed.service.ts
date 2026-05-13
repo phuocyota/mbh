@@ -220,11 +220,15 @@ export class SeedService {
 
     // Create categories
     const categoryData = [
-      { name: 'Đồ Ăn Nhanh', sortOrder: 1 },
-      { name: 'Đồ Uống', sortOrder: 2 },
-      { name: 'Bánh', sortOrder: 3 },
-      { name: 'Cơm', sortOrder: 4 },
-      { name: 'Mì Pasta', sortOrder: 5 },
+      { name: 'Kẹo', sortOrder: 1 },
+      { name: 'Phụ kiện', sortOrder: 2 },
+      { name: 'Snack', sortOrder: 3 },
+      { name: 'Ăn vặt', sortOrder: 4 },
+      { name: 'Sữa', sortOrder: 5 },
+      { name: 'Nước', sortOrder: 6 },
+      { name: 'Học tập', sortOrder: 7 },
+      { name: 'Tiện ích', sortOrder: 8 },
+      { name: 'Đồ chơi', sortOrder: 9 },
     ];
 
     const categoryList: any[] = [];
@@ -246,64 +250,32 @@ export class SeedService {
     }
     console.log('✅ Categories seeded');
 
-    // Create products
+    // Create products (match FE product list)
     const productData = [
-      {
-        category: categoryList[0],
-        sku: 'BURGER001',
-        name: 'Burger Gà',
-        price: 35000,
-        unit: 'cái',
-      },
-      {
-        category: categoryList[0],
-        sku: 'PIZZA001',
-        name: 'Pizza Thịt',
-        price: 45000,
-        unit: 'cái',
-      },
-      {
-        category: categoryList[1],
-        sku: 'JUICE001',
-        name: 'Nước Cam Tươi',
-        price: 20000,
-        unit: 'ly',
-      },
-      {
-        category: categoryList[1],
-        sku: 'MILKSHAKE001',
-        name: 'Sữa Lắc Dâu',
-        price: 25000,
-        unit: 'ly',
-      },
-      {
-        category: categoryList[2],
-        sku: 'DONUT001',
-        name: 'Bánh Donut',
-        price: 15000,
-        unit: 'cái',
-      },
-      {
-        category: categoryList[3],
-        sku: 'RICE001',
-        name: 'Cơm Gà',
-        price: 40000,
-        unit: 'phần',
-      },
-      {
-        category: categoryList[4],
-        sku: 'PENNE001',
-        name: 'Mì Penne Sốt Cà Chua',
-        price: 50000,
-        unit: 'phần',
-      },
-      {
-        category: categoryList[1],
-        sku: 'ICED_COFFEE001',
-        name: 'Cà Phê Đen Đá',
-        price: 18000,
-        unit: 'ly',
-      },
+      // ===== Kẹo (0) - 5K =====
+      { category: categoryList[0], sku: 'KEO001', name: 'Kẹo mút', price: 5000, unit: 'cây' },
+      { category: categoryList[0], sku: 'KEO002', name: 'Kẹo viên', price: 5000, unit: 'gói' },
+      // ===== Phụ kiện (1) - 5K =====
+      { category: categoryList[1], sku: 'PHUKIEN001', name: 'Sticker', price: 5000, unit: 'tấm' },
+      { category: categoryList[1], sku: 'PHUKIEN002', name: 'Ghim cài áo', price: 5000, unit: 'cái' },
+      // ===== Snack (2) - 10K =====
+      { category: categoryList[2], sku: 'SNACK001', name: 'Bánh snack', price: 10000, unit: 'gói' },
+      // ===== Ăn vặt (3) - 10K =====
+      { category: categoryList[3], sku: 'ANVAT001', name: 'Thạch rau câu', price: 10000, unit: 'cái' },
+      // ===== Sữa (4) - 10K =====
+      { category: categoryList[4], sku: 'SUA001', name: 'Sữa chua nhỏ', price: 10000, unit: 'hộp' },
+      // ===== Nước (5) - 10K =====
+      { category: categoryList[5], sku: 'NUOC001', name: 'Nước suối', price: 10000, unit: 'chai' },
+      // ===== Học tập (6) =====
+      { category: categoryList[6], sku: 'HOCTAP001', name: 'Tập', price: 10000, unit: 'quyển' },
+      { category: categoryList[6], sku: 'HOCTAP002', name: 'Bút chì', price: 10000, unit: 'cây' },
+      { category: categoryList[6], sku: 'HOCTAP003', name: 'Bút thú', price: 10000, unit: 'cây' },
+      { category: categoryList[6], sku: 'HOCTAP004', name: 'Thước con thú', price: 5000, unit: 'cái' },
+      // ===== Tiện ích (7) =====
+      { category: categoryList[7], sku: 'TIENICH001', name: 'Quạt cầm tay', price: 5000, unit: 'cái' },
+      { category: categoryList[7], sku: 'TIENICH002', name: 'Bút quạt', price: 10000, unit: 'cây' },
+      // ===== Đồ chơi (8) =====
+      { category: categoryList[8], sku: 'DOCHOI001', name: 'Mô hình lắp ráp', price: 10000, unit: 'bộ' },
     ];
 
     for (const prod of productData) {
