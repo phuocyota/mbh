@@ -9,26 +9,20 @@ export class StudentProfileDto extends BaseDto {
   customerId: string;
 
   @ApiProperty({
-    description: 'Student ID',
+    description: 'Class ID',
+    example: 'f47ac10b-58cc-4372-a567-0e02b2c3d479',
+  })
+  classId?: string;
+
+  @ApiProperty({
+    description: 'Student code',
     example: 'STU12345',
   })
-  studentId: string;
+  studentCode?: string;
 
   @ApiProperty({
-    description: 'School/University name',
-    example: 'ABC University',
+    description: 'Student full name',
+    example: 'Nguy?n V?n A',
   })
-  schoolName?: string;
-
-  @ApiProperty({
-    description: 'Class/Grade',
-    example: '10A',
-  })
-  classGrade?: string;
-
-  @ApiProperty({
-    description: 'Enrollment date',
-    example: '2023-09-01T00:00:00Z',
-  })
-  enrollmentDate?: Date;
+  fullName?: string;
 }

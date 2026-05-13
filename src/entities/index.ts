@@ -15,6 +15,7 @@ export { RefundItem } from './refund-item.entity';
 export { Shift } from './shift.entity';
 export { CashMovement } from './cash-movement.entity';
 export { StudentProfile } from './student-profile.entity';
+export { StudentCard } from './student-card.entity';
 export { KitchenTicket } from './kitchen-ticket.entity';
 export { KitchenTicketItem } from './kitchen-ticket-item.entity';
 export { StockLevel } from './stock-level.entity';

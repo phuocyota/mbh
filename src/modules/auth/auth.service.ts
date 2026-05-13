@@ -3,7 +3,7 @@ import { JwtService } from '@nestjs/jwt';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import * as bcrypt from 'bcrypt';
-import { User, Customer, Wallet, StudentProfile, School, Class } from 'src/entities';
+import { User, Customer, Wallet, StudentProfile, StudentCard, School, Class } from 'src/entities';
 
 @Injectable()
 export class AuthService {
@@ -16,6 +16,8 @@ export class AuthService {
     private walletRepository: Repository<Wallet>,
     @InjectRepository(StudentProfile)
     private studentProfileRepository: Repository<StudentProfile>,
+    @InjectRepository(StudentCard)
+    private studentCardRepository: Repository<StudentCard>,
     @InjectRepository(School)
     private schoolRepository: Repository<School>,
     @InjectRepository(Class)
@@ -80,28 +82,27 @@ export class AuthService {
     }
 
     // Get actual school and class names
-    const schoolId = customer.studentProfile?.schoolId;
     const classId = customer.studentProfile?.classId;
 
-    console.log('DEBUG - schoolId:', schoolId);
     console.log('DEBUG - classId:', classId);
 
     let schoolName: string | null = null;
     let className: string | null = null;
 
-    if (schoolId) {
-      const school = await this.schoolRepository.findOne({ where: { id: schoolId } });
-      schoolName = school?.name || null;
-    }
-
     if (classId) {
       const classEntity = await this.classRepository.findOne({ where: { id: classId } });
       className = classEntity?.name || null;
+      if (classEntity?.schoolId) {
+        const school = await this.schoolRepository.findOne({ where: { id: classEntity.schoolId } });
+        schoolName = school?.name || null;
+      }
     }
 
     return {
       school: schoolName,
       class: className,
+      studentCode: customer.studentProfile?.studentCode || null,
+      studentFullName: customer.studentProfile?.fullName || customer.fullName,
       walletBalance: customer.wallet?.balance || 0,
     };
   }
@@ -142,8 +143,39 @@ export class AuthService {
 
     // Login by cardId
     if (dto.cardId) {
+      const studentCard = await this.studentCardRepository
+        .createQueryBuilder('studentCard')
+        .innerJoinAndSelect('studentCard.card', 'card')
+        .innerJoinAndSelect('studentCard.studentProfile', 'studentProfile')
+        .innerJoinAndSelect('studentProfile.customer', 'customer')
+        .where('(card.cardUid = :cardId OR card.cardNumber = :cardId)', {
+          cardId: dto.cardId,
+        })
+        .getOne();
+
+      if (!studentCard) {
+        throw new UnauthorizedException('Student card not found');
+      }
+
+      if (studentCard.status !== 'ACTIVE') {
+        throw new UnauthorizedException(`Student card is ${studentCard.status}`);
+      }
+
+      if (studentCard.card.status !== 'ACTIVE') {
+        throw new UnauthorizedException(`Card is ${studentCard.card.status}`);
+      }
+
+      if (studentCard.expiredAt && studentCard.expiredAt < new Date()) {
+        throw new UnauthorizedException('Student card is expired');
+      }
+
+      const customer = studentCard.studentProfile.customer;
+      if (!customer?.userId) {
+        throw new UnauthorizedException('Student card is not linked to a user account');
+      }
+
       user = await this.userRepository.findOne({
-        where: { cardId: dto.cardId },
+        where: { id: customer.userId },
       });
     }
     // Login by email/password

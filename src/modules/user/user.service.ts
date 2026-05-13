@@ -1,7 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { User, Customer, StudentProfile, Wallet } from '../../entities';
+import { User, Customer, StudentProfile, Wallet, Class } from '../../entities';
 import { BaseService } from '../../common/sql/base.service';
 
 @Injectable()
@@ -15,6 +15,8 @@ export class UserService extends BaseService<User> {
     private studentProfileRepository: Repository<StudentProfile>,
     @InjectRepository(Wallet)
     private walletRepository: Repository<Wallet>,
+    @InjectRepository(Class)
+    private classRepository: Repository<Class>,
   ) {
     super(userRepository);
   }
@@ -24,7 +26,6 @@ export class UserService extends BaseService<User> {
   }
 
   async getMe(userId: string) {
-    // Find customer by userId
     const customer = await this.customerRepository.findOne({
       where: { userId },
       relations: ['studentProfile', 'wallet'],
@@ -34,19 +35,24 @@ export class UserService extends BaseService<User> {
       throw new NotFoundException('Customer not found for this user');
     }
 
-    // Get user info
     const user = await this.userRepository.findOne({
       where: { id: userId },
     });
 
+    const classEntity = customer.studentProfile?.classId
+      ? await this.classRepository.findOne({
+          where: { id: customer.studentProfile.classId },
+        })
+      : null;
+
     return {
       userId: user?.id,
-      fullName: customer.fullName,
+      fullName: customer.studentProfile?.fullName || customer.fullName,
       email: user?.email,
       phone: customer.phone,
       type: customer.type,
       classId: customer.studentProfile?.classId || null,
-      schoolId: customer.studentProfile?.schoolId || null,
+      schoolId: classEntity?.schoolId || null,
       studentCode: customer.studentProfile?.studentCode || null,
       walletBalance: customer.wallet?.balance || 0,
       walletStatus: customer.wallet?.status || null,
