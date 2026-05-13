@@ -199,12 +199,13 @@ export class OrderService {
     await this.paymentRepository.save(payment);
 
     // Update order status
-    const paidAmount = (order.paidAmount || 0) + paymentDto.amount;
-    const isPaid = paidAmount >= order.totalAmount;
+    const paidAmount = Number(order.paidAmount || 0) + Number(paymentDto.amount || 0);
+    const totalAmount = Number(order.totalAmount || 0);
+    const isPaid = paidAmount >= totalAmount;
 
     await this.orderRepository.update(orderId, {
       paidAmount: paidAmount,
-      changeAmount: paidAmount - order.totalAmount,
+      changeAmount: paidAmount - totalAmount,
       paymentStatus: isPaid ? 'PAID' : 'PARTIAL',
       paymentMethod: paymentDto.method,
       status: isPaid ? 'PENDING_PAYMENT' : 'DRAFT',
