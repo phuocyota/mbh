@@ -36,28 +36,53 @@ export class OrderService {
   async createOrder(createOrderDto: any) {
     const orderCode = `ORD${Date.now()}${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
 
-    // Calculate totals from items if provided
-    let subtotal = 0;
-    let totalAmount = 0;
-    const items = createOrderDto.items || [];
+    const items = Array.isArray(createOrderDto.items)
+      ? createOrderDto.items.map((item: any) => {
+          const unitPrice = Number(item.unitPrice);
+          const quantity = Number(item.quantity);
+          const discountAmount = Number(item.discountAmount ?? 0);
+          const itemSubtotal = unitPrice * quantity;
+          const itemTotalAmount = itemSubtotal - discountAmount;
 
-    if (items.length > 0) {
-      subtotal = items.reduce((sum: number, item: any) => {
-        const itemSubtotal = Number(item.unitPrice || 0) * Number(item.quantity || 0);
-        return sum + itemSubtotal;
-      }, 0);
-      const discount = items.reduce((sum: number, item: any) => sum + Number(item.discountAmount || 0), 0);
-      totalAmount = subtotal - discount;
-    }
+          if (
+            !item.productId ||
+            !item.productName ||
+            !Number.isFinite(unitPrice) ||
+            !Number.isFinite(quantity) ||
+            quantity <= 0 ||
+            !Number.isFinite(discountAmount) ||
+            !Number.isFinite(itemSubtotal) ||
+            !Number.isFinite(itemTotalAmount)
+          ) {
+            throw new BadRequestException('Invalid order item');
+          }
+
+          return {
+            productId: item.productId,
+            productName: item.productName,
+            unitPrice,
+            quantity,
+            subtotal: itemSubtotal,
+            discountAmount,
+            totalAmount: itemTotalAmount,
+            note: item.note,
+          };
+        })
+      : [];
+
+    const subtotal = items.reduce((sum: number, item: any) => sum + item.subtotal, 0);
+    const discount = items.reduce((sum: number, item: any) => sum + item.discountAmount, 0);
+    const totalAmount = subtotal - discount;
 
     const order = this.orderRepository.create({
       ...createOrderDto,
+      items: undefined,
       orderCode: orderCode,
       status: 'Pending',
       paymentStatus: 'UNPAID',
       paymentMethod: createOrderDto.paymentMethod ?? null,
-      subtotal: subtotal > 0 ? subtotal : null,
-      totalAmount: totalAmount > 0 ? totalAmount : null,
+      subtotal,
+      totalAmount,
     });
 
     const savedResult = await this.orderRepository.save(order);
@@ -65,13 +90,10 @@ export class OrderService {
 
     // Create order items if provided
     if (items.length > 0) {
-      for (const itemDto of items) {
-        const itemSubtotal = Number(itemDto.unitPrice || 0) * Number(itemDto.quantity || 0);
+      for (const item of items) {
         const orderItem = this.orderItemRepository.create({
-          ...itemDto,
+          ...item,
           orderId: savedOrder.id,
-          subtotal: itemSubtotal,
-          totalAmount: itemSubtotal - Number(itemDto.discountAmount || 0),
           status: 'NORMAL',
         });
         await this.orderItemRepository.save(orderItem);
