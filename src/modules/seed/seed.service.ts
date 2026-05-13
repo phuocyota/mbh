@@ -283,16 +283,17 @@ export class SeedService {
     const class43Id = classIds[class43Index];
 
     for (const customer of savedStudents) {
+      const isFirstStudent = customer.customerCode === 'STU00001';
+      const assignedClassId = isFirstStudent && class43Id
+        ? class43Id
+        : (classIds[Math.floor(Math.random() * classIds.length)] || classIds[0]);
+
       const existingProfile = await this.studentProfileRepository.findOne({
         where: { customerId: customer.id },
       });
-      if (!existingProfile) {
-        // Assign first student (STU00001) to class 4/3
-        const isFirstStudent = customer.customerCode === 'STU00001';
-        const assignedClassId = isFirstStudent && class43Id
-          ? class43Id
-          : (classIds[Math.floor(Math.random() * classIds.length)] || classIds[0]);
 
+      if (!existingProfile) {
+        // Create new profile
         const profile = {
           id: uuid(),
           customerId: customer.id,
@@ -302,6 +303,12 @@ export class SeedService {
           parentPhone: `090200000${Math.floor(Math.random() * 9) + 1}`,
         };
         await this.studentProfileRepository.save(profile);
+      } else if (isFirstStudent && class43Id) {
+        // Force update first student to class 4/3
+        await this.studentProfileRepository.update(
+          { id: existingProfile.id },
+          { classId: class43Id, schoolId: schoolId }
+        );
       }
     }
     console.log('✅ Student Profiles seeded');
@@ -316,23 +323,30 @@ export class SeedService {
     const class43 = allClasses.find(c => c.name === '4/3');
 
     for (const student of allStudents) {
+      const isFirstStudent = student.customerCode === 'STU00001';
+      const targetClassId = isFirstStudent && class43
+        ? class43.id
+        : allClasses[Math.floor(Math.random() * allClasses.length)]?.id;
+
       const existingStudentClass = await this.studentClassRepository.findOne({
         where: { studentId: student.id, year: '2024-2025' },
       });
-      if (!existingStudentClass && allClasses.length > 0) {
-        // Assign first student (STU00001, linked to test user) to class 4/3
-        const isFirstStudent = student.customerCode === 'STU00001';
-        const classId = isFirstStudent && class43
-          ? class43.id
-          : allClasses[Math.floor(Math.random() * allClasses.length)].id;
 
+      if (!existingStudentClass && targetClassId) {
+        // Create new student-class relationship
         await this.studentClassRepository.save({
           id: uuid(),
           studentId: student.id,
-          classId: classId,
+          classId: targetClassId,
           year: '2024-2025',
           status: 'ACTIVE',
         });
+      } else if (existingStudentClass && isFirstStudent && class43) {
+        // Force update first student to class 4/3
+        await this.studentClassRepository.update(
+          { id: existingStudentClass.id },
+          { classId: class43.id }
+        );
       }
     }
     console.log('✅ Student-Class relationships seeded');

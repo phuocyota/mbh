@@ -67,6 +67,10 @@ export class AuthService {
       relations: ['studentProfile', 'wallet'],
     });
 
+    console.log('DEBUG - userId:', userId);
+    console.log('DEBUG - customer:', customer);
+    console.log('DEBUG - customer?.studentProfile:', customer?.studentProfile);
+
     if (!customer) {
       return {
         school: null,
@@ -78,6 +82,9 @@ export class AuthService {
     // Get actual school and class names
     const schoolId = customer.studentProfile?.schoolId;
     const classId = customer.studentProfile?.classId;
+
+    console.log('DEBUG - schoolId:', schoolId);
+    console.log('DEBUG - classId:', classId);
 
     let schoolName: string | null = null;
     let className: string | null = null;
