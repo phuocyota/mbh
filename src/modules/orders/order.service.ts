@@ -12,7 +12,7 @@ import {
   Payment,
   Wallet,
   WalletTransaction,
-  Card,
+  StudentCard,
   Customer,
   Product,
   KitchenTicket,
@@ -34,8 +34,8 @@ export class OrderService {
     private walletRepository: Repository<Wallet>,
     @InjectRepository(WalletTransaction)
     private walletTransactionRepository: Repository<WalletTransaction>,
-    @InjectRepository(Card)
-    private cardRepository: Repository<Card>,
+    @InjectRepository(StudentCard)
+    private studentCardRepository: Repository<StudentCard>,
     @InjectRepository(Customer)
     private customerRepository: Repository<Customer>,
     @InjectRepository(Product)
@@ -62,21 +62,25 @@ export class OrderService {
     await queryRunner.startTransaction();
 
     try {
-      // 1. Card → customer
-      const card = await queryRunner.manager.findOne(Card, {
-        where: { cardUid: dto.cardUid },
-      });
-      if (!card) {
+      // 1. Student card -> customer
+      const studentCard = await queryRunner.manager
+        .createQueryBuilder(StudentCard, 'studentCard')
+        .innerJoinAndSelect('studentCard.studentProfile', 'studentProfile')
+        .innerJoinAndSelect('studentProfile.customer', 'customer')
+        .where(
+          '(studentCard.cardUid = :cardUid OR studentCard.cardNumber = :cardUid)',
+          { cardUid: dto.cardUid },
+        )
+        .getOne();
+      if (!studentCard) {
         throw new NotFoundException(`Thẻ ${dto.cardUid} không tồn tại`);
       }
-      if (card.status !== 'ACTIVE') {
+      if (studentCard.status !== 'ACTIVE') {
         throw new BadRequestException(
-          `Thẻ đang ở trạng thái ${card.status}`,
+          `Thẻ đang ở trạng thái ${studentCard.status}`,
         );
       }
-      const customer = await queryRunner.manager.findOne(Customer, {
-        where: { id: card.customerId },
-      });
+      const customer = studentCard.studentProfile.customer;
       if (!customer || customer.status !== 'ACTIVE') {
         throw new BadRequestException('Khách hàng không hợp lệ');
       }

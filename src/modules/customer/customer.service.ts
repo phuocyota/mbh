@@ -2,7 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Customer } from '../../entities/customer.entity';
-import { Card } from '../../entities/card.entity';
+import { StudentCard } from '../../entities/student-card.entity';
 import { Wallet } from '../../entities/wallet.entity';
 import { BaseService } from '../../common/sql/base.service';
 import { ERROR_MESSAGES } from '../../common/constant/error-messages.constant';
@@ -12,8 +12,8 @@ export class CustomerService extends BaseService<Customer> {
   constructor(
     @InjectRepository(Customer)
     private customerRepository: Repository<Customer>,
-    @InjectRepository(Card)
-    private cardRepository: Repository<Card>,
+    @InjectRepository(StudentCard)
+    private studentCardRepository: Repository<StudentCard>,
     @InjectRepository(Wallet)
     private walletRepository: Repository<Wallet>,
   ) {
@@ -24,32 +24,36 @@ export class CustomerService extends BaseService<Customer> {
     return 'Customer';
   }
 
-  /**
-   * Tìm customer theo card UID (NFC/RFID).
-   * Trả về customer kèm số dư ví (nếu có) để tiện flow quẹt thẻ tại POS.
-   */
   async findByCardUid(cardUid: string) {
-    const card = await this.cardRepository.findOne({
-      where: { cardUid },
-    });
+    const studentCard = await this.studentCardRepository
+      .createQueryBuilder('studentCard')
+      .innerJoinAndSelect('studentCard.studentProfile', 'studentProfile')
+      .where(
+        '(studentCard.cardUid = :cardUid OR studentCard.cardNumber = :cardUid)',
+        { cardUid },
+      )
+      .getOne();
 
-    if (!card) {
-      throw new NotFoundException(`Thẻ với UID ${cardUid} không tồn tại`);
+    if (!studentCard) {
+      throw new NotFoundException(`The ${cardUid} card does not exist`);
     }
 
-    if (card.status !== 'ACTIVE') {
+    if (studentCard.status !== 'ACTIVE') {
       throw new NotFoundException(
-        `Thẻ ${cardUid} đang ở trạng thái ${card.status}`,
+        `The ${cardUid} card is ${studentCard.status}`,
       );
     }
 
     const customer = await this.customerRepository.findOne({
-      where: { id: card.customerId },
+      where: { id: studentCard.studentProfile.customerId },
     });
 
     if (!customer) {
       throw new NotFoundException(
-        ERROR_MESSAGES.NOT_FOUND_WITH_ID('Customer', card.customerId),
+        ERROR_MESSAGES.NOT_FOUND_WITH_ID(
+          'Customer',
+          studentCard.studentProfile.customerId,
+        ),
       );
     }
 
@@ -60,10 +64,10 @@ export class CustomerService extends BaseService<Customer> {
     return {
       customer,
       card: {
-        id: card.id,
-        cardUid: card.cardUid,
-        cardNumber: card.cardNumber,
-        status: card.status,
+        id: studentCard.id,
+        cardUid: studentCard.cardUid,
+        cardNumber: studentCard.cardNumber,
+        status: studentCard.status,
       },
       wallet: wallet
         ? {

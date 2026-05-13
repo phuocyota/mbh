@@ -13,7 +13,6 @@ import { UserModule } from './modules/user/user.module';
 import { BranchModule } from './modules/branch/branch.module';
 import { POSDeviceModule } from './modules/pos-device/pos-device.module';
 import { CustomerModule } from './modules/customer/customer.module';
-import { CardModule } from './modules/card/card.module';
 import { WalletModule } from './modules/wallet/wallet.module';
 import { WalletTransactionModule } from './modules/wallet-transaction/wallet-transaction.module';
 import { CategoryModule } from './modules/category/category.module';
@@ -44,7 +43,6 @@ import { CartModule } from './modules/cart/cart.module';
     BranchModule,
     POSDeviceModule,
     CustomerModule,
-    CardModule,
     WalletModule,
     WalletTransactionModule,
     CategoryModule,

@@ -2,7 +2,6 @@ export { User } from './user.entity';
 export { Branch } from './branch.entity';
 export { POSDevice } from './pos-device.entity';
 export { Customer } from './customer.entity';
-export { Card } from './card.entity';
 export { Wallet } from './wallet.entity';
 export { WalletTransaction } from './wallet-transaction.entity';
 export { Category } from './category.entity';

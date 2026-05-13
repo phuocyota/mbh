@@ -124,10 +124,9 @@ export class AuthService {
   async loginByCard(cardId: string, deviceId?: string) {
     const studentCard = await this.studentCardRepository
       .createQueryBuilder('studentCard')
-      .innerJoinAndSelect('studentCard.card', 'card')
       .innerJoinAndSelect('studentCard.studentProfile', 'studentProfile')
       .innerJoinAndSelect('studentProfile.customer', 'customer')
-      .where('(card.cardUid = :cardId OR card.cardNumber = :cardId)', {
+      .where('(studentCard.cardUid = :cardId OR studentCard.cardNumber = :cardId)', {
         cardId,
       })
       .getOne();
@@ -138,10 +137,6 @@ export class AuthService {
 
     if (studentCard.status !== 'ACTIVE') {
       throw new UnauthorizedException(`Student card is ${studentCard.status}`);
-    }
-
-    if (studentCard.card.status !== 'ACTIVE') {
-      throw new UnauthorizedException(`Card is ${studentCard.card.status}`);
     }
 
     if (studentCard.expiredAt && studentCard.expiredAt < new Date()) {
@@ -176,10 +171,9 @@ export class AuthService {
     if (dto.cardId) {
       const studentCard = await this.studentCardRepository
         .createQueryBuilder('studentCard')
-        .innerJoinAndSelect('studentCard.card', 'card')
         .innerJoinAndSelect('studentCard.studentProfile', 'studentProfile')
         .innerJoinAndSelect('studentProfile.customer', 'customer')
-        .where('(card.cardUid = :cardId OR card.cardNumber = :cardId)', {
+        .where('(studentCard.cardUid = :cardId OR studentCard.cardNumber = :cardId)', {
           cardId: dto.cardId,
         })
         .getOne();
@@ -190,10 +184,6 @@ export class AuthService {
 
       if (studentCard.status !== 'ACTIVE') {
         throw new UnauthorizedException(`Student card is ${studentCard.status}`);
-      }
-
-      if (studentCard.card.status !== 'ACTIVE') {
-        throw new UnauthorizedException(`Card is ${studentCard.card.status}`);
       }
 
       if (studentCard.expiredAt && studentCard.expiredAt < new Date()) {

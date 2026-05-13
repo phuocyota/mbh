@@ -1,15 +1,17 @@
 import { Entity, Column, ManyToOne, JoinColumn } from 'typeorm';
 import { BaseEntity } from '../common/sql/base.entity';
 import { StudentProfile } from './student-profile.entity';
-import { Card } from './card.entity';
 
 @Entity('student_cards')
 export class StudentCard extends BaseEntity {
   @Column('uuid', { name: 'student_profile_id' })
   studentProfileId: string;
 
-  @Column('uuid', { name: 'card_id' })
-  cardId: string;
+  @Column('varchar', { unique: true, name: 'card_uid' })
+  cardUid: string;
+
+  @Column('varchar', { nullable: true, name: 'card_number' })
+  cardNumber: string;
 
   @Column('varchar', { default: 'ACTIVE' })
   status: string;
@@ -25,8 +27,4 @@ export class StudentCard extends BaseEntity {
   })
   @JoinColumn({ name: 'student_profile_id' })
   studentProfile: StudentProfile;
-
-  @ManyToOne(() => Card)
-  @JoinColumn({ name: 'card_id' })
-  card: Card;
 }

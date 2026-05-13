@@ -1,6 +1,5 @@
 import { Entity, Column, OneToMany, OneToOne } from 'typeorm';
 import { BaseEntity } from '../common/sql/base.entity';
-import { Card } from './card.entity';
 import { Order } from './order.entity';
 import { Wallet } from './wallet.entity';
 import { StudentProfile } from './student-profile.entity';
@@ -27,9 +26,6 @@ export class Customer extends BaseEntity {
   userId: string;
 
   // Relations
-  @OneToMany(() => Card, (card) => card.customer)
-  cards: Card[];
-
   @OneToMany(() => Order, (order) => order.customer)
   orders: Order[];
 
