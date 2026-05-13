@@ -7,7 +7,6 @@ import { AppService } from './app.service';
 import { databaseConfig } from './config/database.config';
 import { AllExceptionsFilter } from './common/filter/all-exceptions.filter';
 import { AuthModule } from './modules/auth/auth.module';
-import { SeedModule } from './modules/seed/seed.module';
 import { ProductModule } from './modules/products/product.module';
 import { OrderModule } from './modules/orders/order.module';
 import { UserModule } from './modules/user/user.module';
@@ -41,7 +40,6 @@ import { CartModule } from './modules/cart/cart.module';
     }),
     TypeOrmModule.forRoot(databaseConfig),
     AuthModule,
-    SeedModule,
     UserModule,
     BranchModule,
     POSDeviceModule,
