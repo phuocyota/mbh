@@ -212,12 +212,13 @@ export class CartService {
       createdBy: userId,
     });
 
-    const completedOrder = await this.orderService.completeOrder(order.id);
+    const preparingOrder = await this.orderService.updateStatus(order.id, 'PREPARING');
     await this.clearCart(cartWithItems.id);
 
     return {
-      order: completedOrder,
+      order: preparingOrder,
       payment,
+      nextAction: 'WAITING_FOR_PREPARATION',
     };
   }
 

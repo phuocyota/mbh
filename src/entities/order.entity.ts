@@ -10,6 +10,9 @@ export class Order extends BaseEntity {
   @Column('varchar', { unique: true, name: 'order_code' })
   orderCode: string;
 
+  @Column('integer', { nullable: true, name: 'order_number', unique: true })
+  orderNumber: number;
+
   @Column('uuid', { nullable: true, name: 'branch_id' })
   branchId: string;
 

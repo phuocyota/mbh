@@ -15,6 +15,7 @@ import {
   Customer,
 } from 'src/entities';
 import { ERROR_MESSAGES } from '../../common/constant/error-messages.constant';
+import { OrderNumberService } from './order-number.service';
 
 @Injectable()
 export class OrderService {
@@ -31,6 +32,7 @@ export class OrderService {
     private walletTransactionRepository: Repository<WalletTransaction>,
     @InjectRepository(Customer)
     private customerRepository: Repository<Customer>,
+    private orderNumberService: OrderNumberService,
   ) {}
 
   async createOrder(createOrderDto: any) {
@@ -208,7 +210,7 @@ export class OrderService {
       changeAmount: paidAmount - totalAmount,
       paymentStatus: isPaid ? 'PAID' : 'PARTIAL',
       paymentMethod: paymentDto.method,
-      status: isPaid ? 'PENDING_PAYMENT' : 'DRAFT',
+      status: isPaid ? 'PREPARING' : 'DRAFT',
       paidAt: isPaid ? new Date() : undefined,
     });
 
@@ -230,9 +232,13 @@ export class OrderService {
       throw new BadRequestException('Order must be fully paid before completion');
     }
 
+    // Generate order number (auto-assign with gap-filling logic)
+    const orderNumber = await this.orderNumberService.generateNextOrderNumber();
+
     await this.orderRepository.update(orderId, {
       status: 'DONE',
       completedAt: new Date(),
+      orderNumber,
     });
 
     return this.getOrderWithItems(orderId);
