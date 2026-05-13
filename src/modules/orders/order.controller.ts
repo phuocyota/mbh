@@ -102,6 +102,14 @@ export class OrderController {
     return this.orderService.updateStatus(id, 'Pending');
   }
 
+  @ApiOperation({ summary: 'Set order status to ready for pickup' })
+  @ApiParam({ name: 'id', description: 'Order ID' })
+  @ApiResponse({ status: 200, description: 'Order status set to ready for pickup' })
+  @Put(':id/ready-to-pickup')
+  async setReadyToPickup(@Param('id') id: string) {
+    return this.orderService.updateStatus(id, 'READY_TO_PICKUP');
+  }
+
   @ApiOperation({ summary: 'Set order status to done (complete)' })
   @ApiParam({ name: 'id', description: 'Order ID' })
   @ApiResponse({ status: 200, description: 'Order completed' })
