@@ -61,6 +61,9 @@ export class Order extends BaseEntity {
   @Column('varchar', { default: 'UNPAID', name: 'payment_status' })
   paymentStatus: string; // UNPAID, PAID, PARTIAL, REFUNDED
 
+  @Column('varchar', { nullable: true, name: 'payment_method' })
+  paymentMethod: string; // CASH, WALLET, CARD, BANK_TRANSFER, QR
+
   @Column('text', { nullable: true })
   note: string;
 

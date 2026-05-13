@@ -175,6 +175,7 @@ export class CartService {
       customerId: cartWithItems.customerId,
       cashierId: userId,
       orderType: dto.orderType ?? 'TAKEAWAY',
+      paymentMethod,
       note: dto.note,
       items: cartWithItems.items.map((item) => ({
         productId: item.productId,

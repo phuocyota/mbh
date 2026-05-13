@@ -158,6 +158,7 @@ export class OrderService {
         paidAmount: totalAmount,
         changeAmount: 0,
         paymentStatus: 'PAID',
+        paymentMethod: 'WALLET',
         note: dto.note,
         paidAt: new Date(),
       });
@@ -278,6 +279,7 @@ export class OrderService {
       orderCode: orderCode,
       status: 'Pending',
       paymentStatus: 'UNPAID',
+      paymentMethod: createOrderDto.paymentMethod ?? null,
       subtotal: subtotal > 0 ? subtotal : null,
       totalAmount: totalAmount > 0 ? totalAmount : null,
     });
@@ -406,6 +408,7 @@ export class OrderService {
       paidAmount: paidAmount,
       changeAmount: paidAmount - order.totalAmount,
       paymentStatus: isPaid ? 'PAID' : 'PARTIAL',
+      paymentMethod: paymentDto.method,
       status: isPaid ? 'PENDING_PAYMENT' : 'DRAFT',
       paidAt: isPaid ? new Date() : undefined,
     });
