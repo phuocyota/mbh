@@ -7,12 +7,12 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   const port = process.env.PORT || 3002;
 
-  // Enable CORS for frontend (cho phép mọi origin local trong dev)
-  const corsOrigins = process.env.CORS_ORIGIN
-    ? process.env.CORS_ORIGIN.split(',').map((s) => s.trim())
-    : null;
+  // Enable CORS for frontend
   app.enableCors({
-    origin: corsOrigins ?? true, // `true` = reflect request origin (an toàn cho dev)
+    origin: [
+      'https://fe.kidocanteen.kidoedu.vn',
+      'http://localhost:5173',
+    ],
     credentials: true,
   });
 
