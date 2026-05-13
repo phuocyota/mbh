@@ -24,20 +24,18 @@ export class AuthService {
     return null;
   }
 
-  async login(user: any) {
+  async login(user: any, deviceId?: string) {
     const payload = {
       email: user.email,
-      sub: user.id,
-      role: user.role,
+      userId: user.id,
+      userType: user.role,
+      deviceId: deviceId || 'default-device',
     };
     return {
-      access_token: this.jwtService.sign(payload),
-      user: {
-        id: user.id,
-        email: user.email,
-        fullName: user.fullName,
-        role: user.role,
-      },
+      accessToken: this.jwtService.sign(payload),
+      userId: user.id,
+      userType: user.role,
+      deviceId: deviceId || 'default-device',
     };
   }
 
@@ -55,7 +53,7 @@ export class AuthService {
     return result;
   }
 
-  async loginByCard(cardId: string) {
+  async loginByCard(cardId: string, deviceId?: string) {
     const user = await this.userRepository.findOne({
       where: { cardId },
     });
@@ -69,10 +67,10 @@ export class AuthService {
     }
 
     const { passwordHash, ...userWithoutPassword } = user;
-    return this.login(userWithoutPassword);
+    return this.login(userWithoutPassword, deviceId);
   }
 
-  async loginStudent(dto: { cardId?: string; email?: string; password?: string }) {
+  async loginStudent(dto: { cardId?: string; email?: string; password?: string; deviceId?: string }) {
     let user: User | null = null;
 
     // Login by cardId
@@ -106,6 +104,6 @@ export class AuthService {
     }
 
     const { passwordHash, ...userWithoutPassword } = user;
-    return this.login(userWithoutPassword);
+    return this.login(userWithoutPassword, dto.deviceId);
   }
 }

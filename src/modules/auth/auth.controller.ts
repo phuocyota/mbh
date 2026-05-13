@@ -27,8 +27,8 @@ export class AuthController {
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @UseGuards(LocalAuthGuard)
   @Post('login')
-  async login(@Request() req) {
-    return this.authService.login(req.user);
+  async login(@Request() req, @Body('deviceId') deviceId?: string) {
+    return this.authService.login(req.user, deviceId);
   }
 
   @ApiOperation({ summary: 'Register a new user' })
@@ -69,7 +69,7 @@ export class AuthController {
   @ApiResponse({ status: 401, description: 'Unauthorized - Card not found or inactive' })
   @Post('login-card')
   async loginByCard(@Body() dto: CardLoginDto) {
-    return this.authService.loginByCard(dto.cardId);
+    return this.authService.loginByCard(dto.cardId, dto.deviceId);
   }
 
   @ApiOperation({ summary: 'Student login with card or email/password' })

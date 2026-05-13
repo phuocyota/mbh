@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsNotEmpty, IsString } from 'class-validator';
+import { IsNotEmpty, IsString, IsOptional } from 'class-validator';
 
 export class CardLoginDto {
   @ApiProperty({
@@ -9,4 +9,13 @@ export class CardLoginDto {
   @IsNotEmpty()
   @IsString()
   cardId: string;
+
+  @ApiProperty({
+    description: 'Device ID',
+    example: 'device-12345',
+    required: false,
+  })
+  @IsOptional()
+  @IsString()
+  deviceId?: string;
 }

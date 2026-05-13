@@ -28,4 +28,13 @@ export class StudentLoginDto {
   @IsOptional()
   @IsString()
   password?: string;
+
+  @ApiProperty({
+    description: 'Device ID',
+    example: 'device-12345',
+    required: false,
+  })
+  @IsOptional()
+  @IsString()
+  deviceId?: string;
 }
