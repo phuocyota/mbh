@@ -3,13 +3,19 @@ import { JwtService } from '@nestjs/jwt';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import * as bcrypt from 'bcrypt';
-import { User } from 'src/entities';
+import { User, Customer, Wallet, StudentProfile } from 'src/entities';
 
 @Injectable()
 export class AuthService {
   constructor(
     @InjectRepository(User)
     private userRepository: Repository<User>,
+    @InjectRepository(Customer)
+    private customerRepository: Repository<Customer>,
+    @InjectRepository(Wallet)
+    private walletRepository: Repository<Wallet>,
+    @InjectRepository(StudentProfile)
+    private studentProfileRepository: Repository<StudentProfile>,
     private jwtService: JwtService,
   ) {}
 
@@ -31,11 +37,49 @@ export class AuthService {
       userType: user.role,
       deviceId: deviceId || 'default-device',
     };
-    return {
+
+    const result: any = {
       accessToken: this.jwtService.sign(payload),
       userId: user.id,
       userType: user.role,
       deviceId: deviceId || 'default-device',
+      fullName: user.fullName,
+      avatar: user.avatar || null,
+    };
+
+    // Add student-specific info if role is STUDENT
+    if (user.role === 'STUDENT') {
+      const studentInfo = await this.getStudentInfo(user.id);
+      Object.assign(result, studentInfo);
+    }
+
+    return result;
+  }
+
+  async getStudentInfo(userId: string) {
+    // Find customer by userId
+    const customer = await this.customerRepository.findOne({
+      where: { userId },
+      relations: ['studentProfile', 'wallet'],
+    });
+
+    if (!customer) {
+      return {
+        school: null,
+        class: null,
+        walletBalance: 0,
+      };
+    }
+
+    // Get school and class names (for now using IDs as placeholders)
+    // TODO: Replace with actual school/class entity lookups when available
+    const schoolId = customer.studentProfile?.schoolId;
+    const classId = customer.studentProfile?.classId;
+
+    return {
+      school: schoolId ? `School-${schoolId.substring(0, 8)}` : null,
+      class: classId ? `Class-${classId.substring(0, 8)}` : null,
+      walletBalance: customer.wallet?.balance || 0,
     };
   }
 

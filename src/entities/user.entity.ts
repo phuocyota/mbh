@@ -24,6 +24,9 @@ export class User extends BaseEntity {
   @Column('varchar', { nullable: true, name: 'card_id', unique: true })
   cardId: string;
 
+  @Column('varchar', { nullable: true })
+  avatar: string;
+
   // Relations
   @OneToMany('Order', 'cashier')
   orders: any[];

@@ -11,6 +11,7 @@ import {
   Wallet,
   Category,
   Product,
+  StudentProfile,
 } from '../../entities';
 import { v4 as uuid } from 'uuid';
 
@@ -33,6 +34,8 @@ export class SeedService {
     private categoryRepository: Repository<Category>,
     @InjectRepository(Product)
     private productRepository: Repository<Product>,
+    @InjectRepository(StudentProfile)
+    private studentProfileRepository: Repository<StudentProfile>,
   ) {}
 
   async seed(): Promise<void> {
@@ -81,6 +84,7 @@ export class SeedService {
         role: 'STUDENT',
         status: 'ACTIVE',
         cardId: '0089280076',
+        avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=student1',
       },
     ];
 
@@ -160,6 +164,8 @@ export class SeedService {
     console.log('✅ POS Devices seeded');
 
     // Create customers
+    const schoolId = uuid();
+    const classId = uuid();
     const customers: any[] = [];
     for (let i = 1; i <= 10; i++) {
       const customerId = uuid();
@@ -170,6 +176,7 @@ export class SeedService {
         phone: `090100000${i}`,
         type: 'STUDENT',
         status: 'ACTIVE',
+        userId: i === 1 ? studentId : null, // Link first customer to student user
       });
     }
 
@@ -217,6 +224,28 @@ export class SeedService {
       }
     }
     console.log('✅ Cards and Wallets seeded');
+
+    // Create student profiles for STUDENT type customers
+    const savedStudents = await this.customerRepository.find({
+      where: { type: 'STUDENT' },
+    });
+    for (const customer of savedStudents) {
+      const existingProfile = await this.studentProfileRepository.findOne({
+        where: { customerId: customer.id },
+      });
+      if (!existingProfile) {
+        const profile = {
+          id: uuid(),
+          customerId: customer.id,
+          schoolId: schoolId,
+          classId: classId,
+          studentCode: customer.customerCode,
+          parentPhone: `090200000${Math.floor(Math.random() * 9) + 1}`,
+        };
+        await this.studentProfileRepository.save(profile);
+      }
+    }
+    console.log('✅ Student Profiles seeded');
 
     // Create categories
     const categoryData = [

@@ -11,6 +11,7 @@ import {
   Wallet,
   Category,
   Product,
+  StudentProfile,
 } from '../../entities';
 
 @Module({
@@ -24,6 +25,7 @@ import {
       Wallet,
       Category,
       Product,
+      StudentProfile,
     ]),
   ],
   providers: [SeedService],
