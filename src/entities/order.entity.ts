@@ -25,6 +25,9 @@ export class Order extends BaseEntity {
   @Column('uuid', { nullable: true, name: 'cashier_id' })
   cashierId: string;
 
+  @Column('uuid', { nullable: true, name: 'coupon_id' })
+  couponId: string;
+
   @Column('varchar', { nullable: true, name: 'order_type' })
   orderType: string; // DINE_IN, TAKEAWAY, PRE_ORDER
 
@@ -41,6 +44,14 @@ export class Order extends BaseEntity {
     name: 'discount_amount',
   })
   discountAmount: number;
+
+  @Column('numeric', {
+    precision: 12,
+    scale: 2,
+    default: 0,
+    name: 'coupon_discount',
+  })
+  couponDiscount: number;
 
   @Column('numeric', { nullable: true, precision: 12, scale: 2, name: 'total_amount' })
   totalAmount: number;
@@ -95,6 +106,10 @@ export class Order extends BaseEntity {
   @ManyToOne(() => User, (user) => user.orders)
   @JoinColumn({ name: 'cashier_id' })
   cashier: User;
+
+  @ManyToOne('Coupon', 'orders')
+  @JoinColumn({ name: 'coupon_id' })
+  coupon: any;
 
   @OneToMany('OrderItem', 'order', { cascade: true })
   items: any[];

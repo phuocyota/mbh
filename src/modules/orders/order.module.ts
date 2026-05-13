@@ -10,8 +10,10 @@ import {
   Wallet,
   WalletTransaction,
   Customer,
+  Coupon,
 } from 'src/entities';
 import { CustomerModule } from '../customer/customer.module';
+import { CouponModule } from '../coupon/coupon.module';
 
 @Module({
   imports: [
@@ -22,8 +24,10 @@ import { CustomerModule } from '../customer/customer.module';
       Wallet,
       WalletTransaction,
       Customer,
+      Coupon,
     ]),
     CustomerModule,
+    CouponModule,
   ],
   providers: [OrderService, OrderNumberService],
   controllers: [OrderController],

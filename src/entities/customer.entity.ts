@@ -4,6 +4,7 @@ import { Order } from './order.entity';
 import { Wallet } from './wallet.entity';
 import { StudentProfile } from './student-profile.entity';
 import { StudentClass } from './student-class.entity';
+import { Coupon } from './coupon.entity';
 
 @Entity('customers')
 export class Customer extends BaseEntity {
@@ -37,4 +38,7 @@ export class Customer extends BaseEntity {
 
   @OneToMany(() => StudentClass, (sc) => sc.student)
   classes: StudentClass[];
+
+  @OneToMany(() => Coupon, (coupon) => coupon.customer)
+  coupons: Coupon[];
 }
