@@ -175,8 +175,8 @@ export class CartService {
     const paymentMethod = dto.paymentMethod ?? 'WALLET';
 
     const order = await this.orderService.createOrder({
-      branchId: dto.branchId ?? cartWithItems.branchId,
-      posDeviceId: dto.posDeviceId,
+      branchId: dto.branchId || cartWithItems.branchId || undefined,
+      posDeviceId: dto.posDeviceId || undefined,
       customerId: cartWithItems.customerId,
       cashierId: userId,
       orderType: dto.orderType ?? 'TAKEAWAY',

@@ -1,13 +1,16 @@
 import { ApiProperty } from '@nestjs/swagger';
+import { Transform } from 'class-transformer';
 import { IsIn, IsOptional, IsString, IsUUID } from 'class-validator';
 
 export class CompleteCartDto {
   @ApiProperty({ description: 'Branch ID', required: false })
+  @Transform(({ value }) => value || undefined)
   @IsOptional()
   @IsUUID()
   branchId?: string;
 
   @ApiProperty({ description: 'POS Device ID', required: false })
+  @Transform(({ value }) => value || undefined)
   @IsOptional()
   @IsUUID()
   posDeviceId?: string;
