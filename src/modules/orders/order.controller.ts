@@ -58,6 +58,14 @@ export class OrderController {
     return this.orderService.findPreparingOrders(branchId);
   }
 
+  @ApiOperation({ summary: 'Get orders ready for pickup' })
+  @ApiQuery({ name: 'branchId', required: false })
+  @ApiResponse({ status: 200, description: 'List of ready-to-pickup orders' })
+  @Get('ready-to-pickup')
+  async findReadyToPickup(@Query('branchId') branchId?: string) {
+    return this.orderService.findReadyToPickupOrders(branchId);
+  }
+
   @ApiOperation({ summary: 'Get order with items and payments' })
   @ApiParam({ name: 'id', description: 'Order ID' })
   @ApiResponse({ status: 200, description: 'Order details with items' })

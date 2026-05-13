@@ -303,6 +303,10 @@ export class OrderService {
     return this.findAll(branchId, 'PREPARING');
   }
 
+  async findReadyToPickupOrders(branchId?: string) {
+    return this.findAll(branchId, 'READY_TO_PICKUP');
+  }
+
   async updateStatus(orderId: string, status: string) {
     const order = await this.orderRepository.findOne({
       where: { id: orderId },
