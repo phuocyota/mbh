@@ -100,6 +100,18 @@ export class OrderController {
     return this.orderService.processPayment(id, paymentDto);
   }
 
+  @ApiOperation({ summary: 'Receive cash payment from customer (PENDING_PAYMENT -> READY_TO_PICKUP)' })
+  @ApiParam({ name: 'id', description: 'Order ID' })
+  @ApiResponse({ status: 200, description: 'Cash payment received, order status updated to ready-to-pickup' })
+  @Post(':id/receive-cash')
+  async receiveCashPayment(@Param('id') id: string, @Body() paymentDto: any, @Req() req: any) {
+    const userId = req.user?.userId;
+    return this.orderService.receiveCashPayment(id, {
+      amount: paymentDto.amount,
+      createdBy: userId,
+    });
+  }
+
   // FE Actions APIs
 
   @ApiOperation({ summary: 'Set order status to pending' })

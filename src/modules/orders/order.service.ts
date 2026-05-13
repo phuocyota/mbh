@@ -307,6 +307,46 @@ export class OrderService {
     return this.findAll(branchId, 'READY_TO_PICKUP');
   }
 
+  async receiveCashPayment(orderId: string, paymentDto: { amount: number; createdBy?: string }) {
+    const order = await this.orderRepository.findOne({
+      where: { id: orderId },
+    });
+
+    if (!order) {
+      throw new NotFoundException(
+        ERROR_MESSAGES.NOT_FOUND_WITH_ID('Order', orderId),
+      );
+    }
+
+    if (order.paymentStatus !== 'UNPAID') {
+      throw new BadRequestException('Order payment must be in UNPAID status');
+    }
+
+    if (order.status !== 'PENDING_PAYMENT') {
+      throw new BadRequestException('Order status must be PENDING_PAYMENT');
+    }
+
+    // Create payment record
+    const payment = this.paymentRepository.create({
+      orderId: orderId,
+      method: 'CASH',
+      amount: paymentDto.amount,
+      status: 'SUCCESS',
+      createdBy: paymentDto.createdBy,
+    });
+    await this.paymentRepository.save(payment);
+
+    // Update order: set paymentStatus to PAID and status to READY_TO_PICKUP
+    await this.orderRepository.update(orderId, {
+      paymentStatus: 'PAID',
+      status: 'READY_TO_PICKUP',
+      paidAmount: paymentDto.amount,
+      paidAt: new Date(),
+    });
+
+    return this.getOrderWithItems(orderId);
+  }
+
   async updateStatus(orderId: string, status: string) {
     const order = await this.orderRepository.findOne({
       where: { id: orderId },
