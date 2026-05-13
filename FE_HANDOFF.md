@@ -21,7 +21,7 @@ Login bằng thẻ:
 ```json
 {
   "cardId": "0089280076",
-  "deviceId": "kiosk-01"
+  "deviceId": "student-app"
 }
 ```
 
@@ -31,7 +31,7 @@ Login bằng email/password:
 {
   "email": "student1@pos.local",
   "password": "student123",
-  "deviceId": "kiosk-01"
+  "deviceId": "student-app"
 }
 ```
 
@@ -42,7 +42,7 @@ Response chính:
   "accessToken": "jwt-token",
   "userId": "uuid",
   "userType": "STUDENT",
-  "deviceId": "kiosk-01",
+  "deviceId": "student-app",
   "fullName": "Nguyen Van A",
   "avatar": null,
   "school": "Ten truong",
@@ -91,7 +91,7 @@ Response:
 
 ## 3. Cart APIs
 
-Các API cart dùng JWT của học sinh.
+Các API cart dùng JWT của học sinh. Flow FE chính dùng giỏ hàng theo token, từ lấy giỏ hàng, thêm món, xác nhận, đến xử lý thanh toán.
 
 ### Lấy giỏ hàng hiện tại
 
@@ -142,6 +142,19 @@ DELETE /api/cart/me/items/:itemId
 ```http
 POST /api/cart/me/complete
 ```
+
+Auth: JWT của học sinh.
+
+BE sẽ tự xử lý theo token:
+
+1. Lấy `userId` từ JWT.
+2. Tìm `customer` gắn với `userId`.
+3. Lấy cart hiện tại của customer.
+4. Tạo order từ cart items.
+5. Lưu `paymentMethod` vào order.
+6. Nếu `paymentMethod = WALLET`, kiểm tra ví, trừ ví, tạo payment, ghi wallet transaction.
+7. Nếu `paymentMethod = CASH`, chuyển order sang `PENDING_PAYMENT`.
+8. Clear cart sau khi xử lý thành công.
 
 Body thanh toán ví:
 

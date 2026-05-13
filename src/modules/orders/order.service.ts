@@ -4,7 +4,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, Repository } from 'typeorm';
+import { Repository } from 'typeorm';
 import { v4 as uuid } from 'uuid';
 import {
   Order,
@@ -12,14 +12,9 @@ import {
   Payment,
   Wallet,
   WalletTransaction,
-  StudentCard,
   Customer,
-  Product,
-  KitchenTicket,
-  KitchenTicketItem,
 } from 'src/entities';
 import { ERROR_MESSAGES } from '../../common/constant/error-messages.constant';
-import { KioskCheckoutDto } from './dto/kiosk-checkout.dto';
 
 @Injectable()
 export class OrderService {
@@ -34,228 +29,9 @@ export class OrderService {
     private walletRepository: Repository<Wallet>,
     @InjectRepository(WalletTransaction)
     private walletTransactionRepository: Repository<WalletTransaction>,
-    @InjectRepository(StudentCard)
-    private studentCardRepository: Repository<StudentCard>,
     @InjectRepository(Customer)
     private customerRepository: Repository<Customer>,
-    @InjectRepository(Product)
-    private productRepository: Repository<Product>,
-    @InjectRepository(KitchenTicket)
-    private kitchenTicketRepository: Repository<KitchenTicket>,
-    @InjectRepository(KitchenTicketItem)
-    private kitchenTicketItemRepository: Repository<KitchenTicketItem>,
   ) {}
-
-  /**
-   * Self-service checkout từ kiosk:
-   * - Auth bằng cardUid → tìm customer + ví
-   * - Tạo order + order_items
-   * - Trừ ví (yêu cầu đủ số dư)
-   * - Tạo payment WALLET, wallet_transaction
-   * - Tạo kitchen_ticket + items (gửi bếp)
-   * - Order status = PREPARING
-   * Tất cả trong 1 transaction.
-   */
-  async kioskCheckout(dto: KioskCheckoutDto) {
-    const queryRunner = this.orderRepository.manager.connection.createQueryRunner();
-    await queryRunner.connect();
-    await queryRunner.startTransaction();
-
-    try {
-      // 1. Student card -> customer
-      const studentCard = await queryRunner.manager
-        .createQueryBuilder(StudentCard, 'studentCard')
-        .innerJoinAndSelect('studentCard.studentProfile', 'studentProfile')
-        .innerJoinAndSelect('studentProfile.customer', 'customer')
-        .where(
-          '(studentCard.cardUid = :cardUid OR studentCard.cardNumber = :cardUid)',
-          { cardUid: dto.cardUid },
-        )
-        .getOne();
-      if (!studentCard) {
-        throw new NotFoundException(`Thẻ ${dto.cardUid} không tồn tại`);
-      }
-      if (studentCard.status !== 'ACTIVE') {
-        throw new BadRequestException(
-          `Thẻ đang ở trạng thái ${studentCard.status}`,
-        );
-      }
-      const customer = studentCard.studentProfile.customer;
-      if (!customer || customer.status !== 'ACTIVE') {
-        throw new BadRequestException('Khách hàng không hợp lệ');
-      }
-
-      // 2. Wallet
-      const wallet = await queryRunner.manager.findOne(Wallet, {
-        where: { customerId: customer.id },
-      });
-      if (!wallet) {
-        throw new BadRequestException('Khách hàng chưa có ví');
-      }
-      if (wallet.status !== 'ACTIVE') {
-        throw new BadRequestException('Ví không ở trạng thái ACTIVE');
-      }
-
-      // 3. Resolve products (lấy giá hiện tại từ DB, không tin client)
-      const productIds = dto.items.map((i) => i.productId);
-      const products = await queryRunner.manager.findBy(Product, {
-        id: In(productIds),
-      });
-      if (products.length !== productIds.length) {
-        throw new BadRequestException('Có sản phẩm không tồn tại');
-      }
-      const productMap = new Map(products.map((p) => [p.id, p]));
-
-      // 4. Build order_items + tổng
-      let subtotal = 0;
-      const orderItemsData = dto.items.map((line) => {
-        const p = productMap.get(line.productId)!;
-        if (!p.isActive) {
-          throw new BadRequestException(
-            `Sản phẩm ${p.name} đang ngừng bán`,
-          );
-        }
-        const lineTotal = Number(p.price) * line.quantity;
-        subtotal += lineTotal;
-        return {
-          productId: p.id,
-          productName: p.name,
-          unitPrice: Number(p.price),
-          quantity: line.quantity,
-          subtotal: lineTotal,
-          discountAmount: 0,
-          totalAmount: lineTotal,
-          status: 'NORMAL',
-        };
-      });
-
-      const totalAmount = subtotal;
-
-      // 5. Check wallet balance
-      const balanceBefore = Number(wallet.balance);
-      if (balanceBefore < totalAmount) {
-        throw new BadRequestException(
-          `Số dư ví không đủ. Còn ${balanceBefore.toLocaleString('vi-VN')} đ, cần ${totalAmount.toLocaleString('vi-VN')} đ`,
-        );
-      }
-
-      // 6. Create order
-      const orderCode = `ORD${Date.now()}${Math.random()
-        .toString(36)
-        .substring(2, 8)
-        .toUpperCase()}`;
-      const order = queryRunner.manager.create(Order, {
-        orderCode,
-        branchId: dto.branchId,
-        posDeviceId: dto.posDeviceId,
-        customerId: customer.id,
-        cashierId: customer.id, // kiosk: customer tự thao tác, dùng customer.id làm placeholder
-        orderType: 'TAKEAWAY',
-        status: 'PAID',
-        subtotal,
-        discountAmount: 0,
-        totalAmount,
-        paidAmount: totalAmount,
-        changeAmount: 0,
-        paymentStatus: 'PAID',
-        paymentMethod: 'WALLET',
-        note: dto.note,
-        paidAt: new Date(),
-      });
-      const savedOrder = await queryRunner.manager.save(order);
-
-      // 7. Create order_items
-      const orderItems = orderItemsData.map((d) =>
-        queryRunner.manager.create(OrderItem, {
-          ...d,
-          orderId: savedOrder.id,
-        }),
-      );
-      const savedItems = await queryRunner.manager.save(orderItems);
-
-      // 8. Trừ ví + ghi wallet_transaction
-      const balanceAfter = balanceBefore - totalAmount;
-      wallet.balance = balanceAfter;
-      await queryRunner.manager.save(wallet);
-
-      const walletTx = queryRunner.manager.create(WalletTransaction, {
-        walletId: wallet.id,
-        customerId: customer.id,
-        type: 'PAYMENT',
-        amount: totalAmount,
-        balanceBefore,
-        balanceAfter,
-        refType: 'ORDER',
-        refId: savedOrder.id,
-        note: `Thanh toán đơn ${orderCode} (kiosk)`,
-      });
-      await queryRunner.manager.save(walletTx);
-
-      // 9. Create payment
-      const payment = queryRunner.manager.create(Payment, {
-        orderId: savedOrder.id,
-        method: 'WALLET',
-        amount: totalAmount,
-        status: 'SUCCESS',
-        paidByCustomerId: customer.id,
-      });
-      await queryRunner.manager.save(payment);
-
-      // 10. Create kitchen_ticket + items
-      const ticket = queryRunner.manager.create(KitchenTicket, {
-        orderId: savedOrder.id,
-        branchId: dto.branchId,
-        status: 'WAITING',
-      });
-      const savedTicket = await queryRunner.manager.save(ticket);
-
-      const ticketItems = savedItems.map((oi) =>
-        queryRunner.manager.create(KitchenTicketItem, {
-          kitchenTicketId: savedTicket.id,
-          orderItemId: oi.id,
-          productName: oi.productName,
-          quantity: oi.quantity,
-          status: 'WAITING',
-        }),
-      );
-      await queryRunner.manager.save(ticketItems);
-
-      // 11. Update order → PREPARING
-      savedOrder.status = 'PREPARING';
-      await queryRunner.manager.save(savedOrder);
-
-      await queryRunner.commitTransaction();
-
-      return {
-        order: {
-          id: savedOrder.id,
-          orderCode: savedOrder.orderCode,
-          status: 'PREPARING',
-          totalAmount,
-          paidAt: savedOrder.paidAt,
-        },
-        kitchenTicket: {
-          id: savedTicket.id,
-          status: 'WAITING',
-        },
-        wallet: {
-          balanceBefore,
-          balanceAfter,
-        },
-        customer: {
-          id: customer.id,
-          fullName: customer.fullName,
-          customerCode: customer.customerCode,
-        },
-        items: orderItemsData,
-      };
-    } catch (err) {
-      await queryRunner.rollbackTransaction();
-      throw err;
-    } finally {
-      await queryRunner.release();
-    }
-  }
 
   async createOrder(createOrderDto: any) {
     const orderCode = `ORD${Date.now()}${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
