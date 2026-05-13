@@ -59,6 +59,11 @@ export class CartService {
     return cart;
   }
 
+  async getMyCart(userId: string): Promise<Cart> {
+    const cart = await this.getOrCreateCart(undefined, undefined, undefined, userId);
+    return this.getCart(cart.id);
+  }
+
   async addItem(
     cartId: string,
     productId: string,

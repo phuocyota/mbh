@@ -28,7 +28,7 @@ export class CartController {
   @Get('me')
   async getMyCart(@Req() req: any) {
     const userId = req.user?.userId;
-    return this.cartService.getOrCreateCart(undefined, undefined, undefined, userId);
+    return this.cartService.getMyCart(userId);
   }
 
   @ApiOperation({ summary: 'Add item to my cart (via JWT token)' })
