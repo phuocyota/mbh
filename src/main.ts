@@ -13,6 +13,7 @@ async function bootstrap() {
     origin: [
       'https://fe.kidocanteen.kidoedu.vn',
       'http://localhost:5173',
+      'https://localhost:5173',
     ],
     credentials: true,
   });
