@@ -51,6 +51,30 @@ export class CouponService {
     });
   }
 
+  async getBestAvailableCoupon(customerId: string) {
+    const now = new Date();
+    const coupons = await this.couponRepository.find({
+      where: { customerId, status: 'ACTIVE' },
+      order: { reducePrice: 'DESC', createdAt: 'ASC' },
+    });
+
+    for (const coupon of coupons) {
+      if (coupon.expiresAt && now > coupon.expiresAt) {
+        await this.couponRepository.update(coupon.id, { status: 'EXPIRED' });
+        continue;
+      }
+
+      if (coupon.usedQuantity >= coupon.quantity) {
+        await this.couponRepository.update(coupon.id, { status: 'USED' });
+        continue;
+      }
+
+      return coupon;
+    }
+
+    return null;
+  }
+
   async validateAndUseCoupon(couponId: string, customerId: string) {
     const coupon = await this.getCouponById(couponId);
 

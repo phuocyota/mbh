@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Cart, CartItem, Product, Customer } from 'src/entities';
 import { OrderService } from '../orders/order.service';
+import { CouponService } from '../coupon/coupon.service';
 import { CompleteCartDto } from './dto/complete-cart.dto';
 
 @Injectable()
@@ -17,6 +18,7 @@ export class CartService {
     @InjectRepository(Customer)
     private customerRepository: Repository<Customer>,
     private orderService: OrderService,
+    private couponService: CouponService,
   ) {}
 
   async getOrCreateCart(customerId?: string, sessionId?: string, branchId?: string, userId?: string): Promise<Cart> {
@@ -205,11 +207,16 @@ export class CartService {
       };
     }
 
+    const coupon =
+      dto.couponId || !cartWithItems.customerId
+        ? null
+        : await this.couponService.getBestAvailableCoupon(cartWithItems.customerId);
+
     const payment = await this.orderService.processPayment(order.id, {
       method: paymentMethod,
       amount: totalAmount,
       customerId: cartWithItems.customerId,
-      couponId: dto.couponId,
+      couponId: dto.couponId || coupon?.id,
       createdBy: userId,
     });
 
