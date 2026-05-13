@@ -29,10 +29,16 @@ export class ProductController {
 
   @ApiOperation({ summary: 'Get all products' })
   @ApiQuery({ name: 'categoryId', required: false })
+  @ApiQuery({ name: 'minPrice', required: false, type: Number })
+  @ApiQuery({ name: 'maxPrice', required: false, type: Number })
   @ApiResponse({ status: 200, description: 'List of products' })
   @Get()
-  async findAll(@Query('categoryId') categoryId?: string) {
-    return this.productService.findAll(categoryId);
+  async findAll(
+    @Query('categoryId') categoryId?: string,
+    @Query('minPrice') minPrice?: number,
+    @Query('maxPrice') maxPrice?: number,
+  ) {
+    return this.productService.findAll(categoryId, { minPrice, maxPrice });
   }
 
   @ApiOperation({ summary: 'Get all product categories' })
@@ -43,10 +49,18 @@ export class ProductController {
   }
 
   @ApiOperation({ summary: 'Get active categories with active products' })
+  @ApiQuery({ name: 'minPrice', required: false, type: Number })
+  @ApiQuery({ name: 'maxPrice', required: false, type: Number })
   @ApiResponse({ status: 200, description: 'List of categories with products' })
   @Get('full')
-  async findAllCategoriesWithProducts() {
-    return this.productService.findAllCategoriesWithProducts();
+  async findAllCategoriesWithProducts(
+    @Query('minPrice') minPrice?: number,
+    @Query('maxPrice') maxPrice?: number,
+  ) {
+    return this.productService.findAllCategoriesWithProducts({
+      minPrice,
+      maxPrice,
+    });
   }
 
   @ApiOperation({ summary: 'Get product by ID' })

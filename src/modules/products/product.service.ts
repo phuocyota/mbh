@@ -5,6 +5,11 @@ import { Product, Category } from 'src/entities';
 import { BaseService } from '../../common/sql/base.service';
 import { ERROR_MESSAGES } from '../../common/constant/error-messages.constant';
 
+type ProductPriceFilter = {
+  minPrice?: number;
+  maxPrice?: number;
+};
+
 @Injectable()
 export class ProductService extends BaseService<Product> {
   constructor(
@@ -16,7 +21,7 @@ export class ProductService extends BaseService<Product> {
     super(productRepository);
   }
 
-  async findAll(categoryId?: string) {
+  async findAll(categoryId?: string, filter: ProductPriceFilter = {}) {
     const query = this.productRepository
       .createQueryBuilder('p')
       .leftJoinAndSelect('p.category', 'category')
@@ -25,6 +30,8 @@ export class ProductService extends BaseService<Product> {
     if (categoryId) {
       query.andWhere('p.category_id = :categoryId', { categoryId });
     }
+
+    this.applyPriceFilter(query, 'p', filter);
 
     return query
       .orderBy('category.sort_order', 'ASC')
@@ -68,18 +75,49 @@ export class ProductService extends BaseService<Product> {
     });
   }
 
-  async findAllCategoriesWithProducts() {
+  async findAllCategoriesWithProducts(filter: ProductPriceFilter = {}) {
+    const productConditions = ['product.is_active = :isActive'];
+    const params: Record<string, number | boolean | string> = { isActive: true };
+
+    if (filter.minPrice !== undefined) {
+      productConditions.push('product.price >= :minPrice');
+      params.minPrice = filter.minPrice;
+    }
+
+    if (filter.maxPrice !== undefined) {
+      productConditions.push('product.price <= :maxPrice');
+      params.maxPrice = filter.maxPrice;
+    }
+
     return this.categoryRepository
       .createQueryBuilder('category')
       .leftJoinAndSelect(
         'category.products',
         'product',
-        'product.is_active = :isActive',
-        { isActive: true },
+        productConditions.join(' AND '),
+        params,
       )
       .where('category.status = :status', { status: 'ACTIVE' })
       .orderBy('category.sort_order', 'ASC')
       .addOrderBy('product.name', 'ASC')
       .getMany();
+  }
+
+  private applyPriceFilter(
+    query: ReturnType<Repository<Product>['createQueryBuilder']>,
+    alias: string,
+    filter: ProductPriceFilter,
+  ) {
+    if (filter.minPrice !== undefined) {
+      query.andWhere(`${alias}.price >= :minPrice`, {
+        minPrice: filter.minPrice,
+      });
+    }
+
+    if (filter.maxPrice !== undefined) {
+      query.andWhere(`${alias}.price <= :maxPrice`, {
+        maxPrice: filter.maxPrice,
+      });
+    }
   }
 }
