@@ -220,4 +220,25 @@ export class AuthService {
     const { passwordHash, ...userWithoutPassword } = user;
     return this.login(userWithoutPassword, dto.deviceId);
   }
+
+  async loginCashier(dto: { email: string; password: string; deviceId?: string }) {
+    const user = await this.userRepository.findOne({
+      where: { email: dto.email },
+    });
+
+    if (!user || !(await bcrypt.compare(dto.password, user.passwordHash))) {
+      throw new UnauthorizedException('Invalid credentials');
+    }
+
+    if (user.role !== 'CASHIER') {
+      throw new UnauthorizedException('This endpoint is only for cashiers');
+    }
+
+    if (user.status !== 'ACTIVE') {
+      throw new UnauthorizedException('Cashier account is inactive');
+    }
+
+    const { passwordHash, ...userWithoutPassword } = user;
+    return this.login(userWithoutPassword, dto.deviceId);
+  }
 }
