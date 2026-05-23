@@ -1,6 +1,7 @@
 import { Controller, Post, Body } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBody } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
+import { CashierLoginDto } from './dto/cashier-login.dto';
 import { StudentLoginDto } from './dto/student-login.dto';
 
 @ApiTags('Auth')
@@ -50,5 +51,17 @@ export class AuthController {
   @Post('login/student')
   async loginStudent(@Body() dto: StudentLoginDto) {
     return this.authService.loginStudent(dto);
+  }
+
+  @ApiOperation({ summary: 'Cashier login with email/password' })
+  @ApiBody({ type: CashierLoginDto })
+  @ApiResponse({
+    status: 200,
+    description: 'Cashier login successful, returns JWT token',
+  })
+  @ApiResponse({ status: 401, description: 'Unauthorized - Only cashiers can use this endpoint' })
+  @Post('login/cashier')
+  async loginCashier(@Body() dto: CashierLoginDto) {
+    return this.authService.loginCashier(dto);
   }
 }
