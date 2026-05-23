@@ -16,4 +16,10 @@ export class CashMovementService extends BaseService<CashMovement> {
   protected getEntityName(): string {
     return 'CashMovement';
   }
+
+  async findByShift(shiftId: string): Promise<CashMovement[]> {
+    return this.cashMovementRepository.find({
+      where: { shiftId },
+    });
+  }
 }

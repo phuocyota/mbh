@@ -29,7 +29,9 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 export class UserController {
   constructor(private userService: UserService) {}
 
-  @ApiOperation({ summary: 'Get current user profile (name, class, school, wallet)' })
+  @ApiOperation({
+    summary: 'Get current user profile (name, class, school, wallet)',
+  })
   @ApiResponse({ status: 200, description: 'User profile retrieved' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiResponse({ status: 404, description: 'Customer not found' })

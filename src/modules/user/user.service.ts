@@ -1,22 +1,16 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { User, Customer, StudentProfile, Wallet, Class } from '../../entities';
+import { User } from '../../entities';
 import { BaseService } from '../../common/sql/base.service';
+import { CustomerService } from '../customer/customer.service';
 
 @Injectable()
 export class UserService extends BaseService<User> {
   constructor(
     @InjectRepository(User)
     private userRepository: Repository<User>,
-    @InjectRepository(Customer)
-    private customerRepository: Repository<Customer>,
-    @InjectRepository(StudentProfile)
-    private studentProfileRepository: Repository<StudentProfile>,
-    @InjectRepository(Wallet)
-    private walletRepository: Repository<Wallet>,
-    @InjectRepository(Class)
-    private classRepository: Repository<Class>,
+    private customerService: CustomerService,
   ) {
     super(userRepository);
   }
@@ -25,37 +19,36 @@ export class UserService extends BaseService<User> {
     return 'User';
   }
 
-  async getMe(userId: string) {
-    const customer = await this.customerRepository.findOne({
-      where: { userId },
-      relations: ['studentProfile', 'wallet'],
+  async findByEmail(email: string): Promise<User | null> {
+    return this.userRepository.findOne({ where: { email } });
+  }
+
+  async createStaffUser(data: {
+    email: string;
+    passwordHash: string;
+    fullName: string;
+  }): Promise<User> {
+    const user = this.userRepository.create({
+      ...data,
+      role: 'STAFF',
+      status: 'ACTIVE',
     });
 
-    if (!customer) {
-      throw new NotFoundException('Customer not found for this user');
+    return this.userRepository.save(user);
+  }
+
+  async getMe(userId: string) {
+    const customerInfo = await this.customerService.getUserCustomerInfo(userId);
+    const user = await this.findById(userId);
+
+    if (!user) {
+      throw new NotFoundException('User not found');
     }
 
-    const user = await this.userRepository.findOne({
-      where: { id: userId },
-    });
-
-    const classEntity = customer.studentProfile?.classId
-      ? await this.classRepository.findOne({
-          where: { id: customer.studentProfile.classId },
-        })
-      : null;
-
     return {
-      userId: user?.id,
-      fullName: customer.studentProfile?.fullName || customer.fullName,
-      email: user?.email,
-      phone: customer.phone,
-      type: customer.type,
-      classId: customer.studentProfile?.classId || null,
-      schoolId: classEntity?.schoolId || null,
-      studentCode: customer.studentProfile?.studentCode || null,
-      walletBalance: customer.wallet?.balance || 0,
-      walletStatus: customer.wallet?.status || null,
+      userId: user.id,
+      email: user.email,
+      ...customerInfo,
     };
   }
 }

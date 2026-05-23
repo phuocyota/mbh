@@ -16,4 +16,24 @@ export class StockLevelService extends BaseService<StockLevel> {
   protected getEntityName(): string {
     return 'StockLevel';
   }
+
+  async getSnapshot(branchId?: string) {
+    const qb = this.stockLevelRepository
+      .createQueryBuilder('sl')
+      .leftJoin('inventory_items', 'ii', 'ii.id = sl.inventory_item_id')
+      .select('sl.id', 'id')
+      .addSelect('sl.branch_id', 'branchId')
+      .addSelect('sl.inventory_item_id', 'inventoryItemId')
+      .addSelect('ii.name', 'name')
+      .addSelect('ii.unit', 'unit')
+      .addSelect('sl.quantity', 'quantity')
+      .addSelect('sl.updated_at', 'updatedAt')
+      .orderBy('ii.name', 'ASC');
+
+    if (branchId) {
+      qb.where('sl.branch_id = :branchId', { branchId });
+    }
+
+    return qb.getRawMany();
+  }
 }

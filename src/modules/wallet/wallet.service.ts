@@ -7,9 +7,9 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Wallet } from '../../entities/wallet.entity';
 import { WalletTransaction } from '../../entities/wallet-transaction.entity';
-import { Customer } from '../../entities/customer.entity';
 import { BaseService } from '../../common/sql/base.service';
 import { ERROR_MESSAGES } from '../../common/constant/error-messages.constant';
+import { CustomerService } from '../customer/customer.service';
 
 export interface TopupResult {
   walletId: string;
@@ -27,8 +27,7 @@ export class WalletService extends BaseService<Wallet> {
     private walletRepository: Repository<Wallet>,
     @InjectRepository(WalletTransaction)
     private walletTransactionRepository: Repository<WalletTransaction>,
-    @InjectRepository(Customer)
-    private customerRepository: Repository<Customer>,
+    private customerService: CustomerService,
   ) {
     super(walletRepository);
   }
@@ -41,9 +40,7 @@ export class WalletService extends BaseService<Wallet> {
    * Lấy số dư ví theo customerId. Nếu chưa có ví thì tạo mới với balance=0.
    */
   async getBalanceByCustomer(customerId: string) {
-    const customer = await this.customerRepository.findOne({
-      where: { id: customerId },
-    });
+    const customer = await this.customerService.findById(customerId);
     if (!customer) {
       throw new NotFoundException(
         ERROR_MESSAGES.NOT_FOUND_WITH_ID('Customer', customerId),
@@ -86,9 +83,7 @@ export class WalletService extends BaseService<Wallet> {
     }
 
     return this.runInTransaction(async () => {
-      const customer = await this.customerRepository.findOne({
-        where: { id: customerId },
-      });
+      const customer = await this.customerService.findById(customerId);
       if (!customer) {
         throw new NotFoundException(
           ERROR_MESSAGES.NOT_FOUND_WITH_ID('Customer', customerId),
@@ -144,14 +139,88 @@ export class WalletService extends BaseService<Wallet> {
     });
   }
 
+  async chargeForOrder(customerId: string, amount: number, orderId: string) {
+    if (amount <= 0) {
+      return null;
+    }
+
+    const wallet = await this.walletRepository.findOne({
+      where: { customerId },
+    });
+
+    if (!wallet) {
+      throw new BadRequestException('Customer wallet not found');
+    }
+    if (wallet.status !== 'ACTIVE') {
+      throw new BadRequestException('Wallet is not active');
+    }
+    if (Number(wallet.balance) < amount) {
+      throw new BadRequestException('Insufficient wallet balance');
+    }
+
+    const balanceBefore = Number(wallet.balance);
+    const balanceAfter = balanceBefore - amount;
+    await this.walletRepository.update(wallet.id, { balance: balanceAfter });
+
+    const tx = this.walletTransactionRepository.create({
+      walletId: wallet.id,
+      customerId,
+      type: 'PAYMENT',
+      amount,
+      balanceBefore,
+      balanceAfter,
+      refType: 'ORDER',
+      refId: orderId,
+    });
+
+    return this.walletTransactionRepository.save(tx);
+  }
+
+  async refundToWallet(
+    customerId: string,
+    amount: number,
+    refundId: string,
+    orderCode: string,
+    updatedBy: string,
+  ) {
+    if (amount <= 0) {
+      return null;
+    }
+
+    const wallet = await this.walletRepository.findOne({
+      where: { customerId },
+    });
+
+    if (!wallet) {
+      return null;
+    }
+
+    const balanceBefore = Number(wallet.balance);
+    const balanceAfter = balanceBefore + amount;
+    wallet.balance = balanceAfter;
+    wallet.updatedBy = updatedBy;
+    await this.walletRepository.save(wallet);
+
+    const walletTx = this.walletTransactionRepository.create({
+      walletId: wallet.id,
+      customerId,
+      type: 'REFUND',
+      amount,
+      balanceBefore,
+      balanceAfter,
+      refType: 'REFUND',
+      refId: refundId,
+      note: `Hoàn tiền cho đơn ${orderCode}`,
+      createdBy: updatedBy,
+    });
+
+    return this.walletTransactionRepository.save(walletTx);
+  }
+
   /**
    * Lịch sử giao dịch ví của 1 customer (mới nhất trước).
    */
-  async getTransactionsByCustomer(
-    customerId: string,
-    page = 1,
-    size = 20,
-  ) {
+  async getTransactionsByCustomer(customerId: string, page = 1, size = 20) {
     const safePage = Math.max(Number(page) || 1, 1);
     const safeSize = Math.min(Math.max(Number(size) || 20, 1), 100);
 

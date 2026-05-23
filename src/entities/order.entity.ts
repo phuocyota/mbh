@@ -53,7 +53,12 @@ export class Order extends BaseEntity {
   })
   couponDiscount: number;
 
-  @Column('numeric', { nullable: true, precision: 12, scale: 2, name: 'total_amount' })
+  @Column('numeric', {
+    nullable: true,
+    precision: 12,
+    scale: 2,
+    name: 'total_amount',
+  })
   totalAmount: number;
 
   @Column('numeric', {

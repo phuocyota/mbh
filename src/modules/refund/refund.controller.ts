@@ -70,10 +70,7 @@ export class RefundController {
     summary: 'Tạo phiếu hoàn tiền (status=PENDING, chờ duyệt)',
   })
   @ApiResponse({ status: 201, description: 'Refund created' })
-  async create(
-    @Body() createRefundDto: CreateRefundDto,
-    @Req() req: any,
-  ) {
+  async create(@Body() createRefundDto: CreateRefundDto, @Req() req: any) {
     const userId = req.user?.userId || 'system';
     return this.refundService.createRefund(createRefundDto, userId);
   }
@@ -81,7 +78,8 @@ export class RefundController {
   @Put(':id/approve')
   @UseGuards(JwtAuthGuard)
   @ApiOperation({
-    summary: 'Duyệt refund - hoàn ví (nếu thanh toán bằng WALLET) + cập nhật order',
+    summary:
+      'Duyệt refund - hoàn ví (nếu thanh toán bằng WALLET) + cập nhật order',
   })
   @ApiParam({ name: 'id', description: 'Refund ID' })
   async approve(

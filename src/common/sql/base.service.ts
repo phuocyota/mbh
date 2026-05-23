@@ -6,9 +6,9 @@ import {
   In,
   Repository,
 } from 'typeorm';
-import { JwtPayload } from '../interface/jwt-payload.interface.js';
-import { BaseEntity } from './base.entity.js';
-import { ERROR_MESSAGES } from '../constant/error-messages.constant.js';
+import { JwtPayload } from '../interface/jwt-payload.interface';
+import { BaseEntity } from './base.entity';
+import { ERROR_MESSAGES } from '../constant/error-messages.constant';
 
 export abstract class BaseService<T extends BaseEntity> {
   constructor(protected readonly repo: Repository<T>) {}

@@ -1,10 +1,16 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { Cart, CartItem, Product, Customer } from 'src/entities';
+import { Cart, CartItem } from 'src/entities';
 import { OrderService } from '../orders/order.service';
 import { CouponService } from '../coupon/coupon.service';
 import { CompleteCartDto } from './dto/complete-cart.dto';
+import { ProductService } from '../products/product.service';
+import { CustomerService } from '../customer/customer.service';
 
 @Injectable()
 export class CartService {
@@ -13,23 +19,24 @@ export class CartService {
     private cartRepository: Repository<Cart>,
     @InjectRepository(CartItem)
     private cartItemRepository: Repository<CartItem>,
-    @InjectRepository(Product)
-    private productRepository: Repository<Product>,
-    @InjectRepository(Customer)
-    private customerRepository: Repository<Customer>,
+    private productService: ProductService,
+    private customerService: CustomerService,
     private orderService: OrderService,
     private couponService: CouponService,
   ) {}
 
-  async getOrCreateCart(customerId?: string, sessionId?: string, branchId?: string, userId?: string): Promise<Cart> {
+  async getOrCreateCart(
+    customerId?: string,
+    sessionId?: string,
+    branchId?: string,
+    userId?: string,
+  ): Promise<Cart> {
     let cart: Cart | null = null;
     let resolvedCustomerId = customerId;
 
     // If userId provided, find customer by userId
     if (userId && !customerId) {
-      const customer = await this.customerRepository.findOne({
-        where: { userId },
-      });
+      const customer = await this.customerService.findByUserId(userId);
       if (customer) {
         resolvedCustomerId = customer.id;
       }
@@ -62,7 +69,12 @@ export class CartService {
   }
 
   async getMyCart(userId: string): Promise<Cart> {
-    const cart = await this.getOrCreateCart(undefined, undefined, undefined, userId);
+    const cart = await this.getOrCreateCart(
+      undefined,
+      undefined,
+      undefined,
+      userId,
+    );
     return this.getCart(cart.id);
   }
 
@@ -80,10 +92,7 @@ export class CartService {
       throw new NotFoundException('Cart not found');
     }
 
-    const product = await this.productRepository.findOne({ where: { id: productId } });
-    if (!product) {
-      throw new NotFoundException('Product not found');
-    }
+    const product = await this.productService.findOne(productId);
     if (!product.isActive) {
       throw new BadRequestException(`Product ${product.name} is not available`);
     }
@@ -115,7 +124,11 @@ export class CartService {
     return cartItem;
   }
 
-  async updateItemQuantity(cartId: string, cartItemId: string, quantity: number): Promise<CartItem> {
+  async updateItemQuantity(
+    cartId: string,
+    cartItemId: string,
+    quantity: number,
+  ): Promise<CartItem> {
     const cartItem = await this.cartItemRepository.findOne({
       where: { id: cartItemId, cartId },
     });
@@ -166,7 +179,12 @@ export class CartService {
       throw new BadRequestException('User is required');
     }
 
-    const cart = await this.getOrCreateCart(undefined, undefined, undefined, userId);
+    const cart = await this.getOrCreateCart(
+      undefined,
+      undefined,
+      undefined,
+      userId,
+    );
     const cartWithItems = await this.getCart(cart.id);
 
     if (!cartWithItems.items?.length) {
@@ -197,7 +215,10 @@ export class CartService {
     }
 
     if (paymentMethod === 'CASH') {
-      const waitingOrder = await this.orderService.updateStatus(order.id, 'PENDING_PAYMENT');
+      const waitingOrder = await this.orderService.updateStatus(
+        order.id,
+        'PENDING_PAYMENT',
+      );
       await this.clearCart(cartWithItems.id);
 
       return {
@@ -210,7 +231,9 @@ export class CartService {
     const coupon =
       dto.couponId || !cartWithItems.customerId
         ? null
-        : await this.couponService.getBestAvailableCoupon(cartWithItems.customerId);
+        : await this.couponService.getBestAvailableCoupon(
+            cartWithItems.customerId,
+          );
 
     const payment = await this.orderService.processPayment(order.id, {
       method: paymentMethod,
@@ -220,7 +243,10 @@ export class CartService {
       createdBy: userId,
     });
 
-    const preparingOrder = await this.orderService.updateStatus(order.id, 'PREPARING');
+    const preparingOrder = await this.orderService.updateStatus(
+      order.id,
+      'PREPARING',
+    );
     await this.clearCart(cartWithItems.id);
 
     return {
@@ -243,7 +269,10 @@ export class CartService {
 
   private async recalculateCartTotals(cartId: string): Promise<void> {
     const items = await this.cartItemRepository.find({ where: { cartId } });
-    const totalAmount = items.reduce((sum, item) => sum + Number(item.subtotal), 0);
+    const totalAmount = items.reduce(
+      (sum, item) => sum + Number(item.subtotal),
+      0,
+    );
     const itemCount = items.reduce((sum, item) => sum + item.quantity, 0);
 
     await this.cartRepository.update(cartId, {

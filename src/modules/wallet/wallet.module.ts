@@ -4,10 +4,13 @@ import { WalletService } from './wallet.service';
 import { WalletController } from './wallet.controller';
 import { Wallet } from '../../entities/wallet.entity';
 import { WalletTransaction } from '../../entities/wallet-transaction.entity';
-import { Customer } from '../../entities/customer.entity';
+import { CustomerModule } from '../customer/customer.module';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Wallet, WalletTransaction, Customer])],
+  imports: [
+    TypeOrmModule.forFeature([Wallet, WalletTransaction]),
+    CustomerModule,
+  ],
   providers: [WalletService],
   controllers: [WalletController],
   exports: [WalletService],

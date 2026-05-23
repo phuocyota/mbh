@@ -22,9 +22,13 @@ export class StudentCard extends BaseEntity {
   @Column('timestamp', { nullable: true, name: 'expired_at' })
   expiredAt: Date;
 
-  @ManyToOne(() => StudentProfile, (studentProfile) => studentProfile.studentCards, {
-    onDelete: 'CASCADE',
-  })
+  @ManyToOne(
+    () => StudentProfile,
+    (studentProfile) => studentProfile.studentCards,
+    {
+      onDelete: 'CASCADE',
+    },
+  )
   @JoinColumn({ name: 'student_profile_id' })
   studentProfile: StudentProfile;
 }

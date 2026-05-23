@@ -1,17 +1,18 @@
 import { Module } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
-import { TypeOrmModule } from '@nestjs/typeorm';
 import { ConfigService } from '@nestjs/config';
 import { AuthService } from './auth.service';
 import { AuthController } from './auth.controller';
 import { LocalStrategy } from './strategies/local.strategy';
 import { JwtStrategy } from './strategies/jwt.strategy';
-import { User, Customer, Wallet, StudentProfile, StudentCard, School, Class } from 'src/entities';
+import { UserModule } from '../user/user.module';
+import { CustomerModule } from '../customer/customer.module';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([User, Customer, Wallet, StudentProfile, StudentCard, School, Class]),
+    UserModule,
+    CustomerModule,
     PassportModule,
     JwtModule.registerAsync({
       inject: [ConfigService],

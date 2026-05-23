@@ -80,11 +80,7 @@ export class WalletController {
     @Query('page') page?: number,
     @Query('size') size?: number,
   ) {
-    return this.walletService.getTransactionsByCustomer(
-      customerId,
-      page,
-      size,
-    );
+    return this.walletService.getTransactionsByCustomer(customerId, page, size);
   }
 
   @Get(':id')

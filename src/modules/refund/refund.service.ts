@@ -4,35 +4,27 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, Repository } from 'typeorm';
+import { Repository } from 'typeorm';
 import { Refund } from '../../entities/refund.entity';
-import { RefundItem } from '../../entities/refund-item.entity';
-import { Order } from '../../entities/order.entity';
-import { OrderItem } from '../../entities/order-item.entity';
-import { Payment } from '../../entities/payment.entity';
-import { Wallet } from '../../entities/wallet.entity';
-import { WalletTransaction } from '../../entities/wallet-transaction.entity';
 import { BaseService } from '../../common/sql/base.service';
 import { ERROR_MESSAGES } from '../../common/constant/error-messages.constant';
 import { CreateRefundDto } from './dto/create-refund.dto';
+import { RefundItemService } from '../refund-item/refund-item.service';
+import { OrderService } from '../orders/order.service';
+import { OrderItemService } from '../order-item/order-item.service';
+import { PaymentService } from '../payment/payment.service';
+import { WalletService } from '../wallet/wallet.service';
 
 @Injectable()
 export class RefundService extends BaseService<Refund> {
   constructor(
     @InjectRepository(Refund)
     private refundRepository: Repository<Refund>,
-    @InjectRepository(RefundItem)
-    private refundItemRepository: Repository<RefundItem>,
-    @InjectRepository(Order)
-    private orderRepository: Repository<Order>,
-    @InjectRepository(OrderItem)
-    private orderItemRepository: Repository<OrderItem>,
-    @InjectRepository(Payment)
-    private paymentRepository: Repository<Payment>,
-    @InjectRepository(Wallet)
-    private walletRepository: Repository<Wallet>,
-    @InjectRepository(WalletTransaction)
-    private walletTransactionRepository: Repository<WalletTransaction>,
+    private refundItemService: RefundItemService,
+    private orderService: OrderService,
+    private orderItemService: OrderItemService,
+    private paymentService: PaymentService,
+    private walletService: WalletService,
   ) {
     super(refundRepository);
   }
@@ -41,67 +33,60 @@ export class RefundService extends BaseService<Refund> {
     return 'Refund';
   }
 
-  /**
-   * Tạo refund cho một order. Refund ở trạng thái PENDING, chờ duyệt.
-   */
   async createRefund(dto: CreateRefundDto, userId: string): Promise<Refund> {
     return this.runInTransaction(async () => {
-      const order = await this.orderRepository.findOne({
-        where: { id: dto.orderId },
-      });
-      if (!order) {
-        throw new NotFoundException(
-          ERROR_MESSAGES.NOT_FOUND_WITH_ID('Order', dto.orderId),
-        );
-      }
+      const order = await this.orderService.findOrderByIdOrThrow(dto.orderId);
 
       if (!['PAID', 'COMPLETED'].includes(order.status)) {
         throw new BadRequestException(
-          `Chỉ có thể hoàn tiền cho đơn đã PAID/COMPLETED (hiện tại: ${order.status})`,
+          `Chi co the hoan tien cho don da PAID/COMPLETED (hien tai: ${order.status})`,
         );
       }
 
       if (order.paymentStatus === 'REFUNDED') {
-        throw new BadRequestException('Đơn hàng này đã được hoàn tiền');
+        throw new BadRequestException('Don hang nay da duoc hoan tien');
       }
 
-      // Validate items
-      const orderItemIds = dto.items.map((i) => i.orderItemId);
-      const orderItems = await this.orderItemRepository.find({
-        where: { id: In(orderItemIds), orderId: dto.orderId },
-      });
+      const orderItemIds = dto.items.map((item) => item.orderItemId);
+      const orderItems = await this.orderItemService.findByIdsForOrder(
+        dto.orderId,
+        orderItemIds,
+      );
 
       if (orderItems.length !== orderItemIds.length) {
         throw new BadRequestException(
-          'Có order_item không thuộc đơn này hoặc không tồn tại',
+          'Co order_item khong thuoc don nay hoac khong ton tai',
         );
       }
 
-      // Check item-level capacity
-      const orderItemMap = new Map(orderItems.map((oi) => [oi.id, oi]));
-      for (const i of dto.items) {
-        const oi = orderItemMap.get(i.orderItemId);
-        if (!oi) continue;
-        if (oi.status === 'REFUNDED') {
+      const orderItemMap = new Map(orderItems.map((item) => [item.id, item]));
+      for (const item of dto.items) {
+        const orderItem = orderItemMap.get(item.orderItemId);
+        if (!orderItem) {
+          continue;
+        }
+
+        if (orderItem.status === 'REFUNDED') {
           throw new BadRequestException(
-            `Item ${oi.productName} đã được hoàn trước đó`,
+            `Item ${orderItem.productName} da duoc hoan truoc do`,
           );
         }
-        if (i.quantity > oi.quantity) {
+
+        if (item.quantity > orderItem.quantity) {
           throw new BadRequestException(
-            `Số lượng hoàn (${i.quantity}) vượt quá số lượng đã bán (${oi.quantity}) của ${oi.productName}`,
+            `So luong hoan (${item.quantity}) vuot qua so luong da ban (${orderItem.quantity}) cua ${orderItem.productName}`,
           );
         }
       }
 
       const refundAmount = dto.items.reduce(
-        (sum, i) => sum + Number(i.amount),
+        (sum, item) => sum + Number(item.amount),
         0,
       );
 
       if (refundAmount > Number(order.totalAmount)) {
         throw new BadRequestException(
-          `Tổng tiền hoàn (${refundAmount}) không được vượt quá tổng đơn (${order.totalAmount})`,
+          `Tong tien hoan (${refundAmount}) khong duoc vuot qua tong don (${order.totalAmount})`,
         );
       }
 
@@ -120,29 +105,16 @@ export class RefundService extends BaseService<Refund> {
       });
       const savedRefund = await this.refundRepository.save(refund);
 
-      // Create refund_items
-      const refundItems = dto.items.map((i) =>
-        this.refundItemRepository.create({
-          refundId: savedRefund.id,
-          orderItemId: i.orderItemId,
-          quantity: i.quantity,
-          amount: i.amount,
-          createdBy: userId,
-        }),
+      await this.refundItemService.createManyForRefund(
+        savedRefund.id,
+        dto.items,
+        userId,
       );
-      await this.refundItemRepository.save(refundItems);
 
       return savedRefund;
     });
   }
 
-  /**
-   * Duyệt refund. Logic:
-   * - Cập nhật refund.status = APPROVED → COMPLETED
-   * - Đánh dấu order_items.status = REFUNDED
-   * - Nếu order paid bằng WALLET → cộng tiền lại vào ví, ghi wallet_transactions type=REFUND
-   * - Đánh dấu order.paymentStatus = REFUNDED, order.status = REFUNDED (nếu hoàn toàn bộ)
-   */
   async approveRefund(refundId: string, userId: string): Promise<Refund> {
     return this.runInTransaction(async () => {
       const refund = await this.refundRepository.findOne({
@@ -155,93 +127,46 @@ export class RefundService extends BaseService<Refund> {
       }
       if (refund.status !== 'PENDING') {
         throw new BadRequestException(
-          `Refund đang ở trạng thái ${refund.status}, không thể duyệt`,
+          `Refund dang o trang thai ${refund.status}, khong the duyet`,
         );
       }
 
-      const refundItems = await this.refundItemRepository.find({
-        where: { refundId: refund.id },
-      });
+      const refundItems = await this.refundItemService.findByRefund(refund.id);
+      const order = await this.orderService.findOrderByIdOrThrow(
+        refund.orderId,
+      );
 
-      const order = await this.orderRepository.findOne({
-        where: { id: refund.orderId },
-      });
-      if (!order) {
-        throw new NotFoundException(
-          ERROR_MESSAGES.NOT_FOUND_WITH_ID('Order', refund.orderId),
-        );
-      }
+      const orderItemIds = refundItems.map((item) => item.orderItemId);
+      await this.orderItemService.markRefunded(orderItemIds, userId);
 
-      // Mark order items as REFUNDED
-      const orderItemIds = refundItems.map((ri) => ri.orderItemId);
-      if (orderItemIds.length > 0) {
-        await this.orderItemRepository.update(
-          { id: In(orderItemIds) },
-          { status: 'REFUNDED', updatedBy: userId },
-        );
-      }
-
-      // If paid via WALLET → refund to wallet
-      const walletPayments = await this.paymentRepository.find({
-        where: {
-          orderId: order.id,
-          method: 'WALLET',
-          status: 'SUCCESS',
-        },
-      });
-
-      const refundAmountNum = Number(refund.refundAmount);
-      let totalWalletPaid = walletPayments.reduce(
-        (s, p) => s + Number(p.amount),
+      const walletPayments =
+        await this.paymentService.findSuccessfulWalletByOrder(order.id);
+      const refundAmount = Number(refund.refundAmount);
+      const totalWalletPaid = walletPayments.reduce(
+        (sum, payment) => sum + Number(payment.amount),
         0,
       );
-      let amountToRefundWallet = Math.min(refundAmountNum, totalWalletPaid);
+      const amountToRefundWallet = Math.min(refundAmount, totalWalletPaid);
 
       if (amountToRefundWallet > 0 && order.customerId) {
-        const wallet = await this.walletRepository.findOne({
-          where: { customerId: order.customerId },
-        });
-        if (wallet) {
-          const balanceBefore = Number(wallet.balance);
-          const balanceAfter = balanceBefore + amountToRefundWallet;
-          wallet.balance = balanceAfter;
-          wallet.updatedBy = userId;
-          await this.walletRepository.save(wallet);
-
-          const walletTx = this.walletTransactionRepository.create({
-            walletId: wallet.id,
-            customerId: order.customerId,
-            type: 'REFUND',
-            amount: amountToRefundWallet,
-            balanceBefore,
-            balanceAfter,
-            refType: 'REFUND',
-            refId: refund.id,
-            note: `Hoàn tiền cho đơn ${order.orderCode}`,
-            createdBy: userId,
-          });
-          await this.walletTransactionRepository.save(walletTx);
-        }
-      }
-
-      // Mark wallet payments as REFUNDED
-      if (walletPayments.length > 0) {
-        await this.paymentRepository.update(
-          { id: In(walletPayments.map((p) => p.id)) },
-          { status: 'REFUNDED', updatedBy: userId },
+        await this.walletService.refundToWallet(
+          order.customerId,
+          amountToRefundWallet,
+          refund.id,
+          order.orderCode,
+          userId,
         );
       }
 
-      // Update order
-      const isFullRefund = refundAmountNum >= Number(order.totalAmount);
-      const now = new Date();
-      await this.orderRepository.update(order.id, {
-        paymentStatus: 'REFUNDED',
-        status: isFullRefund ? 'REFUNDED' : order.status,
-        updatedBy: userId,
-      });
+      await this.paymentService.markRefunded(
+        walletPayments.map((payment) => payment.id),
+        userId,
+      );
 
-      // Update refund
+      const isFullRefund = refundAmount >= Number(order.totalAmount);
+      const now = new Date();
+      await this.orderService.markRefunded(order.id, isFullRefund, userId);
+
       refund.status = 'COMPLETED';
       refund.approvedBy = userId;
       refund.approvedAt = now;
@@ -251,9 +176,6 @@ export class RefundService extends BaseService<Refund> {
     });
   }
 
-  /**
-   * Từ chối refund. Refund chuyển sang REJECTED, kèm lý do.
-   */
   async rejectRefund(
     refundId: string,
     userId: string,
@@ -269,7 +191,7 @@ export class RefundService extends BaseService<Refund> {
     }
     if (refund.status !== 'PENDING') {
       throw new BadRequestException(
-        `Refund đang ở trạng thái ${refund.status}, không thể từ chối`,
+        `Refund dang o trang thai ${refund.status}, khong the tu choi`,
       );
     }
     refund.status = 'REJECTED';
@@ -280,9 +202,6 @@ export class RefundService extends BaseService<Refund> {
     return this.refundRepository.save(refund);
   }
 
-  /**
-   * Lấy refund kèm danh sách items.
-   */
   async findOneWithItems(id: string) {
     const refund = await this.refundRepository.findOne({ where: { id } });
     if (!refund) {
@@ -290,9 +209,7 @@ export class RefundService extends BaseService<Refund> {
         ERROR_MESSAGES.NOT_FOUND_WITH_ID('Refund', id),
       );
     }
-    const items = await this.refundItemRepository.find({
-      where: { refundId: id },
-    });
+    const items = await this.refundItemService.findByRefund(id);
     return { ...refund, items };
   }
 

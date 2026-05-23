@@ -24,4 +24,43 @@ export class CategoryService extends BaseService<Category> {
     await this.categoryRepository.remove(item);
     return item;
   }
+
+  async findActive() {
+    return this.categoryRepository.find({
+      where: { status: 'ACTIVE' },
+      order: { sortOrder: 'ASC' },
+    });
+  }
+
+  async findActiveWithProducts(
+    filter: { minPrice?: number; maxPrice?: number } = {},
+  ) {
+    const productConditions = ['product.is_active = :isActive'];
+    const params: Record<string, number | boolean | string> = {
+      isActive: true,
+    };
+
+    if (filter.minPrice !== undefined) {
+      productConditions.push('product.price >= :minPrice');
+      params.minPrice = filter.minPrice;
+    }
+
+    if (filter.maxPrice !== undefined) {
+      productConditions.push('product.price <= :maxPrice');
+      params.maxPrice = filter.maxPrice;
+    }
+
+    return this.categoryRepository
+      .createQueryBuilder('category')
+      .leftJoinAndSelect(
+        'category.products',
+        'product',
+        productConditions.join(' AND '),
+        params,
+      )
+      .where('category.status = :status', { status: 'ACTIVE' })
+      .orderBy('category.sort_order', 'ASC')
+      .addOrderBy('product.name', 'ASC')
+      .getMany();
+  }
 }

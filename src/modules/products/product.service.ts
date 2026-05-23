@@ -1,9 +1,10 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { Product, Category } from 'src/entities';
+import { Product } from 'src/entities';
 import { BaseService } from '../../common/sql/base.service';
 import { ERROR_MESSAGES } from '../../common/constant/error-messages.constant';
+import { CategoryService } from '../category/category.service';
 
 type ProductPriceFilter = {
   minPrice?: number;
@@ -15,8 +16,7 @@ export class ProductService extends BaseService<Product> {
   constructor(
     @InjectRepository(Product)
     private productRepository: Repository<Product>,
-    @InjectRepository(Category)
-    private categoryRepository: Repository<Category>,
+    private categoryService: CategoryService,
   ) {
     super(productRepository);
   }
@@ -69,38 +69,11 @@ export class ProductService extends BaseService<Product> {
   }
 
   async findAllCategories() {
-    return this.categoryRepository.find({
-      where: { status: 'ACTIVE' },
-      order: { sortOrder: 'ASC' },
-    });
+    return this.categoryService.findActive();
   }
 
   async findAllCategoriesWithProducts(filter: ProductPriceFilter = {}) {
-    const productConditions = ['product.is_active = :isActive'];
-    const params: Record<string, number | boolean | string> = { isActive: true };
-
-    if (filter.minPrice !== undefined) {
-      productConditions.push('product.price >= :minPrice');
-      params.minPrice = filter.minPrice;
-    }
-
-    if (filter.maxPrice !== undefined) {
-      productConditions.push('product.price <= :maxPrice');
-      params.maxPrice = filter.maxPrice;
-    }
-
-    return this.categoryRepository
-      .createQueryBuilder('category')
-      .leftJoinAndSelect(
-        'category.products',
-        'product',
-        productConditions.join(' AND '),
-        params,
-      )
-      .where('category.status = :status', { status: 'ACTIVE' })
-      .orderBy('category.sort_order', 'ASC')
-      .addOrderBy('product.name', 'ASC')
-      .getMany();
+    return this.categoryService.findActiveWithProducts(filter);
   }
 
   private applyPriceFilter(

@@ -44,7 +44,10 @@ export class OrderController {
 
   @ApiOperation({ summary: 'Get orders waiting for cash payment' })
   @ApiQuery({ name: 'branchId', required: false })
-  @ApiResponse({ status: 200, description: 'List of cash payment pending orders' })
+  @ApiResponse({
+    status: 200,
+    description: 'List of cash payment pending orders',
+  })
   @Get('pending-cash')
   async findPendingCash(@Query('branchId') branchId?: string) {
     return this.orderService.findPendingCashOrders(branchId);
@@ -92,11 +95,22 @@ export class OrderController {
     return this.orderService.addItemToOrder(id, createOrderItemDto);
   }
 
-  @ApiOperation({ summary: 'Receive cash payment from customer (PENDING_PAYMENT -> READY_TO_PICKUP)' })
+  @ApiOperation({
+    summary:
+      'Receive cash payment from customer (PENDING_PAYMENT -> READY_TO_PICKUP)',
+  })
   @ApiParam({ name: 'id', description: 'Order ID' })
-  @ApiResponse({ status: 200, description: 'Cash payment received, order status updated to ready-to-pickup' })
+  @ApiResponse({
+    status: 200,
+    description:
+      'Cash payment received, order status updated to ready-to-pickup',
+  })
   @Post(':id/receive-cash')
-  async receiveCashPayment(@Param('id') id: string, @Body() paymentDto: any, @Req() req: any) {
+  async receiveCashPayment(
+    @Param('id') id: string,
+    @Body() paymentDto: any,
+    @Req() req: any,
+  ) {
     const userId = req.user?.userId;
     return this.orderService.receiveCashPayment(id, {
       amount: paymentDto.amount,
@@ -116,7 +130,10 @@ export class OrderController {
 
   @ApiOperation({ summary: 'Set order status to ready for pickup' })
   @ApiParam({ name: 'id', description: 'Order ID' })
-  @ApiResponse({ status: 200, description: 'Order status set to ready for pickup' })
+  @ApiResponse({
+    status: 200,
+    description: 'Order status set to ready for pickup',
+  })
   @Put(':id/ready-to-pickup')
   async setReadyToPickup(@Param('id') id: string) {
     return this.orderService.updateStatus(id, 'READY_TO_PICKUP');
@@ -132,7 +149,10 @@ export class OrderController {
 
   @ApiOperation({ summary: 'Student confirms they received their order' })
   @ApiParam({ name: 'id', description: 'Order ID' })
-  @ApiResponse({ status: 200, description: 'Order marked as received by student' })
+  @ApiResponse({
+    status: 200,
+    description: 'Order marked as received by student',
+  })
   @Put('me/:id/received')
   async confirmMyReceived(@Req() req: any, @Param('id') id: string) {
     const userId = req.user?.userId;
@@ -141,7 +161,10 @@ export class OrderController {
 
   @ApiOperation({ summary: 'Cashier confirms customer received order' })
   @ApiParam({ name: 'id', description: 'Order ID' })
-  @ApiResponse({ status: 200, description: 'Order marked as received by cashier' })
+  @ApiResponse({
+    status: 200,
+    description: 'Order marked as received by cashier',
+  })
   @Put(':id/received')
   async confirmReceivedByCashier(@Param('id') id: string) {
     return this.orderService.confirmReceivedByCashier(id);
@@ -152,10 +175,7 @@ export class OrderController {
   @ApiBody({ type: CancelOrderDto })
   @ApiResponse({ status: 200, description: 'Order cancelled with refund info' })
   @Put(':id/cancel')
-  async cancelOrder(
-    @Param('id') id: string,
-    @Body() dto: CancelOrderDto,
-  ) {
+  async cancelOrder(@Param('id') id: string, @Body() dto: CancelOrderDto) {
     return this.orderService.cancelOrder(id, dto);
   }
 

@@ -16,4 +16,24 @@ export class RefundItemService extends BaseService<RefundItem> {
   protected getEntityName(): string {
     return 'RefundItem';
   }
+
+  async createManyForRefund(refundId: string, items: any[], createdBy: string) {
+    const refundItems = items.map((item) =>
+      this.refundItemRepository.create({
+        refundId,
+        orderItemId: item.orderItemId,
+        quantity: item.quantity,
+        amount: item.amount,
+        createdBy,
+      } as Partial<RefundItem>),
+    );
+
+    return this.refundItemRepository.save(refundItems);
+  }
+
+  async findByRefund(refundId: string): Promise<RefundItem[]> {
+    return this.refundItemRepository.find({
+      where: { refundId },
+    });
+  }
 }

@@ -32,8 +32,7 @@ export class RefundItemInputDto {
   quantity: number;
 
   @ApiProperty({
-    description:
-      'Số tiền hoàn cho item này (đã tính thuế/giảm giá nếu có)',
+    description: 'Số tiền hoàn cho item này (đã tính thuế/giảm giá nếu có)',
     example: 35000,
   })
   @IsNotEmpty()

@@ -43,7 +43,10 @@ export class AuthController {
     status: 200,
     description: 'Student login successful, returns JWT token',
   })
-  @ApiResponse({ status: 401, description: 'Unauthorized - Only students can use this endpoint' })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized - Only students can use this endpoint',
+  })
   @Post('login/student')
   async loginStudent(@Body() dto: StudentLoginDto) {
     return this.authService.loginStudent(dto);

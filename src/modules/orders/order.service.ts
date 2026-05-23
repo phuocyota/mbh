@@ -5,38 +5,25 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { v4 as uuid } from 'uuid';
-import {
-  Order,
-  OrderItem,
-  Payment,
-  Wallet,
-  WalletTransaction,
-  Customer,
-  Coupon,
-} from 'src/entities';
+import { Order } from 'src/entities';
 import { ERROR_MESSAGES } from '../../common/constant/error-messages.constant';
 import { OrderNumberService } from './order-number.service';
 import { CouponService } from '../coupon/coupon.service';
+import { OrderItemService } from '../order-item/order-item.service';
+import { PaymentService } from '../payment/payment.service';
+import { WalletService } from '../wallet/wallet.service';
+import { CustomerService } from '../customer/customer.service';
 
 @Injectable()
 export class OrderService {
   constructor(
     @InjectRepository(Order)
     private orderRepository: Repository<Order>,
-    @InjectRepository(OrderItem)
-    private orderItemRepository: Repository<OrderItem>,
-    @InjectRepository(Payment)
-    private paymentRepository: Repository<Payment>,
-    @InjectRepository(Wallet)
-    private walletRepository: Repository<Wallet>,
-    @InjectRepository(WalletTransaction)
-    private walletTransactionRepository: Repository<WalletTransaction>,
-    @InjectRepository(Customer)
-    private customerRepository: Repository<Customer>,
-    @InjectRepository(Coupon)
-    private couponRepository: Repository<Coupon>,
     private orderNumberService: OrderNumberService,
+    private orderItemService: OrderItemService,
+    private paymentService: PaymentService,
+    private walletService: WalletService,
+    private customerService: CustomerService,
     private couponService: CouponService,
   ) {}
 
@@ -78,8 +65,14 @@ export class OrderService {
         })
       : [];
 
-    const subtotal = items.reduce((sum: number, item: any) => sum + item.subtotal, 0);
-    const discount = items.reduce((sum: number, item: any) => sum + item.discountAmount, 0);
+    const subtotal = items.reduce(
+      (sum: number, item: any) => sum + item.subtotal,
+      0,
+    );
+    const discount = items.reduce(
+      (sum: number, item: any) => sum + item.discountAmount,
+      0,
+    );
     const totalAmount = subtotal - discount;
 
     const order = this.orderRepository.create({
@@ -95,31 +88,51 @@ export class OrderService {
     });
 
     const savedResult = await this.orderRepository.save(order);
-    const savedOrder = Array.isArray(savedResult) ? savedResult[0] : savedResult;
+    const savedOrder = Array.isArray(savedResult)
+      ? savedResult[0]
+      : savedResult;
 
     // Create order items if provided
     if (items.length > 0) {
-      for (const item of items) {
-        const orderItem = this.orderItemRepository.create({
-          ...item,
-          orderId: savedOrder.id,
-          status: 'NORMAL',
-        });
-        await this.orderItemRepository.save(orderItem);
-      }
+      await this.orderItemService.createManyForOrder(savedOrder.id, items);
     }
 
     return this.getOrderWithItems(savedOrder.id);
   }
 
-  async addItemToOrder(orderId: string, createOrderItemDto: any) {
-    const orderItem = this.orderItemRepository.create({
-      ...createOrderItemDto,
-      orderId: orderId,
-      status: 'NORMAL',
+  async findOrderByIdOrThrow(orderId: string): Promise<Order> {
+    const order = await this.orderRepository.findOne({
+      where: { id: orderId },
     });
 
-    const item = await this.orderItemRepository.save(orderItem);
+    if (!order) {
+      throw new NotFoundException(
+        ERROR_MESSAGES.NOT_FOUND_WITH_ID('Order', orderId),
+      );
+    }
+
+    return order;
+  }
+
+  async markRefunded(
+    orderId: string,
+    isFullRefund: boolean,
+    updatedBy: string,
+  ): Promise<void> {
+    const order = await this.findOrderByIdOrThrow(orderId);
+
+    await this.orderRepository.update(order.id, {
+      paymentStatus: 'REFUNDED',
+      status: isFullRefund ? 'REFUNDED' : order.status,
+      updatedBy,
+    });
+  }
+
+  async addItemToOrder(orderId: string, createOrderItemDto: any) {
+    const item = await this.orderItemService.createForOrder(
+      orderId,
+      createOrderItemDto,
+    );
 
     // Update order totals
     await this.recalculateOrderTotals(orderId);
@@ -128,9 +141,7 @@ export class OrderService {
   }
 
   async recalculateOrderTotals(orderId: string) {
-    const items = await this.orderItemRepository.find({
-      where: { orderId: orderId, status: 'NORMAL' },
-    });
+    const items = await this.orderItemService.findNormalByOrder(orderId);
 
     const subtotal = items.reduce(
       (sum, item) => sum + Number(item.subtotal),
@@ -150,15 +161,7 @@ export class OrderService {
   }
 
   async processPayment(orderId: string, paymentDto: any) {
-    const order = await this.orderRepository.findOne({
-      where: { id: orderId },
-    });
-
-    if (!order) {
-      throw new NotFoundException(
-        ERROR_MESSAGES.NOT_FOUND_WITH_ID('Order', orderId),
-      );
-    }
+    const order = await this.findOrderByIdOrThrow(orderId);
 
     let couponDiscount = 0;
     let couponId: string | null = null;
@@ -166,21 +169,13 @@ export class OrderService {
 
     // Step 1: Apply coupon discount first if provided
     if (paymentDto.couponId && paymentDto.customerId) {
-      const coupon = await this.couponService.validateAndUseCoupon(
+      const coupon = await this.couponService.useCoupon(
         paymentDto.couponId,
         paymentDto.customerId,
       );
 
       couponDiscount = Number(coupon.reducePrice);
       couponId = paymentDto.couponId;
-
-      // Use the coupon
-      const newUsedQuantity = coupon.usedQuantity + 1;
-      const isFullyUsed = newUsedQuantity >= coupon.quantity;
-      await this.couponRepository.update(paymentDto.couponId, {
-        usedQuantity: newUsedQuantity,
-        status: isFullyUsed ? 'USED' : 'ACTIVE',
-      });
 
       // Reduce the amount to be paid by coupon discount
       remainingAmount = Math.max(0, remainingAmount - couponDiscount);
@@ -189,49 +184,22 @@ export class OrderService {
     // Step 2: Handle wallet payment for remaining amount
     if (remainingAmount > 0 && paymentDto.method === 'WALLET') {
       if (!paymentDto.customerId) {
-        throw new BadRequestException('Customer is required for wallet payment');
+        throw new BadRequestException(
+          'Customer is required for wallet payment',
+        );
       }
 
-      const wallet = await this.walletRepository.findOne({
-        where: { customerId: paymentDto.customerId },
-      });
-
-      if (!wallet) {
-        throw new BadRequestException('Customer wallet not found');
-      }
-      if (wallet.status !== 'ACTIVE') {
-        throw new BadRequestException('Wallet is not active');
-      }
-      if (Number(wallet.balance) < remainingAmount) {
-        throw new BadRequestException('Insufficient wallet balance');
-      }
-
-      const newBalance = Number(wallet.balance) - remainingAmount;
-      await this.walletRepository.update(wallet.id, { balance: newBalance });
-
-      // Log transaction
-      const txId = uuid();
-      const walletTx = this.walletTransactionRepository.create({
-        id: txId,
-        walletId: wallet.id,
-        customerId: paymentDto.customerId,
-        type: 'PAYMENT',
-        amount: remainingAmount,
-        balanceBefore: wallet.balance,
-        balanceAfter: newBalance,
-        refType: 'ORDER',
-        refId: orderId,
-      });
-      await this.walletTransactionRepository.save(walletTx);
+      await this.walletService.chargeForOrder(
+        paymentDto.customerId,
+        remainingAmount,
+        orderId,
+      );
     }
 
-    const payment = this.paymentRepository.create({
+    const payment = await this.paymentService.createSuccessPayment({
       ...paymentDto,
       orderId: orderId,
-      status: 'SUCCESS',
     });
-
-    await this.paymentRepository.save(payment);
 
     // Update order status with coupon information
     const paidAmount =
@@ -259,18 +227,12 @@ export class OrderService {
   }
 
   async completeOrder(orderId: string) {
-    const order = await this.orderRepository.findOne({
-      where: { id: orderId },
-    });
-
-    if (!order) {
-      throw new NotFoundException(
-        ERROR_MESSAGES.NOT_FOUND_WITH_ID('Order', orderId),
-      );
-    }
+    const order = await this.findOrderByIdOrThrow(orderId);
 
     if (order.paymentStatus !== 'PAID') {
-      throw new BadRequestException('Order must be fully paid before completion');
+      throw new BadRequestException(
+        'Order must be fully paid before completion',
+      );
     }
 
     await this.orderRepository.update(orderId, {
@@ -286,18 +248,9 @@ export class OrderService {
       throw new BadRequestException('User is required');
     }
 
-    const order = await this.orderRepository.findOne({
-      where: { id: orderId },
-    });
-    if (!order) {
-      throw new NotFoundException(
-        ERROR_MESSAGES.NOT_FOUND_WITH_ID('Order', orderId),
-      );
-    }
+    const order = await this.findOrderByIdOrThrow(orderId);
 
-    const customer = await this.customerRepository.findOne({
-      where: { userId },
-    });
+    const customer = await this.customerService.findByUserId(userId);
     if (!customer || order.customerId !== customer.id) {
       throw new BadRequestException('Order does not belong to this customer');
     }
@@ -334,6 +287,105 @@ export class OrderService {
     return query.getMany();
   }
 
+  async getRevenueSummaryRows(query: {
+    from: Date;
+    to: Date;
+    branchId?: string;
+  }) {
+    const orderQb = this.orderRepository
+      .createQueryBuilder('o')
+      .where('o.created_at BETWEEN :from AND :to', {
+        from: query.from,
+        to: query.to,
+      })
+      .andWhere("o.status IN ('PAID','COMPLETED')");
+    if (query.branchId) {
+      orderQb.andWhere('o.branch_id = :branchId', {
+        branchId: query.branchId,
+      });
+    }
+
+    const totalRow = await orderQb
+      .clone()
+      .select('COUNT(o.id)', 'orderCount')
+      .addSelect('COALESCE(SUM(o.total_amount), 0)', 'totalRevenue')
+      .addSelect('COALESCE(SUM(o.discount_amount), 0)', 'totalDiscount')
+      .getRawOne<{
+        orderCount: string;
+        totalRevenue: string;
+        totalDiscount: string;
+      }>();
+
+    const refundQb = this.orderRepository
+      .createQueryBuilder('o')
+      .where('o.created_at BETWEEN :from AND :to', {
+        from: query.from,
+        to: query.to,
+      })
+      .andWhere("o.payment_status = 'REFUNDED'");
+    if (query.branchId) {
+      refundQb.andWhere('o.branch_id = :branchId', {
+        branchId: query.branchId,
+      });
+    }
+
+    const refundedRow = await refundQb
+      .select('COUNT(o.id)', 'refundCount')
+      .addSelect('COALESCE(SUM(o.total_amount), 0)', 'refundAmount')
+      .getRawOne<{ refundCount: string; refundAmount: string }>();
+
+    return { totalRow, refundedRow };
+  }
+
+  async getDailyRevenueRows(query: {
+    from: Date;
+    to: Date;
+    branchId?: string;
+  }) {
+    const qb = this.orderRepository
+      .createQueryBuilder('o')
+      .select("TO_CHAR(o.created_at, 'YYYY-MM-DD')", 'day')
+      .addSelect('COUNT(o.id)', 'orderCount')
+      .addSelect('COALESCE(SUM(o.total_amount), 0)', 'revenue')
+      .where('o.created_at BETWEEN :from AND :to', {
+        from: query.from,
+        to: query.to,
+      })
+      .andWhere("o.status IN ('PAID','COMPLETED')")
+      .groupBy('day')
+      .orderBy('day', 'ASC');
+
+    if (query.branchId) {
+      qb.andWhere('o.branch_id = :branchId', { branchId: query.branchId });
+    }
+
+    return qb.getRawMany<{
+      day: string;
+      orderCount: string;
+      revenue: string;
+    }>();
+  }
+
+  async getShiftOrderAggregate(query: {
+    cashierId: string;
+    branchId: string;
+    from: Date;
+    to: Date;
+  }) {
+    return this.orderRepository
+      .createQueryBuilder('o')
+      .select('COUNT(o.id)', 'orderCount')
+      .addSelect('COALESCE(SUM(o.total_amount), 0)', 'totalRevenue')
+      .where('o.cashier_id = :cashierId', { cashierId: query.cashierId })
+      .andWhere('o.branch_id = :branchId', { branchId: query.branchId })
+      .andWhere('o.created_at BETWEEN :from AND :to', {
+        from: query.from,
+        to: query.to,
+      })
+      .andWhere("o.status IN ('PAID','COMPLETED')")
+      .getRawOne<{ orderCount: string; totalRevenue: string }>();
+  }
+
   async findPendingCashOrders(branchId?: string) {
     return this.findAll(branchId, 'PENDING_PAYMENT');
   }
@@ -346,16 +398,11 @@ export class OrderService {
     return this.findAll(branchId, 'READY_TO_PICKUP');
   }
 
-  async receiveCashPayment(orderId: string, paymentDto: { amount: number; createdBy?: string }) {
-    const order = await this.orderRepository.findOne({
-      where: { id: orderId },
-    });
-
-    if (!order) {
-      throw new NotFoundException(
-        ERROR_MESSAGES.NOT_FOUND_WITH_ID('Order', orderId),
-      );
-    }
+  async receiveCashPayment(
+    orderId: string,
+    paymentDto: { amount: number; createdBy?: string },
+  ) {
+    const order = await this.findOrderByIdOrThrow(orderId);
 
     if (order.paymentStatus !== 'UNPAID') {
       throw new BadRequestException('Order payment must be in UNPAID status');
@@ -366,13 +413,11 @@ export class OrderService {
     }
 
     // Create payment record
-    const payment = this.paymentRepository.create({
+    await this.paymentService.createSuccessPayment({
       orderId: orderId,
       method: 'CASH',
       amount: Number(paymentDto.amount),
-      status: 'SUCCESS',
     });
-    await this.paymentRepository.save(payment);
 
     // Update order: set paymentStatus to PAID and status to READY_TO_PICKUP
     await this.orderRepository.update(orderId, {
@@ -386,15 +431,7 @@ export class OrderService {
   }
 
   async updateStatus(orderId: string, status: string) {
-    const order = await this.orderRepository.findOne({
-      where: { id: orderId },
-    });
-
-    if (!order) {
-      throw new NotFoundException(
-        ERROR_MESSAGES.NOT_FOUND_WITH_ID('Order', orderId),
-      );
-    }
+    await this.findOrderByIdOrThrow(orderId);
 
     await this.orderRepository.update(orderId, {
       status,
@@ -404,16 +441,11 @@ export class OrderService {
     return this.getOrderWithItems(orderId);
   }
 
-  async cancelOrder(orderId: string, dto?: { reason?: string; isRefunded?: boolean }) {
-    const order = await this.orderRepository.findOne({
-      where: { id: orderId },
-    });
-
-    if (!order) {
-      throw new NotFoundException(
-        ERROR_MESSAGES.NOT_FOUND_WITH_ID('Order', orderId),
-      );
-    }
+  async cancelOrder(
+    orderId: string,
+    dto?: { reason?: string; isRefunded?: boolean },
+  ) {
+    const order = await this.findOrderByIdOrThrow(orderId);
 
     if (['DONE'].includes(order.status)) {
       throw new Error('Cannot cancel completed orders');
@@ -434,18 +466,10 @@ export class OrderService {
   }
 
   async deleteOrder(orderId: string) {
-    const order = await this.orderRepository.findOne({
-      where: { id: orderId },
-    });
-
-    if (!order) {
-      throw new NotFoundException(
-        ERROR_MESSAGES.NOT_FOUND_WITH_ID('Order', orderId),
-      );
-    }
+    await this.findOrderByIdOrThrow(orderId);
 
     // Delete order items first (if cascade not set)
-    await this.orderItemRepository.delete({ orderId });
+    await this.orderItemService.deleteByOrder(orderId);
 
     // Delete order
     await this.orderRepository.delete(orderId);

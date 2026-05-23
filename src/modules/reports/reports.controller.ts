@@ -7,10 +7,7 @@ import {
   ApiQuery,
 } from '@nestjs/swagger';
 import { ReportsService } from './reports.service';
-import {
-  DateRangeQueryDto,
-  TopProductsQueryDto,
-} from './dto/report-query.dto';
+import { DateRangeQueryDto, TopProductsQueryDto } from './dto/report-query.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
 @ApiTags('Reports')

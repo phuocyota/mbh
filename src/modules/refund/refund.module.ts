@@ -3,24 +3,20 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { RefundService } from './refund.service';
 import { RefundController } from './refund.controller';
 import { Refund } from '../../entities/refund.entity';
-import { RefundItem } from '../../entities/refund-item.entity';
-import { Order } from '../../entities/order.entity';
-import { OrderItem } from '../../entities/order-item.entity';
-import { Payment } from '../../entities/payment.entity';
-import { Wallet } from '../../entities/wallet.entity';
-import { WalletTransaction } from '../../entities/wallet-transaction.entity';
+import { RefundItemModule } from '../refund-item/refund-item.module';
+import { OrderModule } from '../orders/order.module';
+import { OrderItemModule } from '../order-item/order-item.module';
+import { PaymentModule } from '../payment/payment.module';
+import { WalletModule } from '../wallet/wallet.module';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([
-      Refund,
-      RefundItem,
-      Order,
-      OrderItem,
-      Payment,
-      Wallet,
-      WalletTransaction,
-    ]),
+    TypeOrmModule.forFeature([Refund]),
+    RefundItemModule,
+    OrderModule,
+    OrderItemModule,
+    PaymentModule,
+    WalletModule,
   ],
   providers: [RefundService],
   controllers: [RefundController],

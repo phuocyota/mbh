@@ -138,7 +138,7 @@ export class CouponService {
       expiresAt?: Date;
     },
   ) {
-    const coupon = await this.getCouponById(couponId);
+    await this.getCouponById(couponId);
 
     await this.couponRepository.update(couponId, updateCouponDto);
 
