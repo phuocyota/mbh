@@ -1,15 +1,20 @@
-import { MigrationInterface, QueryRunner, TableColumn, TableForeignKey } from 'typeorm';
+import {
+  MigrationInterface,
+  QueryRunner,
+  TableColumn,
+  TableForeignKey,
+} from 'typeorm';
 
-export class ChangeCouponsUserToCustomer1704067209000
-  implements MigrationInterface
-{
+export class ChangeCouponsUserToCustomer1704067209000 implements MigrationInterface {
   public async up(queryRunner: QueryRunner): Promise<void> {
     const table = await queryRunner.getTable('coupons');
     if (!table) {
       return;
     }
 
-    const hasCustomerId = table.columns.some((column) => column.name === 'customer_id');
+    const hasCustomerId = table.columns.some(
+      (column) => column.name === 'customer_id',
+    );
     const hasUserId = table.columns.some((column) => column.name === 'user_id');
 
     if (!hasCustomerId) {
@@ -56,9 +61,9 @@ export class ChangeCouponsUserToCustomer1704067209000
       await queryRunner.dropColumn('coupons', 'user_id');
     }
 
-    const customerIdColumn = (await queryRunner.getTable('coupons'))?.findColumnByName(
-      'customer_id',
-    );
+    const customerIdColumn = (
+      await queryRunner.getTable('coupons')
+    )?.findColumnByName('customer_id');
     if (customerIdColumn?.isNullable) {
       await queryRunner.changeColumn(
         'coupons',
@@ -89,7 +94,9 @@ export class ChangeCouponsUserToCustomer1704067209000
     }
 
     const hasUserId = table.columns.some((column) => column.name === 'user_id');
-    const hasCustomerId = table.columns.some((column) => column.name === 'customer_id');
+    const hasCustomerId = table.columns.some(
+      (column) => column.name === 'customer_id',
+    );
 
     if (!hasUserId) {
       await queryRunner.addColumn(
@@ -135,9 +142,9 @@ export class ChangeCouponsUserToCustomer1704067209000
       await queryRunner.dropColumn('coupons', 'customer_id');
     }
 
-    const userIdColumn = (await queryRunner.getTable('coupons'))?.findColumnByName(
-      'user_id',
-    );
+    const userIdColumn = (
+      await queryRunner.getTable('coupons')
+    )?.findColumnByName('user_id');
     if (userIdColumn?.isNullable) {
       await queryRunner.changeColumn(
         'coupons',

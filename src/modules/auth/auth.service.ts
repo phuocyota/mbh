@@ -134,7 +134,11 @@ export class AuthService {
       throw error;
     }
   }
-  async loginCashier(dto: { email: string; password: string; deviceId?: string }) {
+  async loginCashier(dto: {
+    email: string;
+    password: string;
+    deviceId?: string;
+  }) {
     const user = await this.userService.findByEmail(dto.email);
 
     if (!user || !(await bcrypt.compare(dto.password, user.passwordHash))) {

@@ -59,7 +59,10 @@ export class AuthController {
     status: 200,
     description: 'Cashier login successful, returns JWT token',
   })
-  @ApiResponse({ status: 401, description: 'Unauthorized - Only cashiers can use this endpoint' })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized - Only cashiers can use this endpoint',
+  })
   @Post('login/cashier')
   async loginCashier(@Body() dto: CashierLoginDto) {
     return this.authService.loginCashier(dto);
