@@ -31,6 +31,7 @@ import { InventoryItemModule } from './modules/inventory-item/inventory-item.mod
 import { ReportsModule } from './modules/reports/reports.module';
 import { CartModule } from './modules/cart/cart.module';
 import { CouponModule } from './modules/coupon/coupon.module';
+import { ParentModule } from './modules/parent/parent.module';
 
 @Module({
   imports: [
@@ -64,6 +65,7 @@ import { CouponModule } from './modules/coupon/coupon.module';
     ReportsModule,
     CartModule,
     CouponModule,
+    ParentModule,
   ],
   controllers: [AppController],
   providers: [

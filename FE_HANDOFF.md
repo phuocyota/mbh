@@ -8,7 +8,144 @@ Các API cần JWT gửi header:
 Authorization: Bearer <accessToken>
 ```
 
-## 1. Student Login
+## 1. Parent/Student Home
+
+API lấy thông tin tổng quan cho màn hình Home của phụ huynh/học sinh. Phụ huynh đăng nhập bằng tài khoản học sinh.
+
+```http
+GET /api/parent/home
+```
+
+**Auth:** Cần JWT của học sinh.
+
+```http
+Authorization: Bearer <accessToken>
+```
+
+**Response 200:**
+
+```json
+{
+  "user": {
+    "id": "student_5000",
+    "fullName": "Test Student 5000",
+    "avatarUrl": "https://be.kidocanteen.kidoedu.vn/uploads/avatar.jpg"
+  },
+  "wallet": {
+    "balance": 45000,
+    "currency": "VND"
+  },
+  "notifications": [
+    {
+      "id": "noti_001",
+      "message": "Con da nhan mon",
+      "type": "ORDER_RECEIVED",
+      "amount": null,
+      "isRead": false,
+      "createdAt": "2026-05-27T10:30:00+07:00"
+    },
+    {
+      "id": "noti_002",
+      "message": "Da tru 30,000d",
+      "type": "PAYMENT_DEDUCTED",
+      "amount": -30000,
+      "isRead": false,
+      "createdAt": "2026-05-27T10:31:00+07:00"
+    }
+  ],
+  "todayOrder": {
+    "id": "order_001",
+    "status": "PREPARING",
+    "statusText": "Dang chuan bi",
+    "orderedAt": "2026-05-27T09:45:00+07:00",
+    "items": [
+      {
+        "id": "item_001",
+        "name": "Com ga",
+        "quantity": 2,
+        "unitPrice": 15000,
+        "totalPrice": 30000
+      }
+    ],
+    "addons": [
+      {
+        "id": "addon_001",
+        "name": "Sua",
+        "quantity": 1,
+        "price": 0
+      }
+    ],
+    "totalAmount": 30000
+  },
+  "recentHistory": [
+    {
+      "id": "txn_001",
+      "type": "ORDER_PAYMENT",
+      "title": "Com ga",
+      "amount": -30000,
+      "status": "COMPLETED",
+      "statusText": "Hoan thanh",
+      "createdAt": "2026-05-27T10:30:00+07:00",
+      "orderId": "order_001"
+    }
+  ],
+  "statistics": {
+    "week": {
+      "spent": 150000,
+      "limit": 200000,
+      "currency": "VND"
+    },
+    "month": {
+      "spent": 600000,
+      "limit": 700000,
+      "currency": "VND"
+    }
+  }
+}
+```
+
+### Field Notes
+
+| Field | Mô tả |
+|-------|-------|
+| `user` | Thông tin học sinh (id, fullName, avatarUrl) |
+| `wallet.balance` | Số dư hiện tại (number) |
+| `notifications` | 5 thông báo gần nhất |
+| `todayOrder` | Đơn hàng hôm nay, `null` nếu chưa có |
+| `recentHistory` | 5 giao dịch gần nhất |
+| `statistics.week/month` | Chi tiêu và giới hạn để hiển thị progress bar |
+| `createdAt`, `orderedAt` | ISO datetime có timezone |
+
+### Enums
+
+```ts
+type OrderStatus = "PENDING" | "PREPARING" | "READY" | "RECEIVED" | "CANCELLED";
+
+type TransactionStatus = "PENDING" | "COMPLETED" | "FAILED" | "REFUNDED";
+
+type NotificationType =
+  | "ORDER_CREATED"
+  | "ORDER_RECEIVED"
+  | "PAYMENT_DEDUCTED"
+  | "TOPUP_SUCCESS"
+  | "SYSTEM";
+
+type TransactionType = "ORDER_PAYMENT" | "TOPUP" | "REFUND";
+```
+
+### Error Response
+
+```json
+{
+  "message": "Unauthorized",
+  "error": "UNAUTHORIZED",
+  "statusCode": 401
+}
+```
+
+---
+
+## 2. Student Login
 
 Chỉ dùng endpoint này cho học sinh. Không dùng `/auth/login` hoặc `/auth/login-card`.
 
@@ -53,7 +190,7 @@ Response chính:
 }
 ```
 
-## 2. Category + Products Full
+## 3. Category + Products Full
 
 Lấy toàn bộ category đang active kèm products đang active.
 
@@ -95,7 +232,7 @@ Response:
 ]
 ```
 
-## 3. Cart APIs
+## 4. Cart APIs
 
 Các API cart dùng JWT của học sinh. Flow FE chính dùng giỏ hàng theo token, từ lấy giỏ hàng, thêm món, xác nhận, đến xử lý thanh toán.
 
@@ -198,7 +335,7 @@ Với `paymentMethod = CASH`, order sẽ có:
 }
 ```
 
-## 4. Orders For Cashier / Counter
+## 5. Orders For Cashier / Counter
 
 Các API order dùng JWT của staff/cashier.
 
@@ -250,7 +387,7 @@ Order response có field `paymentMethod`:
 }
 ```
 
-## 5. Confirm Customer Received Order
+## 6. Confirm Customer Received Order
 
 Có 2 hướng xác nhận.
 
@@ -274,7 +411,7 @@ Auth: JWT của thu ngân/staff.
 
 Không lấy order từ token, chỉ dùng `orderId`. Nếu order đã thanh toán đủ, order chuyển `status = DONE`.
 
-## 6. Cancel Order
+## 7. Cancel Order
 
 Thu ngân hủy đơn qua `orderId`.
 
@@ -293,7 +430,7 @@ Body:
 
 Lưu ý hiện BE set status hủy là `cancelled`.
 
-## 7. Status FE Can Use
+## 8. Status FE Can Use
 
 Các status quan trọng hiện tại:
 

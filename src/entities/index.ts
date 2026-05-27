@@ -26,3 +26,4 @@ export { School } from './school.entity';
 export { Class } from './class.entity';
 export { StudentClass } from './student-class.entity';
 export { Coupon } from './coupon.entity';
+export { Notification } from './notification.entity';
