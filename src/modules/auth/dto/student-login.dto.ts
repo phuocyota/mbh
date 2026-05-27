@@ -1,9 +1,9 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsString, IsEmail, IsOptional } from 'class-validator';
+import { IsString, IsOptional } from 'class-validator';
 
 export class StudentLoginDto {
   @ApiProperty({
-    description: 'Card ID for student login',
+    description: 'Card ID for student login (no password needed)',
     example: '0089280076',
     required: false,
   })
@@ -12,16 +12,16 @@ export class StudentLoginDto {
   cardId?: string;
 
   @ApiProperty({
-    description: 'Email for student login (alternative to cardId)',
-    example: 'student1@pos.local',
+    description: 'Username - can be email or student code (required with password)',
+    example: 'student1@pos.local or STU5000',
     required: false,
   })
   @IsOptional()
-  @IsEmail()
-  email?: string;
+  @IsString()
+  username?: string;
 
   @ApiProperty({
-    description: 'Password (required if using email)',
+    description: 'Password (required if using username)',
     example: 'student123',
     required: false,
   })

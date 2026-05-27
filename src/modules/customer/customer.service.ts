@@ -4,6 +4,7 @@ import { Repository } from 'typeorm';
 import { Customer } from '../../entities/customer.entity';
 import { Class } from '../../entities/class.entity';
 import { StudentCard } from '../../entities/student-card.entity';
+import { StudentProfile } from '../../entities/student-profile.entity';
 import { BaseService } from '../../common/sql/base.service';
 import { ERROR_MESSAGES } from '../../common/constant/error-messages.constant';
 
@@ -14,6 +15,8 @@ export class CustomerService extends BaseService<Customer> {
     private customerRepository: Repository<Customer>,
     @InjectRepository(StudentCard)
     private studentCardRepository: Repository<StudentCard>,
+    @InjectRepository(StudentProfile)
+    private studentProfileRepository: Repository<StudentProfile>,
     @InjectRepository(Class)
     private classRepository: Repository<Class>,
   ) {
@@ -125,6 +128,26 @@ export class CustomerService extends BaseService<Customer> {
     if (!userId) {
       throw new NotFoundException(
         'Student card is not linked to a user account',
+      );
+    }
+
+    return userId;
+  }
+
+  async findUserIdByStudentCode(studentCode: string): Promise<string> {
+    const studentProfile = await this.studentProfileRepository.findOne({
+      where: { studentCode },
+      relations: ['customer'],
+    });
+
+    if (!studentProfile) {
+      throw new NotFoundException('Student with this code not found');
+    }
+
+    const userId = studentProfile.customer?.userId;
+    if (!userId) {
+      throw new NotFoundException(
+        'Student profile is not linked to a user account',
       );
     }
 

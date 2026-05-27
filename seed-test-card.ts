@@ -213,16 +213,26 @@ const seedTestCard = async () => {
     for (const record of seededRecords) {
       console.log('├─ Card ID:', record.cardId);
       console.log('│  ├─ User Email:', record.user.email);
+      console.log('│  ├─ StudentCode:', record.studentProfile.studentCode);
       console.log('│  ├─ User ID:', record.user.id);
       console.log('│  ├─ Customer ID:', record.customer.id);
       console.log('│  ├─ StudentProfile ID:', record.studentProfile.id);
       console.log('│  ├─ StudentCard ID:', record.studentCard.id);
       console.log('│  └─ Wallet Balance:', record.wallet.balance);
     }
-    console.log('\n🧪 Test Login:');
-    console.log('POST http://localhost:3002/auth/login-card');
+    console.log('\n🧪 Test Login Options:');
+    console.log('\n1. Login by Card (no password):');
+    console.log('POST http://localhost:3002/auth/login/student');
     console.log('Body: {"cardId":"5000"}');
     console.log('Body: {"cardId":"10000"}');
+    console.log('\n2. Login by Email/Password:');
+    console.log('POST http://localhost:3002/auth/login/student');
+    console.log('Body: {"username":"teststudent5000@test.local","password":"password123"}');
+    console.log('Body: {"username":"teststudent10000@test.local","password":"password123"}');
+    console.log('\n3. Login by StudentCode/Password:');
+    console.log('POST http://localhost:3002/auth/login/student');
+    console.log('Body: {"username":"STU5000","password":"password123"}');
+    console.log('Body: {"username":"STU10000","password":"password123"}');
   } catch (error) {
     console.error('❌ Seed error:', error);
   } finally {

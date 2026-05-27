@@ -85,26 +85,33 @@ export class AuthService {
 
   async loginStudent(dto: {
     cardId?: string;
-    email?: string;
+    username?: string;
     password?: string;
     deviceId?: string;
   }) {
     let user: User | null = null;
 
-    // Login by cardId
+    // Login by cardId (no password needed)
     if (dto.cardId) {
       const userId = await this.findUserIdByCardForAuth(dto.cardId);
       user = await this.userService.findById(userId);
     }
-    // Login by email/password
-    else if (dto.email && dto.password) {
-      user = await this.userService.findByEmail(dto.email);
+    // Login by username/password (username can be email or studentCode)
+    else if (dto.username && dto.password) {
+      // Check if username is email (contains @)
+      if (dto.username.includes('@')) {
+        user = await this.userService.findByEmail(dto.username);
+      } else {
+        // Treat as studentCode
+        const userId = await this.findUserIdByStudentCodeForAuth(dto.username);
+        user = await this.userService.findById(userId);
+      }
       if (user && !(await bcrypt.compare(dto.password, user.passwordHash))) {
         throw new UnauthorizedException('Invalid credentials');
       }
     } else {
       throw new UnauthorizedException(
-        'Please provide cardId or email with password',
+        'Please provide cardId or username with password',
       );
     }
 
@@ -127,6 +134,17 @@ export class AuthService {
   private async findUserIdByCardForAuth(cardId: string): Promise<string> {
     try {
       return await this.customerService.findUserIdByActiveCard(cardId);
+    } catch (error) {
+      if (error instanceof NotFoundException) {
+        throw new UnauthorizedException(error.message);
+      }
+      throw error;
+    }
+  }
+
+  private async findUserIdByStudentCodeForAuth(studentCode: string): Promise<string> {
+    try {
+      return await this.customerService.findUserIdByStudentCode(studentCode);
     } catch (error) {
       if (error instanceof NotFoundException) {
         throw new UnauthorizedException(error.message);
