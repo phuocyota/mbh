@@ -14,8 +14,10 @@ async function bootstrap() {
   app.enableCors({
     origin: [
       'https://fe.kidocanteen.kidoedu.vn',
+      'https://fe.parent.kidocanteen.kidoedu.vn',
       'http://localhost:5173',
       'https://localhost:5173',
+      'http://localhost:5171',
     ],
     credentials: true,
   });
