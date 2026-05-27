@@ -11,9 +11,6 @@ export class UserDto extends BaseDto {
   @ApiProperty({ description: 'Email address', example: 'john@example.com' })
   email?: string;
 
-  @ApiProperty({ description: 'Password hash' })
-  passwordHash: string;
-
   @ApiProperty({
     description: 'User role',
     example: 'STAFF',

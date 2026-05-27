@@ -1,4 +1,5 @@
 import { Entity, Column, OneToMany } from 'typeorm';
+import { Exclude } from 'class-transformer';
 import { BaseEntity } from '../common/sql/base.entity';
 
 @Entity('users')
@@ -12,6 +13,7 @@ export class User extends BaseEntity {
   @Column('varchar', { nullable: true, unique: true })
   email: string;
 
+  @Exclude()
   @Column('varchar', { name: 'password_hash' })
   passwordHash: string;
 
