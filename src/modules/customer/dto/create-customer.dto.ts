@@ -1,5 +1,13 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsNotEmpty, IsString, IsOptional, IsEnum } from 'class-validator';
+import { Type } from 'class-transformer';
+import {
+  IsNotEmpty,
+  IsString,
+  IsOptional,
+  IsEnum,
+  IsNumber,
+  Min,
+} from 'class-validator';
 
 export class CreateCustomerDto {
   @ApiProperty({
@@ -44,4 +52,15 @@ export class CreateCustomerDto {
   @IsOptional()
   @IsEnum(['ACTIVE', 'INACTIVE'])
   status?: string;
+
+  @ApiProperty({
+    description: 'Customer spending limit',
+    example: 50000,
+    required: false,
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  spendingLimit?: number;
 }

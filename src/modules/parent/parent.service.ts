@@ -71,22 +71,27 @@ export class ParentService {
     // Find customer by userId
     const customer = await this.customerRepository.findOne({
       where: { userId },
-      relations: ['user'],
     });
 
     if (!customer) {
       throw new NotFoundException('Customer not found for this user');
     }
 
-    const [userDto, walletDto, notifications, todayOrder, recentHistory, statistics] =
-      await Promise.all([
-        this.getUserInfo(customer),
-        this.getWalletInfo(customer.id),
-        this.getRecentNotifications(customer.id),
-        this.getTodayOrder(customer.id),
-        this.getRecentHistory(customer.id),
-        this.getStatistics(customer.id),
-      ]);
+    const [
+      userDto,
+      walletDto,
+      notifications,
+      todayOrder,
+      recentHistory,
+      statistics,
+    ] = await Promise.all([
+      this.getUserInfo(customer),
+      this.getWalletInfo(customer.id),
+      this.getRecentNotifications(customer.id),
+      this.getTodayOrder(customer.id),
+      this.getRecentHistory(customer.id),
+      this.getStatistics(customer.id, Number(customer.spendingLimit || 0)),
+    ]);
 
     return {
       user: userDto,
@@ -117,11 +122,12 @@ export class ParentService {
 
     return {
       balance: wallet ? Number(wallet.balance) : 0,
-      currency: 'VND',
     };
   }
 
-  private async getRecentNotifications(customerId: string): Promise<NotificationHomeDto[]> {
+  private async getRecentNotifications(
+    customerId: string,
+  ): Promise<NotificationHomeDto[]> {
     const notifications = await this.notificationRepository.find({
       where: { customerId },
       order: { createdAt: 'DESC' },
@@ -132,13 +138,16 @@ export class ParentService {
       id: n.id,
       message: n.message,
       type: n.type,
-      amount: n.amount ? Number(n.amount) : null,
+      amount:
+        n.amount === null || n.amount === undefined ? null : Number(n.amount),
       isRead: n.isRead,
       createdAt: n.createdAt.toISOString(),
     }));
   }
 
-  private async getTodayOrder(customerId: string): Promise<TodayOrderHomeDto | null> {
+  private async getTodayOrder(
+    customerId: string,
+  ): Promise<TodayOrderHomeDto | null> {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const tomorrow = new Date(today);
@@ -172,11 +181,12 @@ export class ParentService {
 
     // For now, addons are empty - can be extended later
     const addons: OrderAddonHomeDto[] = [];
+    const normalizedStatus = this.normalizeOrderStatus(order.status);
 
     return {
       id: order.id,
-      status: this.normalizeOrderStatus(order.status),
-      statusText: ORDER_STATUS_TEXT[order.status] || order.status,
+      status: normalizedStatus,
+      statusText: ORDER_STATUS_TEXT[normalizedStatus] || normalizedStatus,
       orderedAt: order.createdAt.toISOString(),
       items,
       addons,
@@ -188,14 +198,17 @@ export class ParentService {
     const statusMap: Record<string, string> = {
       Pending: 'PENDING',
       PREPARING: 'PREPARING',
-      'READY_TO_PICKUP': 'READY',
+      READY_TO_PICKUP: 'READY',
       DONE: 'RECEIVED',
       CANCELLED: 'CANCELLED',
+      DRAFT: 'PENDING',
     };
     return statusMap[status] || status.toUpperCase();
   }
 
-  private async getRecentHistory(customerId: string): Promise<RecentHistoryHomeDto[]> {
+  private async getRecentHistory(
+    customerId: string,
+  ): Promise<RecentHistoryHomeDto[]> {
     const transactions = await this.walletTransactionRepository.find({
       where: { customerId },
       order: { createdAt: 'DESC' },
@@ -231,17 +244,18 @@ export class ParentService {
     return TRANSACTION_TYPE_TITLE[transaction.type] || transaction.type;
   }
 
-  private async getStatistics(customerId: string): Promise<StatisticsHomeDto> {
+  private async getStatistics(
+    customerId: string,
+    spendingLimit: number,
+  ): Promise<StatisticsHomeDto> {
     const now = new Date();
-
-    // Week statistics (current week, Monday to Sunday)
     const weekStart = new Date(now);
-    weekStart.setDate(now.getDate() - now.getDay() + 1); // Monday
+    const daysSinceMonday = (now.getDay() + 6) % 7;
+    weekStart.setDate(now.getDate() - daysSinceMonday);
     weekStart.setHours(0, 0, 0, 0);
     const weekEnd = new Date(weekStart);
     weekEnd.setDate(weekStart.getDate() + 7);
 
-    // Month statistics (current month)
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
     const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 1);
 
@@ -253,13 +267,11 @@ export class ParentService {
     return {
       week: {
         spent: weekSpent,
-        limit: 200000,
-        currency: 'VND',
+        limit: spendingLimit,
       },
       month: {
         spent: monthSpent,
-        limit: 700000,
-        currency: 'VND',
+        limit: spendingLimit,
       },
     };
   }

@@ -31,4 +31,10 @@ export class CustomerDto extends BaseDto {
     example: 'ACTIVE',
   })
   status: string;
+
+  @ApiProperty({
+    description: 'Customer spending limit',
+    example: 50000,
+  })
+  spendingLimit: number;
 }

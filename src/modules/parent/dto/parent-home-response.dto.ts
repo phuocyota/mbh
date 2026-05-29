@@ -18,28 +18,35 @@ export class UserHomeDto {
 export class WalletHomeDto {
   @ApiProperty({ description: 'Wallet balance', example: 45000 })
   balance: number;
-
-  @ApiProperty({ description: 'Currency', example: 'VND' })
-  currency: string;
 }
 
 export class NotificationHomeDto {
   @ApiProperty({ description: 'Notification ID', example: 'noti_001' })
   id: string;
 
-  @ApiProperty({ description: 'Notification message', example: 'Con da nhan mon' })
+  @ApiProperty({
+    description: 'Notification message',
+    example: 'Con da nhan mon',
+  })
   message: string;
 
   @ApiProperty({ description: 'Notification type', example: 'ORDER_RECEIVED' })
   type: string;
 
-  @ApiProperty({ description: 'Amount (if applicable)', example: -30000, nullable: true })
+  @ApiProperty({
+    description: 'Amount (if applicable)',
+    example: -30000,
+    nullable: true,
+  })
   amount: number | null;
 
   @ApiProperty({ description: 'Is read', example: false })
   isRead: boolean;
 
-  @ApiProperty({ description: 'Created at', example: '2026-05-27T10:30:00+07:00' })
+  @ApiProperty({
+    description: 'Created at',
+    example: '2026-05-27T10:30:00+07:00',
+  })
   createdAt: string;
 }
 
@@ -84,7 +91,10 @@ export class TodayOrderHomeDto {
   @ApiProperty({ description: 'Status text', example: 'Dang chuan bi' })
   statusText: string;
 
-  @ApiProperty({ description: 'Ordered at', example: '2026-05-27T09:45:00+07:00' })
+  @ApiProperty({
+    description: 'Ordered at',
+    example: '2026-05-27T09:45:00+07:00',
+  })
   orderedAt: string;
 
   @ApiProperty({ description: 'Order items', type: [OrderItemHomeDto] })
@@ -116,10 +126,17 @@ export class RecentHistoryHomeDto {
   @ApiProperty({ description: 'Status text', example: 'Hoan thanh' })
   statusText: string;
 
-  @ApiProperty({ description: 'Created at', example: '2026-05-27T10:30:00+07:00' })
+  @ApiProperty({
+    description: 'Created at',
+    example: '2026-05-27T10:30:00+07:00',
+  })
   createdAt: string;
 
-  @ApiProperty({ description: 'Order ID', example: 'order_001', nullable: true })
+  @ApiProperty({
+    description: 'Order ID',
+    example: 'order_001',
+    nullable: true,
+  })
   orderId: string | null;
 }
 
@@ -129,16 +146,19 @@ export class StatisticsPeriodHomeDto {
 
   @ApiProperty({ description: 'Limit amount', example: 200000 })
   limit: number;
-
-  @ApiProperty({ description: 'Currency', example: 'VND' })
-  currency: string;
 }
 
 export class StatisticsHomeDto {
-  @ApiProperty({ description: 'Week statistics', type: StatisticsPeriodHomeDto })
+  @ApiProperty({
+    description: 'Week statistics',
+    type: StatisticsPeriodHomeDto,
+  })
   week: StatisticsPeriodHomeDto;
 
-  @ApiProperty({ description: 'Month statistics', type: StatisticsPeriodHomeDto })
+  @ApiProperty({
+    description: 'Month statistics',
+    type: StatisticsPeriodHomeDto,
+  })
   month: StatisticsPeriodHomeDto;
 }
 
@@ -149,10 +169,17 @@ export class ParentHomeResponseDto {
   @ApiProperty({ description: 'Wallet info', type: WalletHomeDto })
   wallet: WalletHomeDto;
 
-  @ApiProperty({ description: 'Recent notifications', type: [NotificationHomeDto] })
+  @ApiProperty({
+    description: 'Recent notifications',
+    type: [NotificationHomeDto],
+  })
   notifications: NotificationHomeDto[];
 
-  @ApiProperty({ description: 'Today order', type: TodayOrderHomeDto, nullable: true })
+  @ApiProperty({
+    description: 'Today order',
+    type: TodayOrderHomeDto,
+    nullable: true,
+  })
   todayOrder: TodayOrderHomeDto | null;
 
   @ApiProperty({ description: 'Recent history', type: [RecentHistoryHomeDto] })

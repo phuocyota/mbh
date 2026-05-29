@@ -23,6 +23,14 @@ export class Customer extends BaseEntity {
   @Column('varchar', { default: 'ACTIVE' })
   status: string;
 
+  @Column('numeric', {
+    precision: 12,
+    scale: 2,
+    default: 50000,
+    name: 'spending_limit',
+  })
+  spendingLimit: number;
+
   @Column('uuid', { nullable: true, name: 'user_id', unique: true })
   userId: string;
 
