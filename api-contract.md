@@ -5,7 +5,7 @@
 Endpoint gom data cho man Home phu huynh/hoc sinh.
 
 ```http
-GET /api/parent/home
+GET /parent/home
 Authorization: Bearer <accessToken>
 ```
 

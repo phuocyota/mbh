@@ -1,5 +1,10 @@
 import { Controller, Get, UseGuards, Req } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
+import {
+  ApiBearerAuth,
+  ApiOperation,
+  ApiResponse,
+  ApiTags,
+} from '@nestjs/swagger';
 import { Request } from 'express';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { ParentService } from './parent.service';
@@ -14,7 +19,7 @@ interface AuthenticatedRequest extends Request {
 }
 
 @ApiTags('Parent')
-@Controller('api/parent')
+@Controller('parent')
 @UseGuards(JwtAuthGuard)
 @ApiBearerAuth()
 export class ParentController {
@@ -31,7 +36,9 @@ export class ParentController {
     status: 401,
     description: 'Unauthorized',
   })
-  async getHome(@Req() req: AuthenticatedRequest): Promise<ParentHomeResponseDto> {
+  async getHome(
+    @Req() req: AuthenticatedRequest,
+  ): Promise<ParentHomeResponseDto> {
     const userId = req.user.userId;
     return this.parentService.getParentHome(userId);
   }
