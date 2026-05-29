@@ -24,30 +24,38 @@ Authorization: Bearer <accessToken>
   "notifications": [
     {
       "id": "noti_001",
-      "message": "Con da nhan mon",
-      "type": "ORDER_RECEIVED",
+      "message": "Con đã đặt món Cơm gà",
+      "type": "ORDER_CREATED",
       "amount": null,
       "isRead": false,
-      "createdAt": "2026-05-27T10:30:00+07:00"
+      "createdAt": "2026-05-29T09:45:00+07:00"
     },
     {
       "id": "noti_002",
-      "message": "Da tru 30,000d",
+      "message": "Đã trừ 30.000đ từ ví",
       "type": "PAYMENT_DEDUCTED",
       "amount": -30000,
       "isRead": false,
-      "createdAt": "2026-05-27T10:31:00+07:00"
+      "createdAt": "2026-05-29T09:46:00+07:00"
+    },
+    {
+      "id": "noti_003",
+      "message": "Con đã nhận món",
+      "type": "ORDER_RECEIVED",
+      "amount": null,
+      "isRead": true,
+      "createdAt": "2026-05-29T10:20:00+07:00"
     }
   ],
   "todayOrder": {
     "id": "order_001",
     "status": "PREPARING",
-    "statusText": "Dang chuan bi",
-    "orderedAt": "2026-05-27T09:45:00+07:00",
+    "statusText": "Đang chuẩn bị",
+    "orderedAt": "2026-05-29T09:45:00+07:00",
     "items": [
       {
         "id": "item_001",
-        "name": "Com ga",
+        "name": "Cơm gà",
         "quantity": 2,
         "unitPrice": 15000,
         "totalPrice": 30000
@@ -56,7 +64,7 @@ Authorization: Bearer <accessToken>
     "addons": [
       {
         "id": "addon_001",
-        "name": "Sua",
+        "name": "Sữa",
         "quantity": 1,
         "price": 0
       }
@@ -65,22 +73,22 @@ Authorization: Bearer <accessToken>
   },
   "recentHistory": [
     {
-      "id": "txn_001",
+      "id": "order_001",
       "type": "ORDER_PAYMENT",
-      "title": "Com ga",
+      "title": "Cơm gà",
       "amount": -30000,
-      "status": "COMPLETED",
-      "statusText": "Hoan thanh",
+      "status": "PREPARING",
+      "statusText": "Đang chuẩn bị",
       "createdAt": "2026-05-27T10:30:00+07:00",
       "orderId": "order_001"
     },
     {
-      "id": "txn_002",
+      "id": "order_002",
       "type": "ORDER_PAYMENT",
-      "title": "Bun bo",
+      "title": "Bún bò",
       "amount": -25000,
-      "status": "COMPLETED",
-      "statusText": "Hoan thanh",
+      "status": "RECEIVED",
+      "statusText": "Đã nhận",
       "createdAt": "2026-05-27T11:15:00+07:00",
       "orderId": "order_002"
     }
@@ -103,7 +111,9 @@ Authorization: Bearer <accessToken>
 - `wallet.balance`: so du hien tai cua vi, kieu number. FE tu xu ly don vi tien.
 - `notifications`: chi can tra 2-5 thong bao gan nhat cho man Home.
 - `todayOrder`: tra `null` neu hom nay chua co order.
-- `recentHistory`: chi can tra 3-5 giao dich gan nhat cho man Home.
+- `todayOrder.items`: cac mon chinh trong don hang moi nhat hom nay.
+- `todayOrder.addons`: cac mon/addon di kem trong don hang moi nhat hom nay, hien duoc map tu order item co `unitPrice = 0`.
+- `recentHistory`: tra 3 don hang gan nhat cua customer dang dang nhap.
 - `statistics.week.limit` va `statistics.month.limit`: lay tu `customer.spendingLimit`, dung de tinh thanh progress.
 - `customer.spendingLimit`: gioi han chi tieu do nguoi dung set cho tung customer.
 - `createdAt` va `orderedAt`: tra ISO datetime kem timezone.
@@ -113,8 +123,6 @@ Authorization: Bearer <accessToken>
 
 ```ts
 type OrderStatus = 'PENDING' | 'PREPARING' | 'READY' | 'RECEIVED' | 'CANCELLED';
-
-type TransactionStatus = 'PENDING' | 'COMPLETED' | 'FAILED' | 'REFUNDED';
 
 type NotificationType =
   | 'ORDER_CREATED'

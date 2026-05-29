@@ -26,7 +26,7 @@ export class NotificationHomeDto {
 
   @ApiProperty({
     description: 'Notification message',
-    example: 'Con da nhan mon',
+    example: 'Con đã đặt món Cơm gà',
   })
   message: string;
 
@@ -54,7 +54,7 @@ export class OrderItemHomeDto {
   @ApiProperty({ description: 'Item ID', example: 'item_001' })
   id: string;
 
-  @ApiProperty({ description: 'Product name', example: 'Com ga' })
+  @ApiProperty({ description: 'Product name', example: 'Cơm gà' })
   name: string;
 
   @ApiProperty({ description: 'Quantity', example: 2 })
@@ -71,7 +71,7 @@ export class OrderAddonHomeDto {
   @ApiProperty({ description: 'Addon ID', example: 'addon_001' })
   id: string;
 
-  @ApiProperty({ description: 'Addon name', example: 'Sua' })
+  @ApiProperty({ description: 'Addon name', example: 'Sữa' })
   name: string;
 
   @ApiProperty({ description: 'Quantity', example: 1 })
@@ -88,7 +88,7 @@ export class TodayOrderHomeDto {
   @ApiProperty({ description: 'Order status', example: 'PREPARING' })
   status: string;
 
-  @ApiProperty({ description: 'Status text', example: 'Dang chuan bi' })
+  @ApiProperty({ description: 'Status text', example: 'Đang chuẩn bị' })
   statusText: string;
 
   @ApiProperty({
@@ -108,22 +108,22 @@ export class TodayOrderHomeDto {
 }
 
 export class RecentHistoryHomeDto {
-  @ApiProperty({ description: 'Transaction ID', example: 'txn_001' })
+  @ApiProperty({ description: 'Order ID', example: 'order_001' })
   id: string;
 
   @ApiProperty({ description: 'Transaction type', example: 'ORDER_PAYMENT' })
   type: string;
 
-  @ApiProperty({ description: 'Transaction title', example: 'Com ga' })
+  @ApiProperty({ description: 'Transaction title', example: 'Cơm gà' })
   title: string;
 
   @ApiProperty({ description: 'Amount', example: -30000 })
   amount: number;
 
-  @ApiProperty({ description: 'Transaction status', example: 'COMPLETED' })
+  @ApiProperty({ description: 'Order status', example: 'PREPARING' })
   status: string;
 
-  @ApiProperty({ description: 'Status text', example: 'Hoan thanh' })
+  @ApiProperty({ description: 'Status text', example: 'Đang chuẩn bị' })
   statusText: string;
 
   @ApiProperty({

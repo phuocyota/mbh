@@ -23,29 +23,13 @@ import {
 
 // Order status mapping to text
 const ORDER_STATUS_TEXT: Record<string, string> = {
-  PENDING: 'Cho xac nhan',
-  PREPARING: 'Dang chuan bi',
-  READY: 'San sang',
-  READY_TO_PICKUP: 'San sang lay',
-  DONE: 'Hoan thanh',
-  RECEIVED: 'Da nhan',
-  CANCELLED: 'Da huy',
-};
-
-// Transaction status mapping to text
-const TRANSACTION_STATUS_TEXT: Record<string, string> = {
-  PENDING: 'Cho xu ly',
-  COMPLETED: 'Hoan thanh',
-  FAILED: 'That bai',
-  REFUNDED: 'Da hoan tien',
-};
-
-// Transaction type mapping to title
-const TRANSACTION_TYPE_TITLE: Record<string, string> = {
-  PAYMENT: 'Thanh toan don hang',
-  TOPUP: 'Nap tien',
-  REFUND: 'Hoan tien',
-  ADJUSTMENT: 'Dieu chinh',
+  PENDING: 'Chờ xác nhận',
+  PREPARING: 'Đang chuẩn bị',
+  READY: 'Sẵn sàng',
+  READY_TO_PICKUP: 'Sẵn sàng lấy',
+  DONE: 'Hoàn thành',
+  RECEIVED: 'Đã nhận',
+  CANCELLED: 'Đã hủy',
 };
 
 @Injectable()
@@ -166,21 +150,27 @@ export class ParentService {
       return null;
     }
 
-    // Map order items
-    const items: OrderItemHomeDto[] = order.items
-      ? order.items
-          .filter((item: OrderItem) => item.status !== 'CANCELLED')
-          .map((item: OrderItem) => ({
-            id: item.id,
-            name: item.productName,
-            quantity: item.quantity,
-            unitPrice: Number(item.unitPrice),
-            totalPrice: Number(item.totalAmount),
-          }))
-      : [];
+    const activeItems = (order.items || []).filter(
+      (item: OrderItem) => item.status !== 'CANCELLED',
+    );
+    const items: OrderItemHomeDto[] = activeItems
+      .filter((item: OrderItem) => Number(item.unitPrice) > 0)
+      .map((item: OrderItem) => ({
+        id: item.id,
+        name: item.productName,
+        quantity: item.quantity,
+        unitPrice: Number(item.unitPrice),
+        totalPrice: Number(item.totalAmount),
+      }));
 
-    // For now, addons are empty - can be extended later
-    const addons: OrderAddonHomeDto[] = [];
+    const addons: OrderAddonHomeDto[] = activeItems
+      .filter((item: OrderItem) => Number(item.unitPrice) === 0)
+      .map((item: OrderItem) => ({
+        id: item.id,
+        name: item.productName,
+        quantity: item.quantity,
+        price: Number(item.totalAmount || 0),
+      }));
     const normalizedStatus = this.normalizeOrderStatus(order.status);
 
     return {
@@ -209,39 +199,42 @@ export class ParentService {
   private async getRecentHistory(
     customerId: string,
   ): Promise<RecentHistoryHomeDto[]> {
-    const transactions = await this.walletTransactionRepository.find({
+    const orders = await this.orderRepository.find({
       where: { customerId },
       order: { createdAt: 'DESC' },
-      take: 5,
+      relations: ['items'],
+      take: 3,
     });
 
-    return transactions.map((t) => ({
-      id: t.id,
-      type: this.mapTransactionType(t.type),
-      title: this.getTransactionTitle(t),
-      amount: Number(t.amount) * (t.type === 'PAYMENT' ? -1 : 1),
-      status: 'COMPLETED',
-      statusText: TRANSACTION_STATUS_TEXT['COMPLETED'],
-      createdAt: t.createdAt.toISOString(),
-      orderId: t.refType === 'ORDER' ? t.refId : null,
+    return orders.map((order) => ({
+      id: order.id,
+      type: 'ORDER_PAYMENT',
+      title: this.getOrderTitle(order),
+      amount: -Number(order.totalAmount || 0),
+      status: this.normalizeOrderStatus(order.status),
+      statusText:
+        ORDER_STATUS_TEXT[this.normalizeOrderStatus(order.status)] ||
+        order.status,
+      createdAt: order.createdAt.toISOString(),
+      orderId: order.id,
     }));
   }
 
-  private mapTransactionType(type: string): string {
-    const typeMap: Record<string, string> = {
-      PAYMENT: 'ORDER_PAYMENT',
-      TOPUP: 'TOPUP',
-      REFUND: 'REFUND',
-      ADJUSTMENT: 'REFUND',
-    };
-    return typeMap[type] || type;
-  }
+  private getOrderTitle(order: Order): string {
+    const items = (order.items || []).filter(
+      (item: OrderItem) => item.status !== 'CANCELLED',
+    );
 
-  private getTransactionTitle(transaction: WalletTransaction): string {
-    if (transaction.note) {
-      return transaction.note;
+    if (!items.length) {
+      return order.orderCode || 'Don hang';
     }
-    return TRANSACTION_TYPE_TITLE[transaction.type] || transaction.type;
+
+    const firstItemName = items[0].productName;
+    const remainingCount = items.length - 1;
+
+    return remainingCount > 0
+      ? `${firstItemName} + ${remainingCount} mon`
+      : firstItemName;
   }
 
   private async getStatistics(
