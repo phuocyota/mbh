@@ -15,6 +15,7 @@ async function bootstrap() {
     origin: [
       'https://fe.kidocanteen.kidoedu.vn',
       'https://fe.parent.kidocanteen.kidoedu.vn',
+      'https://fe.admin.kidocanteen.kidoedu.vn',
       'http://localhost:5173',
       'https://localhost:5173',
       'http://localhost:5171',
