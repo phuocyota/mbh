@@ -1,6 +1,7 @@
 import { Controller, Post, Body } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBody } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
+import { AdminLoginDto } from './dto/admin-login.dto';
 import { CashierLoginDto } from './dto/cashier-login.dto';
 import { StudentLoginDto } from './dto/student-login.dto';
 
@@ -66,5 +67,20 @@ export class AuthController {
   @Post('login/cashier')
   async loginCashier(@Body() dto: CashierLoginDto) {
     return this.authService.loginCashier(dto);
+  }
+
+  @ApiOperation({ summary: 'Admin/Manager/Staff login with email/password' })
+  @ApiBody({ type: AdminLoginDto })
+  @ApiResponse({
+    status: 200,
+    description: 'Login successful, returns JWT token',
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized - Only admin/manager/staff can use this endpoint',
+  })
+  @Post('login/admin')
+  async loginAdmin(@Body() dto: AdminLoginDto) {
+    return this.authService.loginAdmin(dto);
   }
 }

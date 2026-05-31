@@ -152,6 +152,26 @@ export class AuthService {
       throw error;
     }
   }
+  async loginAdmin(dto: { email: string; password: string }) {
+    const user = await this.userService.findByEmail(dto.email);
+
+    if (!user || !(await bcrypt.compare(dto.password, user.passwordHash))) {
+      throw new UnauthorizedException('Invalid credentials');
+    }
+
+    const allowedRoles = ['ADMIN', 'MANAGER', 'STAFF'];
+    if (!allowedRoles.includes(user.role)) {
+      throw new UnauthorizedException('This endpoint is only for admin/manager/staff');
+    }
+
+    if (user.status !== 'ACTIVE') {
+      throw new UnauthorizedException('Account is inactive');
+    }
+
+    const { passwordHash, ...userWithoutPassword } = user;
+    return this.login(userWithoutPassword);
+  }
+
   async loginCashier(dto: {
     email: string;
     password: string;
