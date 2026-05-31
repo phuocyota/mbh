@@ -52,4 +52,23 @@ export class ReportsController {
   async stockSnapshot(@Query('branchId') branchId?: string) {
     return this.reportsService.stockSnapshot(branchId);
   }
+
+  @Get('bottom-products')
+  @ApiOperation({ summary: 'Sản phẩm bán chậm nhất (lowSelling)' })
+  async bottomProducts(@Query() query: TopProductsQueryDto) {
+    return this.reportsService.bottomProducts(query);
+  }
+
+  @Get('end-of-day')
+  @ApiOperation({ summary: 'Báo cáo cuối ngày theo sản phẩm (reportDataEndDay)' })
+  async endOfDay(@Query() query: DateRangeQueryDto) {
+    return this.reportsService.endOfDay(query);
+  }
+
+  @Get('inventory')
+  @ApiOperation({ summary: 'Báo cáo tồn kho chi tiết theo mặt hàng (productInventoryData)' })
+  @ApiQuery({ name: 'branchId', required: false, type: String })
+  async inventoryReport(@Query('branchId') branchId?: string) {
+    return this.reportsService.inventoryReport(branchId);
+  }
 }

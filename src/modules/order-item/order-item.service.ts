@@ -110,4 +110,95 @@ export class OrderItemService extends BaseService<OrderItem> {
       totalRevenue: string;
     }>();
   }
+
+  async getBottomProducts(query: {
+    from: Date;
+    to: Date;
+    branchId?: string;
+    limit: number;
+  }) {
+    const qb = this.orderItemRepository
+      .createQueryBuilder('oi')
+      .innerJoin('orders', 'o', 'o.id = oi.order_id')
+      .select('oi.product_id', 'productId')
+      .addSelect('oi.product_name', 'productName')
+      .addSelect('SUM(oi.quantity)', 'totalQuantity')
+      .addSelect('COALESCE(SUM(oi.total_amount), 0)', 'totalRevenue')
+      .where('o.created_at BETWEEN :from AND :to', {
+        from: query.from,
+        to: query.to,
+      })
+      .andWhere("o.status IN ('PAID','COMPLETED')")
+      .andWhere("oi.status = 'NORMAL'")
+      .groupBy('oi.product_id')
+      .addGroupBy('oi.product_name')
+      .orderBy('"totalQuantity"', 'ASC')
+      .limit(query.limit);
+
+    if (query.branchId) {
+      qb.andWhere('o.branch_id = :branchId', { branchId: query.branchId });
+    }
+
+    return qb.getRawMany<{
+      productId: string;
+      productName: string;
+      totalQuantity: string;
+      totalRevenue: string;
+    }>();
+  }
+
+  async getEndOfDayItems(query: {
+    from: Date;
+    to: Date;
+    branchId?: string;
+  }) {
+    const qb = this.orderItemRepository
+      .createQueryBuilder('oi')
+      .innerJoin('orders', 'o', 'o.id = oi.order_id')
+      .select('DATE(o.created_at)', 'date')
+      .addSelect('p.sku', 'code')
+      .addSelect('oi.product_name', 'name')
+      .addSelect('oi.unit_price', 'price')
+      .addSelect('SUM(oi.quantity)', 'qty')
+      .addSelect('COALESCE(SUM(oi.total_amount), 0)', 'total')
+      .addSelect('COALESCE(SUM(oi.subtotal), 0)', 'gross')
+      .addSelect(
+        'COALESCE(SUM(oi.total_amount) * 0.1, 0)',
+        'tax',
+      )
+      .addSelect(
+        'COALESCE(SUM(oi.total_amount) * 0.9, 0)',
+        'net',
+      )
+      .leftJoin('products', 'p', 'p.id = oi.product_id')
+      .where('o.created_at BETWEEN :from AND :to', {
+        from: query.from,
+        to: query.to,
+      })
+      .andWhere("o.status IN ('PAID','COMPLETED')")
+      .andWhere("oi.status = 'NORMAL'")
+      .groupBy('DATE(o.created_at)')
+      .addGroupBy('oi.product_id')
+      .addGroupBy('oi.product_name')
+      .addGroupBy('oi.unit_price')
+      .addGroupBy('p.sku')
+      .orderBy('DATE(o.created_at)', 'ASC')
+      .addOrderBy('oi.product_name', 'ASC');
+
+    if (query.branchId) {
+      qb.andWhere('o.branch_id = :branchId', { branchId: query.branchId });
+    }
+
+    return qb.getRawMany<{
+      date: string;
+      code: string;
+      name: string;
+      price: string;
+      qty: string;
+      total: string;
+      gross: string;
+      tax: string;
+      net: string;
+    }>();
+  }
 }

@@ -32,6 +32,8 @@ import { ReportsModule } from './modules/reports/reports.module';
 import { CartModule } from './modules/cart/cart.module';
 import { CouponModule } from './modules/coupon/coupon.module';
 import { ParentModule } from './modules/parent/parent.module';
+import { EmployeeModule } from './modules/employee/employee.module';
+import { WorkScheduleModule } from './modules/work-schedule/work-schedule.module';
 
 @Module({
   imports: [
@@ -66,6 +68,8 @@ import { ParentModule } from './modules/parent/parent.module';
     CartModule,
     CouponModule,
     ParentModule,
+    EmployeeModule,
+    WorkScheduleModule,
   ],
   controllers: [AppController],
   providers: [

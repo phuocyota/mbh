@@ -180,4 +180,72 @@ export class ReportsService {
   async stockSnapshot(branchId?: string) {
     return this.stockLevelService.getSnapshot(branchId);
   }
+
+  async bottomProducts(query: {
+    from?: string;
+    to?: string;
+    branchId?: string;
+    limit?: number;
+  }) {
+    const { from, to } = this.resolveRange(query);
+    const limit = Math.min(Math.max(Number(query.limit) || 10, 1), 100);
+    const rows = await this.orderItemService.getBottomProducts({
+      from,
+      to,
+      branchId: query.branchId,
+      limit,
+    });
+
+    return rows.map((row) => ({
+      productId: row.productId,
+      productName: row.productName,
+      totalQuantity: Number(row.totalQuantity),
+      totalRevenue: Number(row.totalRevenue),
+    }));
+  }
+
+  async endOfDay(query: {
+    from?: string;
+    to?: string;
+    branchId?: string;
+  }) {
+    const { from, to } = this.resolveRange(query);
+    const rows = await this.orderItemService.getEndOfDayItems({
+      from,
+      to,
+      branchId: query.branchId,
+    });
+
+    return {
+      from,
+      to,
+      branchId: query.branchId || null,
+      data: rows.map((row) => ({
+        date: row.date,
+        code: row.code,
+        name: row.name,
+        price: Number(row.price),
+        qty: Number(row.qty),
+        total: Number(row.total),
+        gross: Number(row.gross),
+        tax: Number(row.tax),
+        net: Number(row.net),
+      })),
+    };
+  }
+
+  async inventoryReport(branchId?: string) {
+    const snapshot = await this.stockLevelService.getSnapshot(branchId);
+    return {
+      branchId: branchId || null,
+      data: snapshot.map((item: any) => ({
+        inventoryItemId: item.inventoryItemId,
+        name: item.name,
+        unit: item.unit,
+        quantity: Number(item.quantity),
+        branchId: item.branchId,
+        updatedAt: item.updatedAt,
+      })),
+    };
+  }
 }
