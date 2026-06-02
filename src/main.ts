@@ -12,14 +12,24 @@ async function bootstrap() {
 
   // Enable CORS for frontend
   app.enableCors({
-    origin: [
-      'https://fe.kidocanteen.kidoedu.vn',
-      'https://fe.parent.kidocanteen.kidoedu.vn',
-      'https://fe.admin.kidocanteen.kidoedu.vn',
-      'http://localhost:5173',
-      'https://localhost:5173',
-      'http://localhost:5171',
-    ],
+    origin: (origin, callback) => {
+      const allowedOrigins = [
+        'https://fe.kidocanteen.kidoedu.vn',
+        'https://fe.parent.kidocanteen.kidoedu.vn',
+        'https://fe.admin.kidocanteen.kidoedu.vn',
+        'http://localhost:5173',
+        'https://localhost:5173',
+        'http://localhost:5171',
+      ];
+      // Allow private network IPs (192.168.x.x, 10.x.x.x, 172.16-31.x.x)
+      const privateIpRegex = /^(http:\/\/)(192\.168\.|10\.|172\.(1[6-9]|2[0-9]|3[0-1])\.)[^:]+:\d+$/;
+      
+      if (!origin || allowedOrigins.includes(origin) || privateIpRegex.test(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error(`Origin ${origin} not allowed by CORS`), false);
+      }
+    },
     credentials: true,
   });
 
