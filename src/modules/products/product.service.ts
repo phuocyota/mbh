@@ -64,6 +64,43 @@ export class ProductService extends BaseService<Product> {
     return this.findOne(id);
   }
 
+  async updateBulk(
+    items: { id: string; price: number }[],
+    updatedBy?: { userId: string },
+  ) {
+    const updatedIds: string[] = [];
+    const errors: { id: string; error: string }[] = [];
+
+    for (const item of items) {
+      try {
+        const product = await this.productRepository.findOne({
+          where: { id: item.id },
+        });
+
+        if (!product) {
+          errors.push({ id: item.id, error: 'Product not found' });
+          continue;
+        }
+
+        product.price = item.price;
+        if (updatedBy) {
+          product.updatedBy = updatedBy.userId;
+        }
+        await this.productRepository.save(product);
+        updatedIds.push(item.id);
+      } catch (error) {
+        errors.push({ id: item.id, error: error.message });
+      }
+    }
+
+    return {
+      success: updatedIds.length,
+      failed: errors.length,
+      updatedIds,
+      errors: errors.length > 0 ? errors : undefined,
+    };
+  }
+
   async deactivateProduct(id: string) {
     return this.productRepository.update(id, { isActive: false });
   }

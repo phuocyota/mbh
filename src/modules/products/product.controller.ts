@@ -91,6 +91,13 @@ export class ProductController {
     } as any);
   }
 
+  @ApiOperation({ summary: 'Bulk update products' })
+  @ApiResponse({ status: 200, description: 'Products updated' })
+  @Put('bulk/update')
+  async updateBulk(@Body() items: { id: string; price: number }[]) {
+    return this.productService.updateBulk(items, { userId: 'system' } as any);
+  }
+
   @ApiOperation({ summary: 'Delete product' })
   @ApiParam({ name: 'id', description: 'Product ID' })
   @ApiResponse({ status: 200, description: 'Product deleted' })
