@@ -63,7 +63,7 @@ export class DashboardService {
         'SUM(order.totalAmount) as revenue',
       ])
       .where('order.createdAt BETWEEN :from AND :to', { from, to })
-      .andWhere('order.status IN (:...statuses)', { statuses: ['COMPLETED', 'READY', 'RECEIVED'] });
+      .andWhere('order.status IN (:...statuses)', { statuses: ['PENDING', 'PENDING_PAYMENT', 'PREPARING', 'READY', 'RECEIVED', 'COMPLETED'] });
     
     if (branchId) {
       query.andWhere('order.branchId = :branchId', { branchId });
@@ -132,7 +132,7 @@ export class DashboardService {
         'COUNT(order.id) as totalOrders',
       ])
       .where('order.createdAt BETWEEN :from AND :to', { from, to })
-      .andWhere('order.status IN (:...statuses)', { statuses: ['COMPLETED', 'READY', 'RECEIVED'] });
+      .andWhere('order.status IN (:...statuses)', { statuses: ['PENDING', 'PENDING_PAYMENT', 'PREPARING', 'READY', 'RECEIVED', 'COMPLETED'] });
     
     if (branchId) {
       query.andWhere('order.branchId = :branchId', { branchId });
