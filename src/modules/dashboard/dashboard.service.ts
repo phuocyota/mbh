@@ -8,6 +8,19 @@ interface DateRange {
   to: Date;
 }
 
+const REVENUE_ORDER_STATUSES = [
+  'Pending',
+  'PENDING',
+  'PENDING_PAYMENT',
+  'PREPARING',
+  'READY',
+  'READY_TO_PICKUP',
+  'RECEIVED',
+  'DONE',
+  'COMPLETED',
+  'waiting',
+];
+
 @Injectable()
 export class DashboardService {
   constructor(
@@ -51,78 +64,8 @@ export class DashboardService {
     return { from, to };
   }
 
-  async getRevenueStats(filter: string, branchId?: string) {
-    const { from, to } = this.resolveDateRange(filter);
-    
-    const query = this.orderRepository
-      .createQueryBuilder('order')
-      .select([
-        'DATE(order.createdAt) as date',
-        'EXTRACT(HOUR FROM order.createdAt) as hour',
-        'COUNT(order.id) as orderCount',
-        'SUM(order.totalAmount) as revenue',
-      ])
-      .where('order.createdAt BETWEEN :from AND :to', { from, to })
-      .andWhere('order.status IN (:...statuses)', { statuses: ['Pending', 'DONE', 'waiting'] });
-    
-    if (branchId) {
-      query.andWhere('order.branchId = :branchId', { branchId });
-    }
-    
-    const hourlyData = await query
-      .groupBy('DATE(order.createdAt)')
-      .addGroupBy('EXTRACT(HOUR FROM order.createdAt)')
-      .orderBy('date', 'ASC')
-      .addOrderBy('hour', 'ASC')
-      .getRawMany();
-    
-    const dailyData = await this.orderRepository
-      .createQueryBuilder('order')
-      .select([
-        'DATE(order.createdAt) as date',
-        'COUNT(order.id) as orderCount',
-        'SUM(order.totalAmount) as revenue',
-      ])
-      .where('order.createdAt BETWEEN :from AND :to', { from, to })
-      .andWhere('order.status IN (:...statuses)', { statuses: ['Pending', 'DONE', 'waiting'] })
-      .groupBy('DATE(order.createdAt)')
-      .orderBy('date', 'ASC')
-      .getRawMany();
-    
-    const summary = await this.orderRepository
-      .createQueryBuilder('order')
-      .select([
-        'COUNT(order.id) as totalOrders',
-        'SUM(order.totalAmount) as totalRevenue',
-      ])
-      .where('order.createdAt BETWEEN :from AND :to', { from, to })
-      .andWhere('order.status IN (:...statuses)', { statuses: ['Pending', 'DONE', 'waiting'] })
-      .getRawOne();
-
-    return {
-      filter,
-      from,
-      to,
-      summary: {
-        orders: Number(summary?.totalOrders || 0),
-        revenue: Number(summary?.totalRevenue || 0),
-      },
-      hourly: hourlyData.map(row => ({
-        date: row.date,
-        hour: Number(row.hour),
-        orders: Number(row.orderCount),
-        revenue: Number(row.revenue),
-      })),
-      daily: dailyData.map(row => ({
-        date: row.date,
-        orders: Number(row.orderCount),
-        revenue: Number(row.revenue),
-      })),
-    };
-  }
-
   async getCustomerStats(filter: string, branchId?: string) {
-    const { from, to } = this.resolveDateRange(filter);
+    const range = this.resolveDateRange(filter);
     
     const query = this.orderRepository
       .createQueryBuilder('order')
@@ -131,8 +74,13 @@ export class DashboardService {
         'COUNT(DISTINCT order.customerId) as uniqueCustomers',
         'COUNT(order.id) as totalOrders',
       ])
-      .where('order.createdAt BETWEEN :from AND :to', { from, to })
-      .andWhere('order.status IN (:...statuses)', { statuses: ['Pending', 'DONE', 'waiting'] });
+      .where('order.createdAt BETWEEN :from AND :to', range)
+      .andWhere('order.paymentStatus = :paymentStatus', {
+        paymentStatus: 'PAID',
+      })
+      .andWhere('order.status IN (:...statuses)', {
+        statuses: REVENUE_ORDER_STATUSES,
+      });
     
     if (branchId) {
       query.andWhere('order.branchId = :branchId', { branchId });
@@ -146,15 +94,26 @@ export class DashboardService {
     const totalUnique = await this.orderRepository
       .createQueryBuilder('order')
       .select('COUNT(DISTINCT order.customerId)', 'count')
-      .where('order.createdAt BETWEEN :from AND :to', { from, to })
-      .andWhere('order.status IN (:...statuses)', { statuses: ['Pending', 'DONE', 'waiting'] })
+      .where('order.createdAt BETWEEN :from AND :to', range)
+      .andWhere('order.paymentStatus = :paymentStatus', {
+        paymentStatus: 'PAID',
+      })
+      .andWhere('order.status IN (:...statuses)', {
+        statuses: REVENUE_ORDER_STATUSES,
+      });
+
+    if (branchId) {
+      totalUnique.andWhere('order.branchId = :branchId', { branchId });
+    }
+
+    const totalUniqueRow = await totalUnique
       .getRawOne();
 
     return {
       filter,
-      from,
-      to,
-      totalCustomers: Number(totalUnique?.count || 0),
+      from: range.from,
+      to: range.to,
+      totalCustomers: Number(totalUniqueRow?.count || 0),
       daily: dailyCustomers.map(row => ({
         date: row.date,
         customers: Number(row.uniqueCustomers),

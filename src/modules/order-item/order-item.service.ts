@@ -92,7 +92,7 @@ export class OrderItemService extends BaseService<OrderItem> {
         from: query.from,
         to: query.to,
       })
-      .andWhere("o.status IN ('PAID','COMPLETED')")
+      .andWhere("o.payment_status = 'PAID'")
       .andWhere("oi.status = 'NORMAL'")
       .groupBy('oi.product_id')
       .addGroupBy('oi.product_name')
@@ -128,7 +128,7 @@ export class OrderItemService extends BaseService<OrderItem> {
         from: query.from,
         to: query.to,
       })
-      .andWhere("o.status IN ('PAID','COMPLETED')")
+      .andWhere("o.payment_status = 'PAID'")
       .andWhere("oi.status = 'NORMAL'")
       .groupBy('oi.product_id')
       .addGroupBy('oi.product_name')
@@ -175,7 +175,7 @@ export class OrderItemService extends BaseService<OrderItem> {
         from: query.from,
         to: query.to,
       })
-      .andWhere("o.status IN ('PAID','COMPLETED')")
+      .andWhere("o.payment_status = 'PAID'")
       .andWhere("oi.status = 'NORMAL'")
       .groupBy('DATE(o.created_at)')
       .addGroupBy('oi.product_id')

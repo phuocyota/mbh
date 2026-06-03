@@ -298,7 +298,7 @@ export class OrderService {
         from: query.from,
         to: query.to,
       })
-      .andWhere("o.status IN ('PAID','COMPLETED')");
+      .andWhere("o.payment_status = 'PAID'");
     if (query.branchId) {
       orderQb.andWhere('o.branch_id = :branchId', {
         branchId: query.branchId,
@@ -351,7 +351,7 @@ export class OrderService {
         from: query.from,
         to: query.to,
       })
-      .andWhere("o.status IN ('PAID','COMPLETED')")
+      .andWhere("o.payment_status = 'PAID'")
       .groupBy('day')
       .orderBy('day', 'ASC');
 
@@ -382,7 +382,7 @@ export class OrderService {
         from: query.from,
         to: query.to,
       })
-      .andWhere("o.status IN ('PAID','COMPLETED')")
+      .andWhere("o.payment_status = 'PAID'")
       .getRawOne<{ orderCount: string; totalRevenue: string }>();
   }
 

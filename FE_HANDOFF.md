@@ -464,38 +464,33 @@ API lấy thống kê cho Dashboard Admin.
 ### Doanh thu và đơn hàng
 
 ```http
-GET /api/dashboard/revenue?filter=7days
-GET /api/dashboard/revenue?filter=today&branchId=branch-id
+GET /api/reports/revenue?from=2026-05-28&to=2026-06-03
+GET /api/reports/revenue?from=2026-06-03&to=2026-06-03&branchId=branch-id
 ```
 
 Query params:
-- `filter`: `today` | `yesterday` | `7days` | `thisMonth` | `lastMonth` (default: `7days`)
+- `from`: optional, ISO date/datetime. Default: 30 ngày trước `to`
+- `to`: optional, ISO date/datetime. Default: hôm nay
 - `branchId`: optional
 
 Response:
 
 ```json
 {
-  "filter": "7days",
   "from": "2026-05-28T00:00:00.000Z",
   "to": "2026-06-03T23:59:59.999Z",
-  "summary": {
-    "orders": 35,
-    "revenue": 8031000
-  },
-  "hourly": [
+  "branchId": null,
+  "orderCount": 35,
+  "totalRevenue": 8031000,
+  "totalDiscount": 120000,
+  "refundCount": 1,
+  "refundAmount": 50000,
+  "netRevenue": 7981000,
+  "paymentBreakdown": [
     {
-      "date": "2026-05-28",
-      "hour": 8,
-      "orders": 5,
-      "revenue": 750000
-    }
-  ],
-  "daily": [
-    {
-      "date": "2026-05-28",
-      "orders": 8,
-      "revenue": 1200000
+      "method": "CASH",
+      "count": 20,
+      "amount": 4500000
     }
   ]
 }
