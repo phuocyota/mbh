@@ -1,5 +1,6 @@
 import { Entity, Column } from 'typeorm';
 import { BaseEntity } from '../common/sql/base.entity';
+import { PAYROLL_STATUS } from '../common/constant/constant';
 
 @Entity('payrolls')
 export class Payroll extends BaseEntity {
@@ -27,8 +28,8 @@ export class Payroll extends BaseEntity {
   @Column('numeric', { precision: 15, scale: 2, default: 0 })
   remaining: number;
 
-  @Column('varchar', { default: 'draft' })
-  status: string; // draft, estimated, finalized, cancelled
+  @Column('varchar', { default: PAYROLL_STATUS.DRAFT })
+  status: string; // DRAFT, ESTIMATED, FINALIZED, CANCELLED
 
   @Column('text', { nullable: true })
   note: string;

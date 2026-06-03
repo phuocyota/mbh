@@ -20,16 +20,24 @@ import {
   StatisticsHomeDto,
   StatisticsPeriodHomeDto,
 } from './dto/parent-home-response.dto';
+import {
+  ORDER_STATUS,
+  WALLET_TRANSACTION_TYPE,
+} from '../../common/constant/constant';
 
-// Order status mapping to text
-const ORDER_STATUS_TEXT: Record<string, string> = {
-  PENDING: 'Chờ xác nhận',
-  PREPARING: 'Đang chuẩn bị',
-  READY: 'Sẵn sàng',
-  READY_TO_PICKUP: 'Sẵn sàng lấy',
-  DONE: 'Hoàn thành',
-  RECEIVED: 'Đã nhận',
-  CANCELLED: 'Đã hủy',
+const ORDER_STATUS_TEXT: Record<number, string> = {
+  [ORDER_STATUS.CANCELLED]: 'Đã hủy',
+  [ORDER_STATUS.PREPARING]: 'Đang chuẩn bị',
+  [ORDER_STATUS.PENDING]: 'Chờ xác nhận',
+  [ORDER_STATUS.PENDING_PAYMENT]: 'Đợi thu tiền mặt',
+  [ORDER_STATUS.READY_TO_PICKUP]: 'Sẵn sàng lấy',
+  [ORDER_STATUS.DONE]: 'Hoàn thành',
+  [ORDER_STATUS.REFUNDED]: 'Đã hoàn tiền',
+  [ORDER_STATUS.DRAFT]: 'Nháp',
+  [ORDER_STATUS.WAITING]: 'Đang chờ',
+  [ORDER_STATUS.READY]: 'Sẵn sàng',
+  [ORDER_STATUS.RECEIVED]: 'Đã nhận',
+  [ORDER_STATUS.COMPLETED]: 'Hoàn tất',
 };
 
 @Injectable()
@@ -176,7 +184,7 @@ export class ParentService {
     return {
       id: order.id,
       status: normalizedStatus,
-      statusText: ORDER_STATUS_TEXT[normalizedStatus] || normalizedStatus,
+      statusText: ORDER_STATUS_TEXT[normalizedStatus] || String(normalizedStatus),
       orderedAt: order.createdAt.toISOString(),
       items,
       addons,
@@ -184,16 +192,13 @@ export class ParentService {
     };
   }
 
-  private normalizeOrderStatus(status: string): string {
-    const statusMap: Record<string, string> = {
-      Pending: 'PENDING',
-      PREPARING: 'PREPARING',
-      READY_TO_PICKUP: 'READY',
-      DONE: 'RECEIVED',
-      CANCELLED: 'CANCELLED',
-      DRAFT: 'PENDING',
+  private normalizeOrderStatus(status: number): number {
+    const statusMap: Record<number, number> = {
+      [ORDER_STATUS.READY_TO_PICKUP]: ORDER_STATUS.READY,
+      [ORDER_STATUS.DONE]: ORDER_STATUS.RECEIVED,
+      [ORDER_STATUS.DRAFT]: ORDER_STATUS.PENDING,
     };
-    return statusMap[status] || status.toUpperCase();
+    return statusMap[status] ?? status;
   }
 
   private async getRecentHistory(
@@ -214,7 +219,7 @@ export class ParentService {
       status: this.normalizeOrderStatus(order.status),
       statusText:
         ORDER_STATUS_TEXT[this.normalizeOrderStatus(order.status)] ||
-        order.status,
+        String(order.status),
       createdAt: order.createdAt.toISOString(),
       orderId: order.id,
     }));
@@ -277,7 +282,7 @@ export class ParentService {
     const transactions = await this.walletTransactionRepository.find({
       where: {
         customerId,
-        type: 'PAYMENT',
+        type: WALLET_TRANSACTION_TYPE.PAYMENT,
         createdAt: Between(startDate, endDate),
       },
     });

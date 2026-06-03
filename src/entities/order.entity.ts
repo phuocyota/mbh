@@ -4,6 +4,10 @@ import { Branch } from './branch.entity';
 import { POSDevice } from './pos-device.entity';
 import { Customer } from './customer.entity';
 import { User } from './user.entity';
+import {
+  ORDER_PAYMENT_STATUS,
+  ORDER_STATUS,
+} from '../common/constant/constant';
 
 @Entity('orders')
 export class Order extends BaseEntity {
@@ -31,8 +35,8 @@ export class Order extends BaseEntity {
   @Column('varchar', { nullable: true, name: 'order_type' })
   orderType: string; // DINE_IN, TAKEAWAY, PRE_ORDER
 
-  @Column('varchar', { default: 'Pending' })
-  status: string; // Pending, DONE, waiting
+  @Column('int', { default: ORDER_STATUS.PENDING })
+  status: number; // 0=CANCELLED, 1=PREPARING, 2=PENDING, 3=PENDING_PAYMENT, 4=READY_TO_PICKUP, 5=DONE
 
   @Column('numeric', { nullable: true, precision: 12, scale: 2 })
   subtotal: number;
@@ -77,7 +81,10 @@ export class Order extends BaseEntity {
   })
   changeAmount: number;
 
-  @Column('varchar', { default: 'UNPAID', name: 'payment_status' })
+  @Column('varchar', {
+    default: ORDER_PAYMENT_STATUS.UNPAID,
+    name: 'payment_status',
+  })
   paymentStatus: string; // UNPAID, PAID, PARTIAL, REFUNDED
 
   @Column('varchar', { nullable: true, name: 'payment_method' })

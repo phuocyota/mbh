@@ -4,6 +4,7 @@ import { Repository } from 'typeorm';
 import { User } from '../../entities';
 import { BaseService } from '../../common/sql/base.service';
 import { CustomerService } from '../customer/customer.service';
+import { COMMON_STATUS, USER_ROLE } from '../../common/constant/constant';
 
 @Injectable()
 export class UserService extends BaseService<User> {
@@ -30,8 +31,8 @@ export class UserService extends BaseService<User> {
   }): Promise<User> {
     const user = this.userRepository.create({
       ...data,
-      role: 'STAFF',
-      status: 'ACTIVE',
+      role: USER_ROLE.STAFF,
+      status: COMMON_STATUS.ACTIVE,
     });
 
     return this.userRepository.save(user);

@@ -1,6 +1,7 @@
 import { Entity, Column, ManyToOne, JoinColumn } from 'typeorm';
 import { BaseEntity } from '../common/sql/base.entity';
 import { Order } from './order.entity';
+import { ORDER_ITEM_STATUS } from '../common/constant/constant';
 
 @Entity('order_items')
 export class OrderItem extends BaseEntity {
@@ -33,7 +34,7 @@ export class OrderItem extends BaseEntity {
   @Column('numeric', { precision: 12, scale: 2, name: 'total_amount' })
   totalAmount: number;
 
-  @Column('varchar', { default: 'NORMAL' })
+  @Column('varchar', { default: ORDER_ITEM_STATUS.NORMAL })
   status: string; // NORMAL, CANCELLED, REFUNDED
 
   @Column('text', { nullable: true })

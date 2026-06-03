@@ -85,8 +85,8 @@ export class TodayOrderHomeDto {
   @ApiProperty({ description: 'Order ID', example: 'order_001' })
   id: string;
 
-  @ApiProperty({ description: 'Order status', example: 'PREPARING' })
-  status: string;
+  @ApiProperty({ description: 'Order status code', example: 1 })
+  status: number;
 
   @ApiProperty({ description: 'Status text', example: 'Đang chuẩn bị' })
   statusText: string;
@@ -120,8 +120,8 @@ export class RecentHistoryHomeDto {
   @ApiProperty({ description: 'Amount', example: -30000 })
   amount: number;
 
-  @ApiProperty({ description: 'Order status', example: 'PREPARING' })
-  status: string;
+  @ApiProperty({ description: 'Order status code', example: 1 })
+  status: number;
 
   @ApiProperty({ description: 'Status text', example: 'Đang chuẩn bị' })
   statusText: string;

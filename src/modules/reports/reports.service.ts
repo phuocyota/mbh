@@ -5,6 +5,7 @@ import { PaymentService } from '../payment/payment.service';
 import { ShiftService } from '../shift/shift.service';
 import { CashMovementService } from '../cash-movement/cash-movement.service';
 import { StockLevelService } from '../stock-level/stock-level.service';
+import { CASH_MOVEMENT_TYPE } from '../../common/constant/constant';
 
 interface DateRange {
   from?: string;
@@ -135,10 +136,10 @@ export class ReportsService {
     const movements = await this.cashMovementService.findByShift(shift.id);
 
     const cashIn = movements
-      .filter((movement) => movement.type === 'CASH_IN')
+      .filter((movement) => movement.type === CASH_MOVEMENT_TYPE.CASH_IN)
       .reduce((sum, movement) => sum + Number(movement.amount), 0);
     const cashOut = movements
-      .filter((movement) => movement.type === 'CASH_OUT')
+      .filter((movement) => movement.type === CASH_MOVEMENT_TYPE.CASH_OUT)
       .reduce((sum, movement) => sum + Number(movement.amount), 0);
 
     const cashRevenue = Number(cashAggr?.cashRevenue || 0);

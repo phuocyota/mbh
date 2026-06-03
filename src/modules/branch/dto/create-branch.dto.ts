@@ -1,5 +1,9 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { IsNotEmpty, IsString, IsOptional, IsEnum } from 'class-validator';
+import {
+  ACTIVE_INACTIVE_STATUS_VALUES,
+  COMMON_STATUS,
+} from '../../../common/constant/constant';
 
 export class CreateBranchDto {
   @ApiProperty({
@@ -21,10 +25,10 @@ export class CreateBranchDto {
 
   @ApiProperty({
     description: 'Branch status',
-    enum: ['ACTIVE', 'INACTIVE'],
-    default: 'ACTIVE',
+    enum: ACTIVE_INACTIVE_STATUS_VALUES,
+    default: COMMON_STATUS.ACTIVE,
   })
   @IsOptional()
-  @IsEnum(['ACTIVE', 'INACTIVE'])
+  @IsEnum(ACTIVE_INACTIVE_STATUS_VALUES)
   status?: string;
 }

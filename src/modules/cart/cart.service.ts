@@ -11,6 +11,12 @@ import { CouponService } from '../coupon/coupon.service';
 import { CompleteCartDto } from './dto/complete-cart.dto';
 import { ProductService } from '../products/product.service';
 import { CustomerService } from '../customer/customer.service';
+import {
+  CART_NEXT_ACTION,
+  ORDER_STATUS,
+  ORDER_TYPE,
+  PAYMENT_METHOD,
+} from '../../common/constant/constant';
 
 @Injectable()
 export class CartService {
@@ -192,14 +198,14 @@ export class CartService {
     }
 
     const totalAmount = Number(cartWithItems.totalAmount);
-    const paymentMethod = dto.paymentMethod ?? 'WALLET';
+    const paymentMethod = dto.paymentMethod ?? PAYMENT_METHOD.WALLET;
 
     const order = await this.orderService.createOrder({
       branchId: dto.branchId || cartWithItems.branchId || undefined,
       posDeviceId: dto.posDeviceId || undefined,
       customerId: cartWithItems.customerId,
       cashierId: userId,
-      orderType: dto.orderType ?? 'TAKEAWAY',
+      orderType: dto.orderType ?? ORDER_TYPE.TAKEAWAY,
       paymentMethod,
       note: dto.note,
       items: cartWithItems.items.map((item) => ({
@@ -214,17 +220,17 @@ export class CartService {
       throw new BadRequestException('Could not create order from cart');
     }
 
-    if (paymentMethod === 'CASH') {
+    if (paymentMethod === PAYMENT_METHOD.CASH) {
       const waitingOrder = await this.orderService.updateStatus(
         order.id,
-        'PENDING_PAYMENT',
+        ORDER_STATUS.PENDING_PAYMENT,
       );
       await this.clearCart(cartWithItems.id);
 
       return {
         order: waitingOrder,
         payment: null,
-        nextAction: 'WAITING_FOR_CASHIER_PAYMENT',
+        nextAction: CART_NEXT_ACTION.WAITING_FOR_CASHIER_PAYMENT,
       };
     }
 
@@ -245,14 +251,14 @@ export class CartService {
 
     const preparingOrder = await this.orderService.updateStatus(
       order.id,
-      'PREPARING',
+      ORDER_STATUS.PREPARING,
     );
     await this.clearCart(cartWithItems.id);
 
     return {
       order: preparingOrder,
       payment,
-      nextAction: 'WAITING_FOR_PREPARATION',
+      nextAction: CART_NEXT_ACTION.WAITING_FOR_PREPARATION,
     };
   }
 

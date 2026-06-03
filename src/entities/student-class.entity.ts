@@ -2,6 +2,7 @@ import { Entity, Column, ManyToOne, JoinColumn } from 'typeorm';
 import { BaseEntity } from '../common/sql/base.entity';
 import { Customer } from './customer.entity';
 import { Class } from './class.entity';
+import { COMMON_STATUS } from '../common/constant/constant';
 
 @Entity('student_classes')
 export class StudentClass extends BaseEntity {
@@ -14,7 +15,7 @@ export class StudentClass extends BaseEntity {
   @Column('varchar', { nullable: true })
   year: string; // Năm học, ví dụ: 2024-2025
 
-  @Column('varchar', { default: 'ACTIVE' })
+  @Column('varchar', { default: COMMON_STATUS.ACTIVE })
   status: string; // ACTIVE, COMPLETED, TRANSFERRED
 
   // Relations

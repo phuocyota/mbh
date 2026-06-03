@@ -10,6 +10,11 @@ import { WalletTransaction } from '../../entities/wallet-transaction.entity';
 import { BaseService } from '../../common/sql/base.service';
 import { ERROR_MESSAGES } from '../../common/constant/error-messages.constant';
 import { CustomerService } from '../customer/customer.service';
+import {
+  COMMON_STATUS,
+  WALLET_TRANSACTION_REF_TYPE,
+  WALLET_TRANSACTION_TYPE,
+} from '../../common/constant/constant';
 
 export interface TopupResult {
   walletId: string;
@@ -55,7 +60,7 @@ export class WalletService extends BaseService<Wallet> {
       wallet = this.walletRepository.create({
         customerId,
         balance: 0,
-        status: 'ACTIVE',
+        status: COMMON_STATUS.ACTIVE,
       });
       wallet = await this.walletRepository.save(wallet);
     }
@@ -98,13 +103,13 @@ export class WalletService extends BaseService<Wallet> {
         wallet = this.walletRepository.create({
           customerId,
           balance: 0,
-          status: 'ACTIVE',
+          status: COMMON_STATUS.ACTIVE,
           createdBy,
         });
         wallet = await this.walletRepository.save(wallet);
       }
 
-      if (wallet.status !== 'ACTIVE') {
+      if (wallet.status !== COMMON_STATUS.ACTIVE) {
         throw new BadRequestException('Ví không ở trạng thái ACTIVE');
       }
 
@@ -118,11 +123,11 @@ export class WalletService extends BaseService<Wallet> {
       const tx = this.walletTransactionRepository.create({
         walletId: wallet.id,
         customerId,
-        type: 'TOPUP',
+        type: WALLET_TRANSACTION_TYPE.TOPUP,
         amount,
         balanceBefore,
         balanceAfter,
-        refType: 'MANUAL',
+        refType: WALLET_TRANSACTION_REF_TYPE.MANUAL,
         note,
         createdBy,
       });
@@ -151,7 +156,7 @@ export class WalletService extends BaseService<Wallet> {
     if (!wallet) {
       throw new BadRequestException('Customer wallet not found');
     }
-    if (wallet.status !== 'ACTIVE') {
+    if (wallet.status !== COMMON_STATUS.ACTIVE) {
       throw new BadRequestException('Wallet is not active');
     }
     if (Number(wallet.balance) < amount) {
@@ -165,11 +170,11 @@ export class WalletService extends BaseService<Wallet> {
     const tx = this.walletTransactionRepository.create({
       walletId: wallet.id,
       customerId,
-      type: 'PAYMENT',
+      type: WALLET_TRANSACTION_TYPE.PAYMENT,
       amount,
       balanceBefore,
       balanceAfter,
-      refType: 'ORDER',
+      refType: WALLET_TRANSACTION_REF_TYPE.ORDER,
       refId: orderId,
     });
 
@@ -204,11 +209,11 @@ export class WalletService extends BaseService<Wallet> {
     const walletTx = this.walletTransactionRepository.create({
       walletId: wallet.id,
       customerId,
-      type: 'REFUND',
+      type: WALLET_TRANSACTION_TYPE.REFUND,
       amount,
       balanceBefore,
       balanceAfter,
-      refType: 'REFUND',
+      refType: WALLET_TRANSACTION_REF_TYPE.REFUND,
       refId: refundId,
       note: `Hoàn tiền cho đơn ${orderCode}`,
       createdBy: updatedBy,

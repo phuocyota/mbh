@@ -2,6 +2,7 @@ import { Entity, Column, ManyToOne, JoinColumn } from 'typeorm';
 import { BaseEntity } from '../common/sql/base.entity';
 import { Order } from './order.entity';
 import { User } from './user.entity';
+import { PAYMENT_STATUS } from '../common/constant/constant';
 
 @Entity('payments')
 export class Payment extends BaseEntity {
@@ -14,7 +15,7 @@ export class Payment extends BaseEntity {
   @Column('numeric', { precision: 12, scale: 2 })
   amount: number;
 
-  @Column('varchar', { default: 'PENDING' })
+  @Column('varchar', { default: PAYMENT_STATUS.PENDING })
   status: string; // PENDING, SUCCESS, FAILED, REFUNDED
 
   @Column('varchar', { nullable: true, name: 'transaction_code' })

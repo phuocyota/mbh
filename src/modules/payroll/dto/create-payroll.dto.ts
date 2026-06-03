@@ -1,4 +1,8 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import {
+  PAYROLL_STATUS,
+  PAYROLL_STATUS_VALUES,
+} from '../../../common/constant/constant';
 
 export class CreatePayrollDto {
   @ApiProperty({ description: 'Payroll name' })
@@ -19,7 +23,11 @@ export class CreatePayrollDto {
   @ApiPropertyOptional({ description: 'Amount paid to employees', default: 0 })
   paid?: number;
 
-  @ApiPropertyOptional({ description: 'Status (draft, estimated, finalized, cancelled)', default: 'draft' })
+  @ApiPropertyOptional({
+    description: 'Status',
+    enum: PAYROLL_STATUS_VALUES,
+    default: PAYROLL_STATUS.DRAFT,
+  })
   status?: string;
 
   @ApiPropertyOptional({ description: 'Note' })

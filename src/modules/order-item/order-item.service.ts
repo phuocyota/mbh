@@ -3,6 +3,10 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import { OrderItem } from '../../entities/order-item.entity';
 import { BaseService } from '../../common/sql/base.service';
+import {
+  ORDER_ITEM_STATUS,
+  ORDER_PAYMENT_STATUS,
+} from '../../common/constant/constant';
 
 @Injectable()
 export class OrderItemService extends BaseService<OrderItem> {
@@ -24,7 +28,7 @@ export class OrderItemService extends BaseService<OrderItem> {
     const orderItem = this.orderItemRepository.create({
       ...createOrderItemDto,
       orderId,
-      status: createOrderItemDto.status ?? 'NORMAL',
+      status: createOrderItemDto.status ?? ORDER_ITEM_STATUS.NORMAL,
     } as Partial<OrderItem>);
 
     return this.orderItemRepository.save(orderItem);
@@ -38,7 +42,7 @@ export class OrderItemService extends BaseService<OrderItem> {
       this.orderItemRepository.create({
         ...item,
         orderId,
-        status: item.status ?? 'NORMAL',
+        status: item.status ?? ORDER_ITEM_STATUS.NORMAL,
       } as Partial<OrderItem>),
     );
 
@@ -47,7 +51,7 @@ export class OrderItemService extends BaseService<OrderItem> {
 
   async findNormalByOrder(orderId: string): Promise<OrderItem[]> {
     return this.orderItemRepository.find({
-      where: { orderId, status: 'NORMAL' },
+      where: { orderId, status: ORDER_ITEM_STATUS.NORMAL },
     });
   }
 
@@ -67,7 +71,7 @@ export class OrderItemService extends BaseService<OrderItem> {
 
     await this.orderItemRepository.update(
       { id: In(ids) },
-      { status: 'REFUNDED', updatedBy },
+      { status: ORDER_ITEM_STATUS.REFUNDED, updatedBy },
     );
   }
 
@@ -92,8 +96,12 @@ export class OrderItemService extends BaseService<OrderItem> {
         from: query.from,
         to: query.to,
       })
-      .andWhere("o.payment_status = 'PAID'")
-      .andWhere("oi.status = 'NORMAL'")
+      .andWhere('o.payment_status = :paymentStatus', {
+        paymentStatus: ORDER_PAYMENT_STATUS.PAID,
+      })
+      .andWhere('oi.status = :itemStatus', {
+        itemStatus: ORDER_ITEM_STATUS.NORMAL,
+      })
       .groupBy('oi.product_id')
       .addGroupBy('oi.product_name')
       .orderBy('"totalQuantity"', 'DESC')
@@ -128,8 +136,12 @@ export class OrderItemService extends BaseService<OrderItem> {
         from: query.from,
         to: query.to,
       })
-      .andWhere("o.payment_status = 'PAID'")
-      .andWhere("oi.status = 'NORMAL'")
+      .andWhere('o.payment_status = :paymentStatus', {
+        paymentStatus: ORDER_PAYMENT_STATUS.PAID,
+      })
+      .andWhere('oi.status = :itemStatus', {
+        itemStatus: ORDER_ITEM_STATUS.NORMAL,
+      })
       .groupBy('oi.product_id')
       .addGroupBy('oi.product_name')
       .orderBy('"totalQuantity"', 'ASC')
@@ -175,8 +187,12 @@ export class OrderItemService extends BaseService<OrderItem> {
         from: query.from,
         to: query.to,
       })
-      .andWhere("o.payment_status = 'PAID'")
-      .andWhere("oi.status = 'NORMAL'")
+      .andWhere('o.payment_status = :paymentStatus', {
+        paymentStatus: ORDER_PAYMENT_STATUS.PAID,
+      })
+      .andWhere('oi.status = :itemStatus', {
+        itemStatus: ORDER_ITEM_STATUS.NORMAL,
+      })
       .groupBy('DATE(o.created_at)')
       .addGroupBy('oi.product_id')
       .addGroupBy('oi.product_name')

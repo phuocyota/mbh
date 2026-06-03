@@ -1,6 +1,7 @@
 import { Entity, Column, ManyToOne, OneToMany, JoinColumn } from 'typeorm';
 import { BaseEntity } from '../common/sql/base.entity';
 import { Branch } from './branch.entity';
+import { COMMON_STATUS } from '../common/constant/constant';
 
 @Entity('pos_devices')
 export class POSDevice extends BaseEntity {
@@ -16,7 +17,7 @@ export class POSDevice extends BaseEntity {
   @Column('varchar', { name: 'device_type' })
   deviceType: string; // DESKTOP_POS, HANDHELD, TABLET
 
-  @Column('varchar', { default: 'ACTIVE' })
+  @Column('varchar', { default: COMMON_STATUS.ACTIVE })
   status: string; // ACTIVE, INACTIVE
 
   @Column('timestamp', { nullable: true, name: 'last_sync_at' })

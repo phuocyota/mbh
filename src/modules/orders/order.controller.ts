@@ -22,6 +22,7 @@ import {
 import { OrderService } from './order.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CancelOrderDto } from './dto/cancel-order.dto';
+import { ORDER_STATUS } from '../../common/constant/constant';
 
 @ApiTags('Orders')
 @ApiBearerAuth()
@@ -125,7 +126,7 @@ export class OrderController {
   @ApiResponse({ status: 200, description: 'Order status set to pending' })
   @Put(':id/pending')
   async setPending(@Param('id') id: string) {
-    return this.orderService.updateStatus(id, 'Pending');
+    return this.orderService.updateStatus(id, ORDER_STATUS.PENDING);
   }
 
   @ApiOperation({ summary: 'Set order status to ready for pickup' })
@@ -136,7 +137,7 @@ export class OrderController {
   })
   @Put(':id/ready-to-pickup')
   async setReadyToPickup(@Param('id') id: string) {
-    return this.orderService.updateStatus(id, 'READY_TO_PICKUP');
+    return this.orderService.updateStatus(id, ORDER_STATUS.READY_TO_PICKUP);
   }
 
   @ApiOperation({ summary: 'Set order status to done (complete)' })

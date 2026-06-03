@@ -55,7 +55,7 @@ Authorization: Bearer <accessToken>
   ],
   "todayOrder": {
     "id": "order_001",
-    "status": "PREPARING",
+    "status": 1,
     "statusText": "Dang chuan bi",
     "orderedAt": "2026-05-27T09:45:00+07:00",
     "items": [
@@ -83,7 +83,7 @@ Authorization: Bearer <accessToken>
       "type": "ORDER_PAYMENT",
       "title": "Com ga",
       "amount": -30000,
-      "status": "COMPLETED",
+      "status": 5,
       "statusText": "Hoan thanh",
       "createdAt": "2026-05-27T10:30:00+07:00",
       "orderId": "order_001"
@@ -119,7 +119,7 @@ Authorization: Bearer <accessToken>
 ### Enums
 
 ```ts
-type OrderStatus = "PENDING" | "PREPARING" | "READY" | "RECEIVED" | "CANCELLED";
+type OrderStatus = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11;
 
 type TransactionStatus = "PENDING" | "COMPLETED" | "FAILED" | "REFUNDED";
 
@@ -296,7 +296,7 @@ BE sẽ tự xử lý theo token:
 4. Tạo order từ cart items.
 5. Lưu `paymentMethod` vào order.
 6. Nếu `paymentMethod = WALLET`, kiểm tra ví, trừ ví, tạo payment, ghi wallet transaction.
-7. Nếu `paymentMethod = CASH`, chuyển order sang `PENDING_PAYMENT`.
+7. Nếu `paymentMethod = CASH`, chuyển order sang `3` (`PENDING_PAYMENT`).
 8. Clear cart sau khi xử lý thành công.
 
 Body thanh toán ví:
@@ -327,7 +327,7 @@ Với `paymentMethod = CASH`, order sẽ có:
 ```json
 {
   "order": {
-    "status": "PENDING_PAYMENT",
+    "status": 3,
     "paymentMethod": "CASH"
   },
   "payment": null,
@@ -346,7 +346,7 @@ GET /api/orders/pending-cash
 GET /api/orders/pending-cash?branchId=branch-id
 ```
 
-BE lọc theo `orders.status = PENDING_PAYMENT`.
+BE lọc theo `orders.status = 3` (`PENDING_PAYMENT`).
 
 Order vẫn lưu thêm `paymentMethod = CASH` trong bảng `orders` để FE hiển thị/audit.
 
@@ -357,15 +357,15 @@ GET /api/orders/preparing
 GET /api/orders/preparing?branchId=branch-id
 ```
 
-BE lọc theo `orders.status = PREPARING`.
+BE lọc theo `orders.status = 1` (`PREPARING`).
 
 ### Danh sách đơn hoàn thành
 
 Dùng endpoint chung:
 
 ```http
-GET /api/orders?status=DONE
-GET /api/orders?status=DONE&branchId=branch-id
+GET /api/orders?status=5
+GET /api/orders?status=5&branchId=branch-id
 ```
 
 ### Xem chi tiết order
@@ -381,7 +381,7 @@ Order response có field `paymentMethod`:
 ```json
 {
   "id": "order-id",
-  "status": "PENDING_PAYMENT",
+  "status": 3,
   "paymentStatus": "UNPAID",
   "paymentMethod": "CASH"
 }
@@ -399,7 +399,7 @@ PUT /api/orders/me/:orderId/received
 
 Auth: JWT của học sinh.
 
-BE sẽ check order thuộc customer của học sinh trong token. Nếu hợp lệ, order chuyển `status = DONE`.
+BE sẽ check order thuộc customer của học sinh trong token. Nếu hợp lệ, order chuyển `status = 5` (`DONE`).
 
 ### Thu ngân xác nhận giúp khách
 
@@ -409,7 +409,7 @@ PUT /api/orders/:orderId/received
 
 Auth: JWT của thu ngân/staff.
 
-Không lấy order từ token, chỉ dùng `orderId`. Nếu order đã thanh toán đủ, order chuyển `status = DONE`.
+Không lấy order từ token, chỉ dùng `orderId`. Nếu order đã thanh toán đủ, order chuyển `status = 5` (`DONE`).
 
 ## 7. Cancel Order
 
@@ -428,7 +428,7 @@ Body:
 }
 ```
 
-Lưu ý hiện BE set status hủy là `cancelled`.
+Lưu ý `orders.status` dùng code số, ví dụ `0` là `CANCELLED`.
 
 ## 8. Status FE Can Use
 
@@ -436,22 +436,36 @@ Các status quan trọng hiện tại:
 
 ```ts
 type OrderStatus =
-  | 'Pending'
-  | 'PENDING_PAYMENT'
-  | 'PREPARING'
-  | 'DONE'
-  | 'cancelled';
+  | 0  // CANCELLED
+  | 1  // PREPARING
+  | 2  // PENDING
+  | 3  // PENDING_PAYMENT
+  | 4  // READY_TO_PICKUP
+  | 5  // DONE
+  | 6  // REFUNDED
+  | 7  // DRAFT
+  | 8  // WAITING
+  | 9  // READY
+  | 10 // RECEIVED
+  | 11; // COMPLETED
 ```
 
 Mapping gợi ý:
 
 ```ts
 const orderStatusLabel = {
-  Pending: 'Moi tao',
-  PENDING_PAYMENT: 'Doi thu tien mat',
-  PREPARING: 'Dang chuan bi',
-  DONE: 'Hoan thanh',
-  cancelled: 'Da huy',
+  0: 'Da huy',
+  1: 'Dang chuan bi',
+  2: 'Moi tao',
+  3: 'Doi thu tien mat',
+  4: 'San sang lay',
+  5: 'Hoan thanh',
+  6: 'Da hoan tien',
+  7: 'Nhap',
+  8: 'Dang cho',
+  9: 'San sang',
+  10: 'Da nhan',
+  11: 'Hoan tat',
 };
 ```
 
@@ -618,11 +632,11 @@ API CRUD bảng lương.
 
 ```http
 GET /api/payrolls
-GET /api/payrolls?status=draft
+GET /api/payrolls?status=DRAFT
 ```
 
 Query params:
-- `status`: `draft` | `estimated` | `finalized` | `cancelled` | `all`
+- `status`: `DRAFT` | `ESTIMATED` | `FINALIZED` | `CANCELLED` | `ALL`
 
 Response:
 
@@ -638,7 +652,7 @@ Response:
     "totalSalary": 50000000,
     "paid": 30000000,
     "remaining": 20000000,
-    "status": "draft",
+    "status": "DRAFT",
     "note": null,
     "createdAt": "2026-01-01T00:00:00Z",
     "updatedAt": "2026-01-01T00:00:00Z"
@@ -662,7 +676,7 @@ Body:
   "periodEnd": "31/05/2026",
   "totalSalary": 50000000,
   "paid": 30000000,
-  "status": "draft",
+  "status": "DRAFT",
   "note": "Ghi chú"
 }
 ```

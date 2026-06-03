@@ -13,6 +13,13 @@ import { OrderItemService } from '../order-item/order-item.service';
 import { PaymentService } from '../payment/payment.service';
 import { WalletService } from '../wallet/wallet.service';
 import { CustomerService } from '../customer/customer.service';
+import { SocketService } from '../socket/socket.service';
+import {
+  ORDER_PAYMENT_STATUS,
+  ORDER_STATUS,
+  PAYMENT_METHOD,
+  resolveOrderStatus,
+} from '../../common/constant/constant';
 
 @Injectable()
 export class OrderService {
@@ -25,6 +32,7 @@ export class OrderService {
     private walletService: WalletService,
     private customerService: CustomerService,
     private couponService: CouponService,
+    private socketService: SocketService,
   ) {}
 
   async createOrder(createOrderDto: any) {
@@ -80,8 +88,8 @@ export class OrderService {
       items: undefined,
       orderCode: orderCode,
       orderNumber: orderNumber,
-      status: 'Pending',
-      paymentStatus: 'UNPAID',
+      status: ORDER_STATUS.PENDING,
+      paymentStatus: ORDER_PAYMENT_STATUS.UNPAID,
       paymentMethod: createOrderDto.paymentMethod ?? null,
       subtotal,
       totalAmount,
@@ -97,7 +105,9 @@ export class OrderService {
       await this.orderItemService.createManyForOrder(savedOrder.id, items);
     }
 
-    return this.getOrderWithItems(savedOrder.id);
+    const orderWithItems = await this.getOrderWithItems(savedOrder.id);
+    this.socketService.emitOrderCreated(orderWithItems);
+    return orderWithItems;
   }
 
   async findOrderByIdOrThrow(orderId: string): Promise<Order> {
@@ -122,8 +132,8 @@ export class OrderService {
     const order = await this.findOrderByIdOrThrow(orderId);
 
     await this.orderRepository.update(order.id, {
-      paymentStatus: 'REFUNDED',
-      status: isFullRefund ? 'REFUNDED' : order.status,
+      paymentStatus: ORDER_PAYMENT_STATUS.REFUNDED,
+      status: isFullRefund ? ORDER_STATUS.REFUNDED : order.status,
       updatedBy,
     });
   }
@@ -182,7 +192,7 @@ export class OrderService {
     }
 
     // Step 2: Handle wallet payment for remaining amount
-    if (remainingAmount > 0 && paymentDto.method === 'WALLET') {
+    if (remainingAmount > 0 && paymentDto.method === PAYMENT_METHOD.WALLET) {
       if (!paymentDto.customerId) {
         throw new BadRequestException(
           'Customer is required for wallet payment',
@@ -210,9 +220,11 @@ export class OrderService {
     const updateData: any = {
       paidAmount: paidAmount,
       changeAmount: paidAmount - totalAmount,
-      paymentStatus: isPaid ? 'PAID' : 'PARTIAL',
+      paymentStatus: isPaid
+        ? ORDER_PAYMENT_STATUS.PAID
+        : ORDER_PAYMENT_STATUS.PARTIAL,
       paymentMethod: paymentDto.method,
-      status: isPaid ? 'PREPARING' : 'DRAFT',
+      status: isPaid ? ORDER_STATUS.PREPARING : ORDER_STATUS.DRAFT,
       paidAt: isPaid ? new Date() : undefined,
     };
 
@@ -229,18 +241,20 @@ export class OrderService {
   async completeOrder(orderId: string) {
     const order = await this.findOrderByIdOrThrow(orderId);
 
-    if (order.paymentStatus !== 'PAID') {
+    if (order.paymentStatus !== ORDER_PAYMENT_STATUS.PAID) {
       throw new BadRequestException(
         'Order must be fully paid before completion',
       );
     }
 
     await this.orderRepository.update(orderId, {
-      status: 'DONE',
+      status: ORDER_STATUS.DONE,
       completedAt: new Date(),
     });
 
-    return this.getOrderWithItems(orderId);
+    const updatedOrder = await this.getOrderWithItems(orderId);
+    this.socketService.emitOrderStatusChanged(updatedOrder);
+    return updatedOrder;
   }
 
   async confirmReceivedByCustomer(orderId: string, userId: string) {
@@ -269,7 +283,7 @@ export class OrderService {
     });
   }
 
-  async findAll(branchId?: string, status?: string) {
+  async findAll(branchId?: string, status?: string | number) {
     const query = this.orderRepository
       .createQueryBuilder('o')
       .leftJoinAndSelect('o.items', 'items')
@@ -280,8 +294,9 @@ export class OrderService {
       query.where('o.branch_id = :branchId', { branchId });
     }
 
-    if (status) {
-      query.andWhere('o.status = :status', { status });
+    const resolvedStatus = resolveOrderStatus(status);
+    if (resolvedStatus !== undefined) {
+      query.andWhere('o.status = :status', { status: resolvedStatus });
     }
 
     return query.getMany();
@@ -298,7 +313,9 @@ export class OrderService {
         from: query.from,
         to: query.to,
       })
-      .andWhere("o.payment_status = 'PAID'");
+      .andWhere('o.payment_status = :paymentStatus', {
+        paymentStatus: ORDER_PAYMENT_STATUS.PAID,
+      });
     if (query.branchId) {
       orderQb.andWhere('o.branch_id = :branchId', {
         branchId: query.branchId,
@@ -322,7 +339,9 @@ export class OrderService {
         from: query.from,
         to: query.to,
       })
-      .andWhere("o.payment_status = 'REFUNDED'");
+      .andWhere('o.payment_status = :paymentStatus', {
+        paymentStatus: ORDER_PAYMENT_STATUS.REFUNDED,
+      });
     if (query.branchId) {
       refundQb.andWhere('o.branch_id = :branchId', {
         branchId: query.branchId,
@@ -351,7 +370,9 @@ export class OrderService {
         from: query.from,
         to: query.to,
       })
-      .andWhere("o.payment_status = 'PAID'")
+      .andWhere('o.payment_status = :paymentStatus', {
+        paymentStatus: ORDER_PAYMENT_STATUS.PAID,
+      })
       .groupBy('day')
       .orderBy('day', 'ASC');
 
@@ -382,20 +403,22 @@ export class OrderService {
         from: query.from,
         to: query.to,
       })
-      .andWhere("o.payment_status = 'PAID'")
+      .andWhere('o.payment_status = :paymentStatus', {
+        paymentStatus: ORDER_PAYMENT_STATUS.PAID,
+      })
       .getRawOne<{ orderCount: string; totalRevenue: string }>();
   }
 
   async findPendingCashOrders(branchId?: string) {
-    return this.findAll(branchId, 'PENDING_PAYMENT');
+    return this.findAll(branchId, ORDER_STATUS.PENDING_PAYMENT);
   }
 
   async findPreparingOrders(branchId?: string) {
-    return this.findAll(branchId, 'PREPARING');
+    return this.findAll(branchId, ORDER_STATUS.PREPARING);
   }
 
   async findReadyToPickupOrders(branchId?: string) {
-    return this.findAll(branchId, 'READY_TO_PICKUP');
+    return this.findAll(branchId, ORDER_STATUS.READY_TO_PICKUP);
   }
 
   async receiveCashPayment(
@@ -404,41 +427,50 @@ export class OrderService {
   ) {
     const order = await this.findOrderByIdOrThrow(orderId);
 
-    if (order.paymentStatus !== 'UNPAID') {
+    if (order.paymentStatus !== ORDER_PAYMENT_STATUS.UNPAID) {
       throw new BadRequestException('Order payment must be in UNPAID status');
     }
 
-    if (order.status !== 'PENDING_PAYMENT') {
+    if (order.status !== ORDER_STATUS.PENDING_PAYMENT) {
       throw new BadRequestException('Order status must be PENDING_PAYMENT');
     }
 
     // Create payment record
     await this.paymentService.createSuccessPayment({
       orderId: orderId,
-      method: 'CASH',
+      method: PAYMENT_METHOD.CASH,
       amount: Number(paymentDto.amount),
     });
 
     // Update order: set paymentStatus to PAID and status to READY_TO_PICKUP
     await this.orderRepository.update(orderId, {
-      paymentStatus: 'PAID',
-      status: 'READY_TO_PICKUP',
+      paymentStatus: ORDER_PAYMENT_STATUS.PAID,
+      status: ORDER_STATUS.READY_TO_PICKUP,
       paidAmount: paymentDto.amount,
       paidAt: new Date(),
     });
 
-    return this.getOrderWithItems(orderId);
+    const updatedOrder = await this.getOrderWithItems(orderId);
+    this.socketService.emitOrderStatusChanged(updatedOrder);
+    return updatedOrder;
   }
 
-  async updateStatus(orderId: string, status: string) {
+  async updateStatus(orderId: string, status: string | number) {
     await this.findOrderByIdOrThrow(orderId);
+    const resolvedStatus = resolveOrderStatus(status);
+
+    if (resolvedStatus === undefined) {
+      throw new BadRequestException(`Invalid order status: ${status}`);
+    }
 
     await this.orderRepository.update(orderId, {
-      status,
+      status: resolvedStatus,
       updatedAt: new Date(),
     });
 
-    return this.getOrderWithItems(orderId);
+    const updatedOrder = await this.getOrderWithItems(orderId);
+    this.socketService.emitOrderStatusChanged(updatedOrder);
+    return updatedOrder;
   }
 
   async cancelOrder(
@@ -447,17 +479,18 @@ export class OrderService {
   ) {
     const order = await this.findOrderByIdOrThrow(orderId);
 
-    if (['DONE'].includes(order.status)) {
+    if (order.status === ORDER_STATUS.DONE) {
       throw new Error('Cannot cancel completed orders');
     }
 
     await this.orderRepository.update(orderId, {
-      status: 'cancelled',
+      status: ORDER_STATUS.CANCELLED,
       cancelledAt: new Date(),
     });
 
     // Return order with cancel info (for FE compatibility)
     const updatedOrder = await this.getOrderWithItems(orderId);
+    this.socketService.emitOrderStatusChanged(updatedOrder);
     return {
       ...updatedOrder,
       isRefunded: dto?.isRefunded ?? true,
@@ -466,13 +499,17 @@ export class OrderService {
   }
 
   async deleteOrder(orderId: string) {
-    await this.findOrderByIdOrThrow(orderId);
+    const order = await this.findOrderByIdOrThrow(orderId);
 
     // Delete order items first (if cascade not set)
     await this.orderItemService.deleteByOrder(orderId);
 
     // Delete order
     await this.orderRepository.delete(orderId);
+    this.socketService.emitOrderDeleted({
+      id: orderId,
+      branchId: order.branchId,
+    });
 
     return { message: 'Order deleted successfully' };
   }

@@ -14,6 +14,12 @@ import { OrderService } from '../orders/order.service';
 import { OrderItemService } from '../order-item/order-item.service';
 import { PaymentService } from '../payment/payment.service';
 import { WalletService } from '../wallet/wallet.service';
+import {
+  ORDER_ITEM_STATUS,
+  ORDER_PAYMENT_STATUS,
+  REFUND_STATUS,
+  REFUNDABLE_ORDER_STATUSES,
+} from '../../common/constant/constant';
 
 @Injectable()
 export class RefundService extends BaseService<Refund> {
@@ -37,13 +43,13 @@ export class RefundService extends BaseService<Refund> {
     return this.runInTransaction(async () => {
       const order = await this.orderService.findOrderByIdOrThrow(dto.orderId);
 
-      if (!['PAID', 'COMPLETED'].includes(order.status)) {
+      if (!REFUNDABLE_ORDER_STATUSES.includes(order.status as any)) {
         throw new BadRequestException(
           `Chi co the hoan tien cho don da PAID/COMPLETED (hien tai: ${order.status})`,
         );
       }
 
-      if (order.paymentStatus === 'REFUNDED') {
+      if (order.paymentStatus === ORDER_PAYMENT_STATUS.REFUNDED) {
         throw new BadRequestException('Don hang nay da duoc hoan tien');
       }
 
@@ -66,7 +72,7 @@ export class RefundService extends BaseService<Refund> {
           continue;
         }
 
-        if (orderItem.status === 'REFUNDED') {
+        if (orderItem.status === ORDER_ITEM_STATUS.REFUNDED) {
           throw new BadRequestException(
             `Item ${orderItem.productName} da duoc hoan truoc do`,
           );
@@ -100,7 +106,7 @@ export class RefundService extends BaseService<Refund> {
         refundCode,
         refundAmount,
         reason: dto.reason,
-        status: 'PENDING',
+        status: REFUND_STATUS.PENDING,
         createdBy: userId,
       });
       const savedRefund = await this.refundRepository.save(refund);
@@ -125,7 +131,7 @@ export class RefundService extends BaseService<Refund> {
           ERROR_MESSAGES.NOT_FOUND_WITH_ID('Refund', refundId),
         );
       }
-      if (refund.status !== 'PENDING') {
+      if (refund.status !== REFUND_STATUS.PENDING) {
         throw new BadRequestException(
           `Refund dang o trang thai ${refund.status}, khong the duyet`,
         );
@@ -167,7 +173,7 @@ export class RefundService extends BaseService<Refund> {
       const now = new Date();
       await this.orderService.markRefunded(order.id, isFullRefund, userId);
 
-      refund.status = 'COMPLETED';
+      refund.status = REFUND_STATUS.COMPLETED;
       refund.approvedBy = userId;
       refund.approvedAt = now;
       refund.completedAt = now;
@@ -189,12 +195,12 @@ export class RefundService extends BaseService<Refund> {
         ERROR_MESSAGES.NOT_FOUND_WITH_ID('Refund', refundId),
       );
     }
-    if (refund.status !== 'PENDING') {
+    if (refund.status !== REFUND_STATUS.PENDING) {
       throw new BadRequestException(
         `Refund dang o trang thai ${refund.status}, khong the tu choi`,
       );
     }
-    refund.status = 'REJECTED';
+    refund.status = REFUND_STATUS.REJECTED;
     refund.approvedBy = userId;
     refund.approvedAt = new Date();
     refund.reason = `${refund.reason} | REJECTED: ${reason}`;

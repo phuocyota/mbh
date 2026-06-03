@@ -7,6 +7,7 @@ import { StudentCard } from '../../entities/student-card.entity';
 import { StudentProfile } from '../../entities/student-profile.entity';
 import { BaseService } from '../../common/sql/base.service';
 import { ERROR_MESSAGES } from '../../common/constant/error-messages.constant';
+import { COMMON_STATUS } from '../../common/constant/constant';
 
 @Injectable()
 export class CustomerService extends BaseService<Customer> {
@@ -116,7 +117,7 @@ export class CustomerService extends BaseService<Customer> {
       throw new NotFoundException('Student card not found');
     }
 
-    if (studentCard.status !== 'ACTIVE') {
+    if (studentCard.status !== COMMON_STATUS.ACTIVE) {
       throw new NotFoundException(`Student card is ${studentCard.status}`);
     }
 
@@ -168,7 +169,7 @@ export class CustomerService extends BaseService<Customer> {
       throw new NotFoundException(`The ${cardUid} card does not exist`);
     }
 
-    if (studentCard.status !== 'ACTIVE') {
+    if (studentCard.status !== COMMON_STATUS.ACTIVE) {
       throw new NotFoundException(
         `The ${cardUid} card is ${studentCard.status}`,
       );

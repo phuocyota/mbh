@@ -2,6 +2,7 @@ import { Entity, Column, ManyToOne, OneToMany, JoinColumn } from 'typeorm';
 import { BaseEntity } from '../common/sql/base.entity';
 import { Order } from './order.entity';
 import { User } from './user.entity';
+import { REFUND_STATUS } from '../common/constant/constant';
 
 @Entity('refunds')
 export class Refund extends BaseEntity {
@@ -17,7 +18,7 @@ export class Refund extends BaseEntity {
   @Column('text', { nullable: true })
   reason: string;
 
-  @Column('varchar', { default: 'PENDING' })
+  @Column('varchar', { default: REFUND_STATUS.PENDING })
   status: string; // PENDING, APPROVED, REJECTED, COMPLETED
 
   @Column('uuid', { nullable: true, name: 'approved_by' })

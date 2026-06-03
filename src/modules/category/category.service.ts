@@ -4,6 +4,7 @@ import { Repository } from 'typeorm';
 import { Category } from '../../entities/category.entity';
 import { BaseService } from '../../common/sql/base.service';
 import { JwtPayload } from '../../common/interface/jwt-payload.interface';
+import { COMMON_STATUS } from '../../common/constant/constant';
 
 @Injectable()
 export class CategoryService extends BaseService<Category> {
@@ -27,7 +28,7 @@ export class CategoryService extends BaseService<Category> {
 
   async findActive() {
     return this.categoryRepository.find({
-      where: { status: 'ACTIVE' },
+      where: { status: COMMON_STATUS.ACTIVE },
       order: { sortOrder: 'ASC' },
     });
   }
@@ -58,7 +59,7 @@ export class CategoryService extends BaseService<Category> {
         productConditions.join(' AND '),
         params,
       )
-      .where('category.status = :status', { status: 'ACTIVE' })
+      .where('category.status = :status', { status: COMMON_STATUS.ACTIVE })
       .orderBy('category.sort_order', 'ASC')
       .addOrderBy('product.name', 'ASC')
       .getMany();

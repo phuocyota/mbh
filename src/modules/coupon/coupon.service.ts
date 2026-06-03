@@ -7,6 +7,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Coupon } from 'src/entities';
 import { ERROR_MESSAGES } from '../../common/constant/error-messages.constant';
+import { COUPON_STATUS } from '../../common/constant/constant';
 
 @Injectable()
 export class CouponService {
@@ -23,7 +24,7 @@ export class CouponService {
   }) {
     const coupon = this.couponRepository.create({
       ...createCouponDto,
-      status: 'ACTIVE',
+      status: COUPON_STATUS.ACTIVE,
       usedQuantity: 0,
     });
 
@@ -46,7 +47,7 @@ export class CouponService {
 
   async getCustomerCoupons(customerId: string) {
     return await this.couponRepository.find({
-      where: { customerId, status: 'ACTIVE' },
+      where: { customerId, status: COUPON_STATUS.ACTIVE },
       order: { createdAt: 'DESC' },
     });
   }
@@ -54,18 +55,22 @@ export class CouponService {
   async getBestAvailableCoupon(customerId: string) {
     const now = new Date();
     const coupons = await this.couponRepository.find({
-      where: { customerId, status: 'ACTIVE' },
+      where: { customerId, status: COUPON_STATUS.ACTIVE },
       order: { reducePrice: 'DESC', createdAt: 'ASC' },
     });
 
     for (const coupon of coupons) {
       if (coupon.expiresAt && now > coupon.expiresAt) {
-        await this.couponRepository.update(coupon.id, { status: 'EXPIRED' });
+        await this.couponRepository.update(coupon.id, {
+          status: COUPON_STATUS.EXPIRED,
+        });
         continue;
       }
 
       if (coupon.usedQuantity >= coupon.quantity) {
-        await this.couponRepository.update(coupon.id, { status: 'USED' });
+        await this.couponRepository.update(coupon.id, {
+          status: COUPON_STATUS.USED,
+        });
         continue;
       }
 
@@ -82,17 +87,21 @@ export class CouponService {
       throw new BadRequestException('Coupon does not belong to this customer');
     }
 
-    if (coupon.status !== 'ACTIVE') {
+    if (coupon.status !== COUPON_STATUS.ACTIVE) {
       throw new BadRequestException('Coupon is not active');
     }
 
     if (coupon.expiresAt && new Date() > coupon.expiresAt) {
-      await this.couponRepository.update(couponId, { status: 'EXPIRED' });
+      await this.couponRepository.update(couponId, {
+        status: COUPON_STATUS.EXPIRED,
+      });
       throw new BadRequestException('Coupon has expired');
     }
 
     if (coupon.usedQuantity >= coupon.quantity) {
-      await this.couponRepository.update(couponId, { status: 'USED' });
+      await this.couponRepository.update(couponId, {
+        status: COUPON_STATUS.USED,
+      });
       throw new BadRequestException('Coupon has been fully used');
     }
 
@@ -107,7 +116,7 @@ export class CouponService {
 
     await this.couponRepository.update(couponId, {
       usedQuantity: newUsedQuantity,
-      status: isFullyUsed ? 'USED' : 'ACTIVE',
+      status: isFullyUsed ? COUPON_STATUS.USED : COUPON_STATUS.ACTIVE,
     });
 
     return coupon;

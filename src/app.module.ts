@@ -37,6 +37,7 @@ import { WorkScheduleModule } from './modules/work-schedule/work-schedule.module
 import { SupplierModule } from './modules/supplier/supplier.module';
 import { PayrollModule } from './modules/payroll/payroll.module';
 import { DashboardModule } from './modules/dashboard/dashboard.module';
+import { SocketModule } from './modules/socket/socket.module';
 
 @Module({
   imports: [
@@ -76,6 +77,7 @@ import { DashboardModule } from './modules/dashboard/dashboard.module';
     SupplierModule,
     PayrollModule,
     DashboardModule,
+    SocketModule,
   ],
   controllers: [AppController],
   providers: [

@@ -22,6 +22,10 @@ import { PayrollService } from './payroll.service';
 import { CreatePayrollDto } from './dto/create-payroll.dto';
 import { UpdatePayrollDto } from './dto/update-payroll.dto';
 import { PayrollDto } from './dto/payroll.dto';
+import {
+  PAYROLL_STATUS_FILTER_ALL,
+  PAYROLL_STATUS_VALUES,
+} from '../../common/constant/constant';
 
 @ApiTags('Payrolls')
 @ApiBearerAuth()
@@ -31,7 +35,12 @@ export class PayrollController {
 
   @Get()
   @ApiOperation({ summary: 'Get all payrolls with optional filters' })
-  @ApiQuery({ name: 'status', required: false, description: 'Filter by status (draft, estimated, finalized, cancelled, all)' })
+  @ApiQuery({
+    name: 'status',
+    required: false,
+    description: 'Filter by status',
+    enum: [...PAYROLL_STATUS_VALUES, PAYROLL_STATUS_FILTER_ALL],
+  })
   @ApiResponse({
     status: 200,
     description: 'List of payrolls',
@@ -67,8 +76,13 @@ export class PayrollController {
     const totalSalary = createDto.totalSalary || 0;
     const paid = createDto.paid || 0;
     const remaining = totalSalary - paid;
+    const status = createDto.status?.toUpperCase();
+    const payload = { ...createDto, code, totalSalary, paid, remaining };
+    if (status) {
+      payload.status = status;
+    }
     return this.payrollService.create(
-      { ...createDto, code, totalSalary, paid, remaining },
+      payload,
       { userId: 'system' } as any,
     );
   }
@@ -92,6 +106,9 @@ export class PayrollController {
       const totalSalary = updateDto.totalSalary ?? existing.totalSalary;
       const paid = updateDto.paid ?? existing.paid;
       updateDto.remaining = totalSalary - paid;
+    }
+    if (updateDto.status) {
+      updateDto.status = updateDto.status.toUpperCase();
     }
     return this.payrollService.update(id, updateDto, { userId: 'system' } as any);
   }

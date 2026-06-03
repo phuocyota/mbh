@@ -3,6 +3,10 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import { Payment } from '../../entities/payment.entity';
 import { BaseService } from '../../common/sql/base.service';
+import {
+  PAYMENT_METHOD,
+  PAYMENT_STATUS,
+} from '../../common/constant/constant';
 
 @Injectable()
 export class PaymentService extends BaseService<Payment> {
@@ -20,7 +24,7 @@ export class PaymentService extends BaseService<Payment> {
   async createSuccessPayment(paymentDto: any): Promise<Payment> {
     const payment = this.paymentRepository.create({
       ...paymentDto,
-      status: 'SUCCESS',
+      status: PAYMENT_STATUS.SUCCESS,
     } as Partial<Payment>);
 
     return this.paymentRepository.save(payment);
@@ -28,7 +32,7 @@ export class PaymentService extends BaseService<Payment> {
 
   async findSuccessfulByOrder(orderId: string): Promise<Payment[]> {
     return this.paymentRepository.find({
-      where: { orderId, status: 'SUCCESS' },
+      where: { orderId, status: PAYMENT_STATUS.SUCCESS },
     });
   }
 
@@ -36,8 +40,8 @@ export class PaymentService extends BaseService<Payment> {
     return this.paymentRepository.find({
       where: {
         orderId,
-        method: 'WALLET',
-        status: 'SUCCESS',
+        method: PAYMENT_METHOD.WALLET,
+        status: PAYMENT_STATUS.SUCCESS,
       },
     });
   }
@@ -49,7 +53,7 @@ export class PaymentService extends BaseService<Payment> {
 
     await this.paymentRepository.update(
       { id: In(ids) },
-      { status: 'REFUNDED', updatedBy },
+      { status: PAYMENT_STATUS.REFUNDED, updatedBy },
     );
   }
 
@@ -65,7 +69,9 @@ export class PaymentService extends BaseService<Payment> {
         from: query.from,
         to: query.to,
       })
-      .andWhere("p.status = 'SUCCESS'");
+      .andWhere('p.status = :paymentStatus', {
+        paymentStatus: PAYMENT_STATUS.SUCCESS,
+      });
     if (query.branchId) {
       qb.andWhere('o.branch_id = :branchId', {
         branchId: query.branchId,
@@ -90,15 +96,15 @@ export class PaymentService extends BaseService<Payment> {
       .createQueryBuilder('p')
       .innerJoin('orders', 'o', 'o.id = p.order_id')
       .select(
-        "COALESCE(SUM(CASE WHEN p.method = 'CASH' THEN p.amount ELSE 0 END), 0)",
+        'COALESCE(SUM(CASE WHEN p.method = :cashMethod THEN p.amount ELSE 0 END), 0)',
         'cashRevenue',
       )
       .addSelect(
-        "COALESCE(SUM(CASE WHEN p.method = 'WALLET' THEN p.amount ELSE 0 END), 0)",
+        'COALESCE(SUM(CASE WHEN p.method = :walletMethod THEN p.amount ELSE 0 END), 0)',
         'walletRevenue',
       )
       .addSelect(
-        "COALESCE(SUM(CASE WHEN p.method NOT IN ('CASH','WALLET') THEN p.amount ELSE 0 END), 0)",
+        'COALESCE(SUM(CASE WHEN p.method NOT IN (:...primaryMethods) THEN p.amount ELSE 0 END), 0)',
         'otherRevenue',
       )
       .where('o.cashier_id = :cashierId', { cashierId: query.cashierId })
@@ -107,7 +113,14 @@ export class PaymentService extends BaseService<Payment> {
         from: query.from,
         to: query.to,
       })
-      .andWhere("p.status = 'SUCCESS'")
+      .andWhere('p.status = :paymentStatus', {
+        paymentStatus: PAYMENT_STATUS.SUCCESS,
+      })
+      .setParameters({
+        cashMethod: PAYMENT_METHOD.CASH,
+        walletMethod: PAYMENT_METHOD.WALLET,
+        primaryMethods: [PAYMENT_METHOD.CASH, PAYMENT_METHOD.WALLET],
+      })
       .getRawOne<{
         cashRevenue: string;
         walletRevenue: string;

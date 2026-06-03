@@ -49,7 +49,7 @@ Authorization: Bearer <accessToken>
   ],
   "todayOrder": {
     "id": "order_001",
-    "status": "PREPARING",
+    "status": 1,
     "statusText": "Đang chuẩn bị",
     "orderedAt": "2026-05-29T09:45:00+07:00",
     "items": [
@@ -77,7 +77,7 @@ Authorization: Bearer <accessToken>
       "type": "ORDER_PAYMENT",
       "title": "Cơm gà",
       "amount": -30000,
-      "status": "PREPARING",
+      "status": 1,
       "statusText": "Đang chuẩn bị",
       "createdAt": "2026-05-27T10:30:00+07:00",
       "orderId": "order_001"
@@ -87,7 +87,7 @@ Authorization: Bearer <accessToken>
       "type": "ORDER_PAYMENT",
       "title": "Bún bò",
       "amount": -25000,
-      "status": "RECEIVED",
+      "status": 10,
       "statusText": "Đã nhận",
       "createdAt": "2026-05-27T11:15:00+07:00",
       "orderId": "order_002"
@@ -122,7 +122,7 @@ Authorization: Bearer <accessToken>
 ### Enums
 
 ```ts
-type OrderStatus = 'PENDING' | 'PREPARING' | 'READY' | 'RECEIVED' | 'CANCELLED';
+type OrderStatus = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11;
 
 type NotificationType =
   | 'ORDER_CREATED'

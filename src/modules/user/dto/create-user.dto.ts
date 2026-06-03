@@ -6,6 +6,12 @@ import {
   IsOptional,
   IsEnum,
 } from 'class-validator';
+import {
+  ACTIVE_INACTIVE_STATUS_VALUES,
+  COMMON_STATUS,
+  USER_ROLE,
+  USER_ROLE_VALUES,
+} from '../../../common/constant/constant';
 
 export class CreateUserDto {
   @ApiProperty({ description: 'Full name of the user', example: 'John Doe' })
@@ -41,20 +47,20 @@ export class CreateUserDto {
 
   @ApiProperty({
     description: 'User role',
-    enum: ['ADMIN', 'MANAGER', 'CASHIER', 'KITCHEN', 'STAFF', 'STUDENT'],
-    default: 'STAFF',
+    enum: USER_ROLE_VALUES,
+    default: USER_ROLE.STAFF,
   })
   @IsOptional()
-  @IsEnum(['ADMIN', 'MANAGER', 'CASHIER', 'KITCHEN', 'STAFF', 'STUDENT'])
+  @IsEnum(USER_ROLE_VALUES)
   role?: string;
 
   @ApiProperty({
     description: 'User status',
-    enum: ['ACTIVE', 'INACTIVE'],
-    default: 'ACTIVE',
+    enum: ACTIVE_INACTIVE_STATUS_VALUES,
+    default: COMMON_STATUS.ACTIVE,
   })
   @IsOptional()
-  @IsEnum(['ACTIVE', 'INACTIVE'])
+  @IsEnum(ACTIVE_INACTIVE_STATUS_VALUES)
   status?: string;
 
   @ApiProperty({

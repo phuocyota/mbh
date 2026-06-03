@@ -1,6 +1,7 @@
 import { Entity, Column, ManyToOne, JoinColumn } from 'typeorm';
 import { BaseEntity } from '../common/sql/base.entity';
 import { StudentProfile } from './student-profile.entity';
+import { COMMON_STATUS } from '../common/constant/constant';
 
 @Entity('student_cards')
 export class StudentCard extends BaseEntity {
@@ -13,7 +14,7 @@ export class StudentCard extends BaseEntity {
   @Column('varchar', { nullable: true, name: 'card_number' })
   cardNumber: string;
 
-  @Column('varchar', { default: 'ACTIVE' })
+  @Column('varchar', { default: COMMON_STATUS.ACTIVE })
   status: string;
 
   @Column('timestamp', { nullable: true, name: 'issued_at' })

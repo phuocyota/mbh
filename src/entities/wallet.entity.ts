@@ -2,6 +2,7 @@ import { Entity, Column, OneToOne, OneToMany, JoinColumn } from 'typeorm';
 import { BaseEntity } from '../common/sql/base.entity';
 import { Customer } from './customer.entity';
 import { WalletTransaction } from './wallet-transaction.entity';
+import { COMMON_STATUS } from '../common/constant/constant';
 
 @Entity('wallets')
 export class Wallet extends BaseEntity {
@@ -11,7 +12,7 @@ export class Wallet extends BaseEntity {
   @Column('numeric', { precision: 12, scale: 2, default: 0 })
   balance: number;
 
-  @Column('varchar', { default: 'ACTIVE' })
+  @Column('varchar', { default: COMMON_STATUS.ACTIVE })
   status: string;
 
   // Relations

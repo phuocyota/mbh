@@ -1,6 +1,7 @@
 import { Entity, Column, OneToMany } from 'typeorm';
 import { Exclude } from 'class-transformer';
 import { BaseEntity } from '../common/sql/base.entity';
+import { COMMON_STATUS, USER_ROLE } from '../common/constant/constant';
 
 @Entity('users')
 export class User extends BaseEntity {
@@ -17,10 +18,10 @@ export class User extends BaseEntity {
   @Column('varchar', { name: 'password_hash' })
   passwordHash: string;
 
-  @Column('varchar', { default: 'STAFF' })
+  @Column('varchar', { default: USER_ROLE.STAFF })
   role: string; // ADMIN, MANAGER, CASHIER, KITCHEN, STAFF, STUDENT
 
-  @Column('varchar', { default: 'ACTIVE' })
+  @Column('varchar', { default: COMMON_STATUS.ACTIVE })
   status: string; // ACTIVE, INACTIVE
 
   @Column('varchar', { nullable: true })

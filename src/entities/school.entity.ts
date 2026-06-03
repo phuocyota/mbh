@@ -1,5 +1,6 @@
 import { Entity, Column } from 'typeorm';
 import { BaseEntity } from '../common/sql/base.entity';
+import { COMMON_STATUS } from '../common/constant/constant';
 
 @Entity('schools')
 export class School extends BaseEntity {
@@ -12,6 +13,6 @@ export class School extends BaseEntity {
   @Column('varchar', { nullable: true })
   phone: string;
 
-  @Column('varchar', { default: 'ACTIVE' })
+  @Column('varchar', { default: COMMON_STATUS.ACTIVE })
   status: string;
 }

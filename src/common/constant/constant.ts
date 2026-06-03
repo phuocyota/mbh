@@ -1,1 +1,186 @@
 export const EMPTY_UUID = '00000000-0000-0000-0000-000000000000';
+
+export const COMMON_STATUS = {
+  ACTIVE: 'ACTIVE',
+  INACTIVE: 'INACTIVE',
+  DELETED: 'DELETED',
+} as const;
+export const COMMON_STATUS_VALUES = Object.values(COMMON_STATUS);
+export const ACTIVE_INACTIVE_STATUS_VALUES = [
+  COMMON_STATUS.ACTIVE,
+  COMMON_STATUS.INACTIVE,
+] as const;
+
+export const CUSTOMER_TYPE = {
+  STUDENT: 'STUDENT',
+  TEACHER: 'TEACHER',
+  GUEST: 'GUEST',
+} as const;
+export const CUSTOMER_TYPE_VALUES = Object.values(CUSTOMER_TYPE);
+
+export const USER_ROLE = {
+  ADMIN: 'ADMIN',
+  MANAGER: 'MANAGER',
+  CASHIER: 'CASHIER',
+  KITCHEN: 'KITCHEN',
+  STAFF: 'STAFF',
+  STUDENT: 'STUDENT',
+} as const;
+export const USER_ROLE_VALUES = Object.values(USER_ROLE);
+
+export const ADMIN_LOGIN_ROLES = [
+  USER_ROLE.ADMIN,
+  USER_ROLE.MANAGER,
+  USER_ROLE.STAFF,
+] as const;
+
+export const ORDER_STATUS = {
+  CANCELLED: 0,
+  PREPARING: 1,
+  PENDING: 2,
+  PENDING_PAYMENT: 3,
+  READY_TO_PICKUP: 4,
+  DONE: 5,
+  REFUNDED: 6,
+  DRAFT: 7,
+  WAITING: 8,
+  READY: 9,
+  RECEIVED: 10,
+  COMPLETED: 11,
+} as const;
+export const ORDER_STATUS_VALUES = Object.values(ORDER_STATUS);
+
+export const ORDER_STATUS_NAME_TO_CODE = {
+  CANCELLED: ORDER_STATUS.CANCELLED,
+  PREPARING: ORDER_STATUS.PREPARING,
+  PENDING: ORDER_STATUS.PENDING,
+  PENDING_PAYMENT: ORDER_STATUS.PENDING_PAYMENT,
+  READY_TO_PICKUP: ORDER_STATUS.READY_TO_PICKUP,
+  DONE: ORDER_STATUS.DONE,
+  REFUNDED: ORDER_STATUS.REFUNDED,
+  DRAFT: ORDER_STATUS.DRAFT,
+  WAITING: ORDER_STATUS.WAITING,
+  READY: ORDER_STATUS.READY,
+  RECEIVED: ORDER_STATUS.RECEIVED,
+  COMPLETED: ORDER_STATUS.COMPLETED,
+} as const;
+
+export function resolveOrderStatus(value?: string | number | null) {
+  if (value === undefined || value === null || value === '') {
+    return undefined;
+  }
+
+  const numericValue = Number(value);
+  if (Number.isInteger(numericValue)) {
+    return (ORDER_STATUS_VALUES as readonly number[]).includes(numericValue)
+      ? numericValue
+      : undefined;
+  }
+
+  return ORDER_STATUS_NAME_TO_CODE[
+    String(value).toUpperCase() as keyof typeof ORDER_STATUS_NAME_TO_CODE
+  ];
+}
+
+export const REVENUE_ORDER_STATUSES = [
+  ORDER_STATUS.PENDING,
+  ORDER_STATUS.PENDING_PAYMENT,
+  ORDER_STATUS.PREPARING,
+  ORDER_STATUS.READY,
+  ORDER_STATUS.READY_TO_PICKUP,
+  ORDER_STATUS.RECEIVED,
+  ORDER_STATUS.DONE,
+  ORDER_STATUS.COMPLETED,
+  ORDER_STATUS.WAITING,
+] as const;
+
+export const ORDER_PAYMENT_STATUS = {
+  UNPAID: 'UNPAID',
+  PAID: 'PAID',
+  PARTIAL: 'PARTIAL',
+  REFUNDED: 'REFUNDED',
+} as const;
+export const ORDER_PAYMENT_STATUS_VALUES = Object.values(ORDER_PAYMENT_STATUS);
+
+export const PAYMENT_METHOD = {
+  CASH: 'CASH',
+  WALLET: 'WALLET',
+  CARD: 'CARD',
+  BANK_TRANSFER: 'BANK_TRANSFER',
+  QR: 'QR',
+} as const;
+export const PAYMENT_METHOD_VALUES = Object.values(PAYMENT_METHOD);
+
+export const PAYMENT_STATUS = {
+  PENDING: 'PENDING',
+  SUCCESS: 'SUCCESS',
+  COMPLETED: 'COMPLETED',
+  FAILED: 'FAILED',
+  REFUNDED: 'REFUNDED',
+} as const;
+export const PAYMENT_STATUS_VALUES = Object.values(PAYMENT_STATUS);
+
+export const ORDER_TYPE = {
+  DINE_IN: 'DINE_IN',
+  TAKEAWAY: 'TAKEAWAY',
+  PRE_ORDER: 'PRE_ORDER',
+} as const;
+export const ORDER_TYPE_VALUES = Object.values(ORDER_TYPE);
+
+export const ORDER_ITEM_STATUS = {
+  NORMAL: 'NORMAL',
+  REFUNDED: 'REFUNDED',
+  CANCELLED: 'CANCELLED',
+} as const;
+export const ORDER_ITEM_STATUS_VALUES = Object.values(ORDER_ITEM_STATUS);
+
+export const REFUND_STATUS = {
+  PENDING: 'PENDING',
+  APPROVED: 'APPROVED',
+  REJECTED: 'REJECTED',
+  COMPLETED: 'COMPLETED',
+} as const;
+export const REFUND_STATUS_VALUES = Object.values(REFUND_STATUS);
+
+export const REFUNDABLE_ORDER_STATUSES = [
+  ORDER_STATUS.DONE,
+  ORDER_STATUS.COMPLETED,
+] as const;
+
+export const COUPON_STATUS = {
+  ACTIVE: 'ACTIVE',
+  EXPIRED: 'EXPIRED',
+  USED: 'USED',
+} as const;
+export const COUPON_STATUS_VALUES = Object.values(COUPON_STATUS);
+
+export const CASH_MOVEMENT_TYPE = {
+  CASH_IN: 'CASH_IN',
+  CASH_OUT: 'CASH_OUT',
+} as const;
+
+export const WALLET_TRANSACTION_TYPE = {
+  TOPUP: 'TOPUP',
+  PAYMENT: 'PAYMENT',
+  REFUND: 'REFUND',
+} as const;
+
+export const WALLET_TRANSACTION_REF_TYPE = {
+  MANUAL: 'MANUAL',
+  ORDER: 'ORDER',
+  REFUND: 'REFUND',
+} as const;
+
+export const CART_NEXT_ACTION = {
+  WAITING_FOR_CASHIER_PAYMENT: 'WAITING_FOR_CASHIER_PAYMENT',
+  WAITING_FOR_PREPARATION: 'WAITING_FOR_PREPARATION',
+} as const;
+
+export const PAYROLL_STATUS = {
+  DRAFT: 'DRAFT',
+  ESTIMATED: 'ESTIMATED',
+  FINALIZED: 'FINALIZED',
+  CANCELLED: 'CANCELLED',
+} as const;
+export const PAYROLL_STATUS_VALUES = Object.values(PAYROLL_STATUS);
+export const PAYROLL_STATUS_FILTER_ALL = 'ALL';

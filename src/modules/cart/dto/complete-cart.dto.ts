@@ -1,6 +1,13 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
 import { IsIn, IsOptional, IsString, IsUUID } from 'class-validator';
+import {
+  ORDER_TYPE,
+  PAYMENT_METHOD,
+} from '../../../common/constant/constant';
+
+const CART_PAYMENT_METHODS = [PAYMENT_METHOD.WALLET, PAYMENT_METHOD.CASH];
+const CART_ORDER_TYPES = [ORDER_TYPE.TAKEAWAY, ORDER_TYPE.PRE_ORDER];
 
 export class CompleteCartDto {
   @ApiProperty({ description: 'Branch ID', required: false })
@@ -17,23 +24,23 @@ export class CompleteCartDto {
 
   @ApiProperty({
     description: 'Payment method',
-    enum: ['WALLET', 'CASH'],
-    default: 'WALLET',
+    enum: CART_PAYMENT_METHODS,
+    default: PAYMENT_METHOD.WALLET,
     required: false,
   })
   @IsOptional()
-  @IsIn(['WALLET', 'CASH'])
-  paymentMethod?: 'WALLET' | 'CASH';
+  @IsIn(CART_PAYMENT_METHODS)
+  paymentMethod?: (typeof CART_PAYMENT_METHODS)[number];
 
   @ApiProperty({
     description: 'Order type: TAKEAWAY = lấy ngay, PRE_ORDER = ra chơi lấy',
-    enum: ['TAKEAWAY', 'PRE_ORDER'],
-    default: 'TAKEAWAY',
+    enum: CART_ORDER_TYPES,
+    default: ORDER_TYPE.TAKEAWAY,
     required: false,
   })
   @IsOptional()
-  @IsIn(['TAKEAWAY', 'PRE_ORDER'])
-  orderType?: 'TAKEAWAY' | 'PRE_ORDER';
+  @IsIn(CART_ORDER_TYPES)
+  orderType?: (typeof CART_ORDER_TYPES)[number];
 
   @ApiProperty({ description: 'Coupon ID', required: false })
   @Transform(({ value }) => value || undefined)

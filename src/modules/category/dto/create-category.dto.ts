@@ -6,6 +6,10 @@ import {
   IsNumber,
   Min,
 } from 'class-validator';
+import {
+  ACTIVE_INACTIVE_STATUS_VALUES,
+  COMMON_STATUS,
+} from '../../../common/constant/constant';
 
 export class CreateCategoryDto {
   @ApiProperty({
@@ -37,8 +41,8 @@ export class CreateCategoryDto {
 
   @ApiProperty({
     description: 'Category status',
-    enum: ['ACTIVE', 'INACTIVE'],
-    default: 'ACTIVE',
+    enum: ACTIVE_INACTIVE_STATUS_VALUES,
+    default: COMMON_STATUS.ACTIVE,
   })
   @IsOptional()
   status?: string;

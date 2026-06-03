@@ -1,6 +1,7 @@
 import { Entity, Column, OneToMany } from 'typeorm';
 import { BaseEntity } from '../common/sql/base.entity';
 import { POSDevice } from './pos-device.entity';
+import { COMMON_STATUS } from '../common/constant/constant';
 
 @Entity('branches')
 export class Branch extends BaseEntity {
@@ -10,7 +11,7 @@ export class Branch extends BaseEntity {
   @Column('text', { nullable: true })
   address: string;
 
-  @Column('varchar', { default: 'ACTIVE' })
+  @Column('varchar', { default: COMMON_STATUS.ACTIVE })
   status: string;
 
   // Relations

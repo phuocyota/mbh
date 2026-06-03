@@ -2,6 +2,7 @@ import { Entity, Column, ManyToOne, JoinColumn, OneToMany } from 'typeorm';
 import { BaseEntity } from '../common/sql/base.entity';
 import { School } from './school.entity';
 import { StudentClass } from './student-class.entity';
+import { COMMON_STATUS } from '../common/constant/constant';
 
 @Entity('classes')
 export class Class extends BaseEntity {
@@ -14,7 +15,7 @@ export class Class extends BaseEntity {
   @Column('varchar', { nullable: true })
   grade: string;
 
-  @Column('varchar', { default: 'ACTIVE' })
+  @Column('varchar', { default: COMMON_STATUS.ACTIVE })
   status: string;
 
   // Relations

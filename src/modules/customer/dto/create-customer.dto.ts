@@ -8,6 +8,12 @@ import {
   IsNumber,
   Min,
 } from 'class-validator';
+import {
+  ACTIVE_INACTIVE_STATUS_VALUES,
+  COMMON_STATUS,
+  CUSTOMER_TYPE,
+  CUSTOMER_TYPE_VALUES,
+} from '../../../common/constant/constant';
 
 export class CreateCustomerDto {
   @ApiProperty({
@@ -37,20 +43,20 @@ export class CreateCustomerDto {
 
   @ApiProperty({
     description: 'Customer type',
-    enum: ['STUDENT', 'TEACHER', 'GUEST'],
-    default: 'GUEST',
+    enum: CUSTOMER_TYPE_VALUES,
+    default: CUSTOMER_TYPE.GUEST,
   })
   @IsOptional()
-  @IsEnum(['STUDENT', 'TEACHER', 'GUEST'])
+  @IsEnum(CUSTOMER_TYPE_VALUES)
   type?: string;
 
   @ApiProperty({
     description: 'Customer status',
-    enum: ['ACTIVE', 'INACTIVE'],
-    default: 'ACTIVE',
+    enum: ACTIVE_INACTIVE_STATUS_VALUES,
+    default: COMMON_STATUS.ACTIVE,
   })
   @IsOptional()
-  @IsEnum(['ACTIVE', 'INACTIVE'])
+  @IsEnum(ACTIVE_INACTIVE_STATUS_VALUES)
   status?: string;
 
   @ApiProperty({

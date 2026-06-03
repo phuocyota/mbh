@@ -2,24 +2,15 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Order, Customer } from '../../entities';
+import {
+  ORDER_PAYMENT_STATUS,
+  REVENUE_ORDER_STATUSES,
+} from '../../common/constant/constant';
 
 interface DateRange {
   from: Date;
   to: Date;
 }
-
-const REVENUE_ORDER_STATUSES = [
-  'Pending',
-  'PENDING',
-  'PENDING_PAYMENT',
-  'PREPARING',
-  'READY',
-  'READY_TO_PICKUP',
-  'RECEIVED',
-  'DONE',
-  'COMPLETED',
-  'waiting',
-];
 
 @Injectable()
 export class DashboardService {
@@ -76,7 +67,7 @@ export class DashboardService {
       ])
       .where('order.createdAt BETWEEN :from AND :to', range)
       .andWhere('order.paymentStatus = :paymentStatus', {
-        paymentStatus: 'PAID',
+        paymentStatus: ORDER_PAYMENT_STATUS.PAID,
       })
       .andWhere('order.status IN (:...statuses)', {
         statuses: REVENUE_ORDER_STATUSES,
@@ -96,7 +87,7 @@ export class DashboardService {
       .select('COUNT(DISTINCT order.customerId)', 'count')
       .where('order.createdAt BETWEEN :from AND :to', range)
       .andWhere('order.paymentStatus = :paymentStatus', {
-        paymentStatus: 'PAID',
+        paymentStatus: ORDER_PAYMENT_STATUS.PAID,
       })
       .andWhere('order.status IN (:...statuses)', {
         statuses: REVENUE_ORDER_STATUSES,

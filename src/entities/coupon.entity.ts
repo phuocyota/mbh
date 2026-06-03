@@ -2,6 +2,7 @@ import { Entity, Column, ManyToOne, JoinColumn, OneToMany } from 'typeorm';
 import { BaseEntity } from '../common/sql/base.entity';
 import { Customer } from './customer.entity';
 import { Order } from './order.entity';
+import { COUPON_STATUS } from '../common/constant/constant';
 
 @Entity('coupons')
 export class Coupon extends BaseEntity {
@@ -21,7 +22,7 @@ export class Coupon extends BaseEntity {
   @Column('integer', { default: 0, name: 'used_quantity' })
   usedQuantity: number;
 
-  @Column('varchar', { default: 'ACTIVE' })
+  @Column('varchar', { default: COUPON_STATUS.ACTIVE })
   status: string; // ACTIVE, EXPIRED, USED
 
   @Column('timestamp', { nullable: true, name: 'expires_at' })

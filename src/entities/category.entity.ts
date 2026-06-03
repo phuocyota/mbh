@@ -1,6 +1,7 @@
 import { Entity, Column, OneToMany } from 'typeorm';
 import { BaseEntity } from '../common/sql/base.entity';
 import { Product } from './product.entity';
+import { COMMON_STATUS } from '../common/constant/constant';
 
 @Entity('categories')
 export class Category extends BaseEntity {
@@ -10,7 +11,7 @@ export class Category extends BaseEntity {
   @Column('int', { default: 0, name: 'sort_order' })
   sortOrder: number;
 
-  @Column('varchar', { default: 'ACTIVE' })
+  @Column('varchar', { default: COMMON_STATUS.ACTIVE })
   status: string;
 
   // Relations

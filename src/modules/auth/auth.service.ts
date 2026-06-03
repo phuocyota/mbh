@@ -8,6 +8,11 @@ import * as bcrypt from 'bcrypt';
 import { User } from 'src/entities';
 import { UserService } from '../user/user.service';
 import { CustomerService } from '../customer/customer.service';
+import {
+  ADMIN_LOGIN_ROLES,
+  COMMON_STATUS,
+  USER_ROLE,
+} from '../../common/constant/constant';
 
 @Injectable()
 export class AuthService {
@@ -44,7 +49,7 @@ export class AuthService {
     };
 
     // Add student-specific info if role is STUDENT
-    if (user.role === 'STUDENT') {
+    if (user.role === USER_ROLE.STUDENT) {
       const studentInfo = await this.getStudentInfo(user.id);
       Object.assign(result, studentInfo);
     }
@@ -75,7 +80,7 @@ export class AuthService {
       throw new UnauthorizedException('User not found');
     }
 
-    if (user.status !== 'ACTIVE') {
+    if (user.status !== COMMON_STATUS.ACTIVE) {
       throw new UnauthorizedException('User account is inactive');
     }
 
@@ -119,11 +124,11 @@ export class AuthService {
       throw new UnauthorizedException('Student not found');
     }
 
-    if (user.role !== 'STUDENT') {
+    if (user.role !== USER_ROLE.STUDENT) {
       throw new UnauthorizedException('This endpoint is only for students');
     }
 
-    if (user.status !== 'ACTIVE') {
+    if (user.status !== COMMON_STATUS.ACTIVE) {
       throw new UnauthorizedException('Student account is inactive');
     }
 
@@ -159,12 +164,11 @@ export class AuthService {
       throw new UnauthorizedException('Invalid credentials');
     }
 
-    const allowedRoles = ['ADMIN', 'MANAGER', 'STAFF'];
-    if (!allowedRoles.includes(user.role)) {
+    if (!ADMIN_LOGIN_ROLES.includes(user.role as any)) {
       throw new UnauthorizedException('This endpoint is only for admin/manager/staff');
     }
 
-    if (user.status !== 'ACTIVE') {
+    if (user.status !== COMMON_STATUS.ACTIVE) {
       throw new UnauthorizedException('Account is inactive');
     }
 
@@ -183,11 +187,11 @@ export class AuthService {
       throw new UnauthorizedException('Invalid credentials');
     }
 
-    if (user.role !== 'CASHIER') {
+    if (user.role !== USER_ROLE.CASHIER) {
       throw new UnauthorizedException('This endpoint is only for cashiers');
     }
 
-    if (user.status !== 'ACTIVE') {
+    if (user.status !== COMMON_STATUS.ACTIVE) {
       throw new UnauthorizedException('Cashier account is inactive');
     }
 

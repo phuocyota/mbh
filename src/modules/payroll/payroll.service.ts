@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Payroll } from '../../entities';
 import { BaseService } from '../../common/sql/base.service';
+import { PAYROLL_STATUS_FILTER_ALL } from '../../common/constant/constant';
 
 interface FindAllOptions {
   status?: string;
@@ -24,8 +25,9 @@ export class PayrollService extends BaseService<Payroll> {
   async findAll(options?: FindAllOptions): Promise<Payroll[]> {
     const where: any = {};
     
-    if (options?.status && options.status !== 'all') {
-      where.status = options.status;
+    const status = options?.status?.toUpperCase();
+    if (status && status !== PAYROLL_STATUS_FILTER_ALL) {
+      where.status = status;
     }
     
     return this.payrollRepository.find({ 

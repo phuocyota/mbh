@@ -5,6 +5,7 @@ import { Wallet } from './wallet.entity';
 import { StudentProfile } from './student-profile.entity';
 import { StudentClass } from './student-class.entity';
 import { Coupon } from './coupon.entity';
+import { COMMON_STATUS } from '../common/constant/constant';
 
 @Entity('customers')
 export class Customer extends BaseEntity {
@@ -20,7 +21,7 @@ export class Customer extends BaseEntity {
   @Column('varchar', { default: 'GUEST' })
   type: string; // STUDENT, TEACHER, GUEST
 
-  @Column('varchar', { default: 'ACTIVE' })
+  @Column('varchar', { default: COMMON_STATUS.ACTIVE })
   status: string;
 
   @Column('numeric', {
