@@ -84,7 +84,7 @@ export class DashboardService {
         'SUM(order.totalAmount) as revenue',
       ])
       .where('order.createdAt BETWEEN :from AND :to', { from, to })
-      .andWhere('order.status IN (:...statuses)', { statuses: ['COMPLETED', 'READY', 'RECEIVED'] })
+      .andWhere('order.status IN (:...statuses)', { statuses: ['PENDING', 'PENDING_PAYMENT', 'PREPARING', 'READY', 'RECEIVED', 'COMPLETED'] })
       .groupBy('DATE(order.createdAt)')
       .orderBy('date', 'ASC')
       .getRawMany();
@@ -96,7 +96,7 @@ export class DashboardService {
         'SUM(order.totalAmount) as totalRevenue',
       ])
       .where('order.createdAt BETWEEN :from AND :to', { from, to })
-      .andWhere('order.status IN (:...statuses)', { statuses: ['COMPLETED', 'READY', 'RECEIVED'] })
+      .andWhere('order.status IN (:...statuses)', { statuses: ['PENDING', 'PENDING_PAYMENT', 'PREPARING', 'READY', 'RECEIVED', 'COMPLETED'] })
       .getRawOne();
 
     return {
@@ -147,7 +147,7 @@ export class DashboardService {
       .createQueryBuilder('order')
       .select('COUNT(DISTINCT order.customerId)', 'count')
       .where('order.createdAt BETWEEN :from AND :to', { from, to })
-      .andWhere('order.status IN (:...statuses)', { statuses: ['COMPLETED', 'READY', 'RECEIVED'] })
+      .andWhere('order.status IN (:...statuses)', { statuses: ['PENDING', 'PENDING_PAYMENT', 'PREPARING', 'READY', 'RECEIVED', 'COMPLETED'] })
       .getRawOne();
 
     return {
