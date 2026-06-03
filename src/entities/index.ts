@@ -29,3 +29,5 @@ export { Coupon } from './coupon.entity';
 export { Notification } from './notification.entity';
 export { Employee } from './employee.entity';
 export { WorkSchedule } from './work-schedule.entity';
+export { Supplier } from './supplier.entity';
+export { Payroll } from './payroll.entity';

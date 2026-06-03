@@ -10,6 +10,7 @@ import {
   HttpStatus,
   Req,
   UseGuards,
+  Patch,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -21,6 +22,7 @@ import {
 import { UserService } from './user.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UserDto } from './dto/user.dto';
+import { UpdateProfileDto } from './dto/update-profile.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
 @ApiTags('Users')
@@ -40,6 +42,18 @@ export class UserController {
   async getMe(@Req() req: any) {
     const userId = req.user?.userId;
     return this.userService.getMe(userId);
+  }
+
+  @ApiOperation({
+    summary: 'Update current user profile',
+  })
+  @ApiResponse({ status: 200, description: 'Profile updated' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @UseGuards(JwtAuthGuard)
+  @Put('me')
+  async updateProfile(@Req() req: any, @Body() dto: UpdateProfileDto) {
+    const userId = req.user?.userId;
+    return this.userService.updateProfile(userId, dto);
   }
 
   @Get()

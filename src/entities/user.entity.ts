@@ -26,6 +26,21 @@ export class User extends BaseEntity {
   @Column('varchar', { nullable: true })
   avatar: string;
 
+  @Column('varchar', { nullable: true })
+  address: string;
+
+  @Column('varchar', { nullable: true })
+  province: string;
+
+  @Column('varchar', { nullable: true })
+  district: string;
+
+  @Column('varchar', { nullable: true })
+  birthday: string;
+
+  @Column('text', { nullable: true })
+  note: string;
+
   // Relations
   @OneToMany('Order', 'cashier')
   orders: any[];

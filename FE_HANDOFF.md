@@ -454,3 +454,280 @@ const orderStatusLabel = {
   cancelled: 'Da huy',
 };
 ```
+
+---
+
+## 9. Admin Dashboard Stats
+
+API lấy thống kê cho Dashboard Admin.
+
+### Doanh thu và đơn hàng
+
+```http
+GET /api/dashboard/revenue?filter=7days
+GET /api/dashboard/revenue?filter=today&branchId=branch-id
+```
+
+Query params:
+- `filter`: `today` | `yesterday` | `7days` | `thisMonth` | `lastMonth` (default: `7days`)
+- `branchId`: optional
+
+Response:
+
+```json
+{
+  "filter": "7days",
+  "from": "2026-05-28T00:00:00.000Z",
+  "to": "2026-06-03T23:59:59.999Z",
+  "summary": {
+    "orders": 35,
+    "revenue": 8031000
+  },
+  "hourly": [
+    {
+      "date": "2026-05-28",
+      "hour": 8,
+      "orders": 5,
+      "revenue": 750000
+    }
+  ],
+  "daily": [
+    {
+      "date": "2026-05-28",
+      "orders": 8,
+      "revenue": 1200000
+    }
+  ]
+}
+```
+
+### Thống kê khách hàng
+
+```http
+GET /api/dashboard/customers?filter=7days
+```
+
+Query params:
+- `filter`: `today` | `yesterday` | `7days` | `thisMonth` | `lastMonth` (default: `7days`)
+- `branchId`: optional
+
+Response:
+
+```json
+{
+  "filter": "7days",
+  "from": "2026-05-28T00:00:00.000Z",
+  "to": "2026-06-03T23:59:59.999Z",
+  "totalCustomers": 45,
+  "daily": [
+    {
+      "date": "2026-05-28",
+      "customers": 8,
+      "orders": 10
+    }
+  ]
+}
+```
+
+---
+
+## 10. Suppliers (Nhà cung cấp)
+
+API CRUD nhà cung cấp.
+
+### List suppliers
+
+```http
+GET /api/suppliers
+GET /api/suppliers?status=active
+GET /api/suppliers?search=abc
+```
+
+Query params:
+- `status`: `active` | `inactive` | `all`
+- `search`: tìm theo code, name, phone
+
+Response:
+
+```json
+[
+  {
+    "id": "supplier-id",
+    "code": "NCC000001",
+    "name": "Công ty TNHH ABC",
+    "phone": "0901234567",
+    "email": "abc@gmail.com",
+    "taxCode": "1234567890",
+    "companyName": "ABC Company",
+    "address": "123 ABC Street",
+    "province": "HCM",
+    "district": "Quận 1",
+    "ward": "Phường Bến Nghé",
+    "idCard": "079123456789",
+    "group": "Thực phẩm",
+    "note": "NCC chính",
+    "debt": 2500000,
+    "totalPurchase": 15000000,
+    "status": "active",
+    "createdAt": "2026-01-01T00:00:00Z",
+    "updatedAt": "2026-01-01T00:00:00Z"
+  }
+]
+```
+
+### Create supplier
+
+```http
+POST /api/suppliers
+```
+
+Body:
+
+```json
+{
+  "name": "Công ty TNHH ABC",
+  "phone": "0901234567",
+  "email": "abc@gmail.com",
+  "taxCode": "1234567890",
+  "companyName": "ABC Company",
+  "address": "123 ABC Street",
+  "province": "HCM",
+  "district": "Quận 1",
+  "ward": "Phường Bến Nghé",
+  "idCard": "079123456789",
+  "group": "Thực phẩm",
+  "note": "NCC chính",
+  "status": "active"
+}
+```
+
+### Update supplier
+
+```http
+PUT /api/suppliers/:id
+```
+
+### Delete supplier
+
+```http
+DELETE /api/suppliers/:id
+```
+
+---
+
+## 11. Payrolls (Bảng lương)
+
+API CRUD bảng lương.
+
+### List payrolls
+
+```http
+GET /api/payrolls
+GET /api/payrolls?status=draft
+```
+
+Query params:
+- `status`: `draft` | `estimated` | `finalized` | `cancelled` | `all`
+
+Response:
+
+```json
+[
+  {
+    "id": "payroll-id",
+    "code": "BL000001",
+    "name": "Bảng lương tháng 5/2026",
+    "cycle": "monthly",
+    "periodStart": "01/05/2026",
+    "periodEnd": "31/05/2026",
+    "totalSalary": 50000000,
+    "paid": 30000000,
+    "remaining": 20000000,
+    "status": "draft",
+    "note": null,
+    "createdAt": "2026-01-01T00:00:00Z",
+    "updatedAt": "2026-01-01T00:00:00Z"
+  }
+]
+```
+
+### Create payroll
+
+```http
+POST /api/payrolls
+```
+
+Body:
+
+```json
+{
+  "name": "Bảng lương tháng 5/2026",
+  "cycle": "monthly",
+  "periodStart": "01/05/2026",
+  "periodEnd": "31/05/2026",
+  "totalSalary": 50000000,
+  "paid": 30000000,
+  "status": "draft",
+  "note": "Ghi chú"
+}
+```
+
+### Update payroll
+
+```http
+PUT /api/payrolls/:id
+```
+
+### Delete payroll
+
+```http
+DELETE /api/payrolls/:id
+```
+
+---
+
+## 12. User Profile
+
+### Get current user profile
+
+```http
+GET /api/users/me
+```
+
+Response:
+
+```json
+{
+  "userId": "uuid",
+  "email": "admin@example.com",
+  "fullName": "Admin User",
+  "phone": "0901234567",
+  "role": "ADMIN",
+  "address": "123 ABC Street",
+  "province": "HCM",
+  "district": "Quận 1",
+  "birthday": "1990-01-01",
+  "note": "Ghi chú",
+  "avatar": null
+}
+```
+
+### Update profile
+
+```http
+PUT /api/users/me
+```
+
+Body:
+
+```json
+{
+  "fullName": "Admin User",
+  "phone": "0901234567",
+  "address": "123 ABC Street",
+  "province": "HCM",
+  "district": "Quận 1",
+  "birthday": "1990-01-01",
+  "note": "Ghi chú"
+}
+```

@@ -34,6 +34,9 @@ import { CouponModule } from './modules/coupon/coupon.module';
 import { ParentModule } from './modules/parent/parent.module';
 import { EmployeeModule } from './modules/employee/employee.module';
 import { WorkScheduleModule } from './modules/work-schedule/work-schedule.module';
+import { SupplierModule } from './modules/supplier/supplier.module';
+import { PayrollModule } from './modules/payroll/payroll.module';
+import { DashboardModule } from './modules/dashboard/dashboard.module';
 
 @Module({
   imports: [
@@ -70,6 +73,9 @@ import { WorkScheduleModule } from './modules/work-schedule/work-schedule.module
     ParentModule,
     EmployeeModule,
     WorkScheduleModule,
+    SupplierModule,
+    PayrollModule,
+    DashboardModule,
   ],
   controllers: [AppController],
   providers: [

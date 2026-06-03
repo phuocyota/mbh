@@ -46,9 +46,35 @@ export class UserService extends BaseService<User> {
     }
 
     return {
+      ...customerInfo,
       userId: user.id,
       email: user.email,
-      ...customerInfo,
+      fullName: user.fullName,
+      phone: user.phone,
+      role: user.role,
+      address: user.address,
+      province: user.province,
+      district: user.district,
+      birthday: user.birthday,
+      note: user.note,
+      avatar: user.avatar,
     };
+  }
+
+  async updateProfile(userId: string, data: {
+    fullName?: string;
+    phone?: string;
+    address?: string;
+    province?: string;
+    district?: string;
+    birthday?: string;
+    note?: string;
+  }) {
+    const user = await this.findOne(userId);
+    
+    Object.assign(user, data);
+    user.updatedBy = userId;
+    
+    return this.userRepository.save(user);
   }
 }
