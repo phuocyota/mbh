@@ -582,6 +582,62 @@ Response:
 }
 ```
 
+### Tình trạng hủy món
+
+```http
+GET /api/reports/cancellations?filter=7days
+```
+
+Query params:
+
+- `filter`: `today` | `yesterday` | `7days` | `thisMonth` | `lastMonth` (default: `7days`)
+- `from`, `to`: optional, nếu truyền sẽ ưu tiên hơn `filter`
+- `branchId`: optional
+
+Response:
+
+```json
+{
+  "filter": "7days",
+  "from": "2026-05-29T00:00:00.000Z",
+  "to": "2026-06-04T23:59:59.999Z",
+  "branchId": null,
+  "summary": {
+    "cancelledItems": 0,
+    "cancelledInvoices": 0
+  },
+  "stages": [
+    {
+      "key": "afterKitchen",
+      "name": "Hủy sau báo bếp",
+      "color": "#ff2d55",
+      "itemCount": 0,
+      "amount": 0,
+      "percentage": 0,
+      "items": []
+    },
+    {
+      "key": "afterCheckout",
+      "name": "Hủy sau tạm tính",
+      "color": "#ff7a00",
+      "itemCount": 0,
+      "amount": 0,
+      "percentage": 0,
+      "items": []
+    },
+    {
+      "key": "afterInspection",
+      "name": "Hủy khi kiểm đồ",
+      "color": "#ffc400",
+      "itemCount": 0,
+      "amount": 0,
+      "percentage": 0,
+      "items": []
+    }
+  ]
+}
+```
+
 ---
 
 ## 10. Suppliers (Nhà cung cấp)

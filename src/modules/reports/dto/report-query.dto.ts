@@ -86,3 +86,5 @@ export class MenuPerformanceQueryDto extends CustomerReportQueryDto {
   @IsIn(MENU_PERFORMANCE_GROUPS)
   groupBy?: (typeof MENU_PERFORMANCE_GROUPS)[number];
 }
+
+export class CancellationReportQueryDto extends CustomerReportQueryDto {}

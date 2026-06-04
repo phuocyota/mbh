@@ -238,6 +238,91 @@ export class ReportsService {
     };
   }
 
+  async cancellationReport(query: {
+    from?: string;
+    to?: string;
+    branchId?: string;
+    filter?: string;
+  }) {
+    const { from, to } = this.resolveCustomerRange(query);
+    const reportRows = await this.orderItemService.getCancellationReportRows({
+      from,
+      to,
+      branchId: query.branchId,
+    });
+
+    const stageConfigs = [
+      {
+        key: 'afterKitchen',
+        name: 'Hủy sau báo bếp',
+        color: '#ff2d55',
+        rows: reportRows.stages.afterKitchen,
+      },
+      {
+        key: 'afterCheckout',
+        name: 'Hủy sau tạm tính',
+        color: '#ff7a00',
+        rows: reportRows.stages.afterCheckout,
+      },
+      {
+        key: 'afterInspection',
+        name: 'Hủy khi kiểm đồ',
+        color: '#ffc400',
+        rows: reportRows.stages.afterInspection,
+      },
+    ];
+
+    const totalCancelledItems = stageConfigs.reduce(
+      (sum, stage) =>
+        sum +
+        stage.rows.reduce(
+          (stageSum, row) => stageSum + Number(row.quantity || 0),
+          0,
+        ),
+      0,
+    );
+
+    return {
+      filter: query.filter || null,
+      from,
+      to,
+      branchId: query.branchId || null,
+      summary: {
+        cancelledItems: totalCancelledItems,
+        cancelledInvoices: reportRows.cancelledInvoiceCount,
+      },
+      stages: stageConfigs.map((stage) => {
+        const itemCount = stage.rows.reduce(
+          (sum, row) => sum + Number(row.quantity || 0),
+          0,
+        );
+        const amount = stage.rows.reduce(
+          (sum, row) => sum + Number(row.amount || 0),
+          0,
+        );
+
+        return {
+          key: stage.key,
+          name: stage.name,
+          color: stage.color,
+          itemCount,
+          amount,
+          percentage:
+            totalCancelledItems > 0
+              ? Number(((itemCount / totalCancelledItems) * 100).toFixed(2))
+              : 0,
+          items: stage.rows.map((row) => ({
+            productId: row.productId,
+            productName: row.productName,
+            quantity: Number(row.quantity || 0),
+            amount: Number(row.amount || 0),
+            invoiceCount: Number(row.invoiceCount || 0),
+          })),
+        };
+      }),
+    };
+  }
+
   async topProducts(query: {
     from?: string;
     to?: string;

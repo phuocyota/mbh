@@ -6,7 +6,17 @@ import { BaseService } from '../../common/sql/base.service';
 import {
   ORDER_ITEM_STATUS,
   ORDER_PAYMENT_STATUS,
+  ORDER_STATUS,
+  REFUND_STATUS,
 } from '../../common/constant/constant';
+
+type CancellationRow = {
+  productId: string;
+  productName: string;
+  quantity: string;
+  amount: string;
+  invoiceCount: string;
+};
 
 @Injectable()
 export class OrderItemService extends BaseService<OrderItem> {
@@ -275,6 +285,30 @@ export class OrderItemService extends BaseService<OrderItem> {
     }>();
   }
 
+  async getCancellationReportRows(query: {
+    from: Date;
+    to: Date;
+    branchId?: string;
+  }) {
+    const [afterKitchenRows, afterCheckoutRows, afterInspectionRows] =
+      await Promise.all([
+        this.getAfterKitchenCancellationRows(query),
+        this.getAfterCheckoutCancellationRows(query),
+        this.getAfterInspectionCancellationRows(query),
+      ]);
+
+    const cancelledInvoiceCount = await this.getCancelledInvoiceCount(query);
+
+    return {
+      cancelledInvoiceCount,
+      stages: {
+        afterKitchen: afterKitchenRows,
+        afterCheckout: afterCheckoutRows,
+        afterInspection: afterInspectionRows,
+      },
+    };
+  }
+
   private createMenuPerformanceBaseQuery(query: {
     from: Date;
     to: Date;
@@ -301,6 +335,212 @@ export class OrderItemService extends BaseService<OrderItem> {
     }
 
     return qb;
+  }
+
+  private async getAfterKitchenCancellationRows(query: {
+    from: Date;
+    to: Date;
+    branchId?: string;
+  }) {
+    const itemCancelQb = this.orderItemRepository
+      .createQueryBuilder('oi')
+      .innerJoin('orders', 'o', 'o.id = oi.order_id')
+      .select('oi.product_id', 'productId')
+      .addSelect('oi.product_name', 'productName')
+      .addSelect('SUM(oi.quantity)', 'quantity')
+      .addSelect('COALESCE(SUM(oi.total_amount), 0)', 'amount')
+      .addSelect('COUNT(DISTINCT o.id)', 'invoiceCount')
+      .where('oi.updated_at BETWEEN :from AND :to', {
+        from: query.from,
+        to: query.to,
+      })
+      .andWhere('oi.status = :itemStatus', {
+        itemStatus: ORDER_ITEM_STATUS.CANCELLED,
+      })
+      .andWhere('o.status != :cancelledOrderStatus', {
+        cancelledOrderStatus: ORDER_STATUS.CANCELLED,
+      })
+      .andWhere(
+        `EXISTS (
+          SELECT 1
+          FROM kitchen_ticket_items kti
+          INNER JOIN kitchen_tickets kt ON kt.id = kti.kitchen_ticket_id
+          WHERE kti.order_item_id = oi.id OR kt.order_id = o.id
+        )`,
+      )
+      .groupBy('oi.product_id')
+      .addGroupBy('oi.product_name');
+
+    const orderCancelQb = this.orderItemRepository
+      .createQueryBuilder('oi')
+      .innerJoin('orders', 'o', 'o.id = oi.order_id')
+      .select('oi.product_id', 'productId')
+      .addSelect('oi.product_name', 'productName')
+      .addSelect('SUM(oi.quantity)', 'quantity')
+      .addSelect('COALESCE(SUM(oi.total_amount), 0)', 'amount')
+      .addSelect('COUNT(DISTINCT o.id)', 'invoiceCount')
+      .where('o.cancelled_at BETWEEN :from AND :to', {
+        from: query.from,
+        to: query.to,
+      })
+      .andWhere('o.status = :cancelledOrderStatus', {
+        cancelledOrderStatus: ORDER_STATUS.CANCELLED,
+      })
+      .andWhere('oi.status != :refundedItemStatus', {
+        refundedItemStatus: ORDER_ITEM_STATUS.REFUNDED,
+      })
+      .andWhere(
+        `EXISTS (
+          SELECT 1
+          FROM kitchen_tickets kt
+          WHERE kt.order_id = o.id
+        )`,
+      )
+      .groupBy('oi.product_id')
+      .addGroupBy('oi.product_name');
+
+    if (query.branchId) {
+      itemCancelQb.andWhere('o.branch_id = :branchId', {
+        branchId: query.branchId,
+      });
+      orderCancelQb.andWhere('o.branch_id = :branchId', {
+        branchId: query.branchId,
+      });
+    }
+
+    return this.mergeCancellationRows([
+      ...(await itemCancelQb.getRawMany<CancellationRow>()),
+      ...(await orderCancelQb.getRawMany<CancellationRow>()),
+    ]);
+  }
+
+  private async getAfterCheckoutCancellationRows(query: {
+    from: Date;
+    to: Date;
+    branchId?: string;
+  }) {
+    const qb = this.orderItemRepository
+      .createQueryBuilder('oi')
+      .innerJoin('orders', 'o', 'o.id = oi.order_id')
+      .select('oi.product_id', 'productId')
+      .addSelect('oi.product_name', 'productName')
+      .addSelect('SUM(oi.quantity)', 'quantity')
+      .addSelect('COALESCE(SUM(oi.total_amount), 0)', 'amount')
+      .addSelect('COUNT(DISTINCT o.id)', 'invoiceCount')
+      .where('o.cancelled_at BETWEEN :from AND :to', {
+        from: query.from,
+        to: query.to,
+      })
+      .andWhere('o.status = :cancelledOrderStatus', {
+        cancelledOrderStatus: ORDER_STATUS.CANCELLED,
+      })
+      .andWhere('oi.status != :refundedItemStatus', {
+        refundedItemStatus: ORDER_ITEM_STATUS.REFUNDED,
+      })
+      .andWhere(
+        `NOT EXISTS (
+          SELECT 1
+          FROM kitchen_tickets kt
+          WHERE kt.order_id = o.id
+        )`,
+      )
+      .groupBy('oi.product_id')
+      .addGroupBy('oi.product_name')
+      .orderBy('"quantity"', 'DESC');
+
+    if (query.branchId) {
+      qb.andWhere('o.branch_id = :branchId', { branchId: query.branchId });
+    }
+
+    return qb.getRawMany<CancellationRow>();
+  }
+
+  private async getAfterInspectionCancellationRows(query: {
+    from: Date;
+    to: Date;
+    branchId?: string;
+  }) {
+    const qb = this.orderItemRepository
+      .createQueryBuilder('oi')
+      .innerJoin('refund_items', 'ri', 'ri.order_item_id = oi.id')
+      .innerJoin('refunds', 'r', 'r.id = ri.refund_id')
+      .innerJoin('orders', 'o', 'o.id = r.order_id')
+      .select('oi.product_id', 'productId')
+      .addSelect('oi.product_name', 'productName')
+      .addSelect('SUM(ri.quantity)', 'quantity')
+      .addSelect('COALESCE(SUM(ri.amount), 0)', 'amount')
+      .addSelect('COUNT(DISTINCT o.id)', 'invoiceCount')
+      .where(
+        'COALESCE(r.completed_at, r.updated_at, r.created_at) BETWEEN :from AND :to',
+        {
+          from: query.from,
+          to: query.to,
+        },
+      )
+      .andWhere('r.status = :refundStatus', {
+        refundStatus: REFUND_STATUS.COMPLETED,
+      })
+      .groupBy('oi.product_id')
+      .addGroupBy('oi.product_name')
+      .orderBy('"quantity"', 'DESC');
+
+    if (query.branchId) {
+      qb.andWhere('o.branch_id = :branchId', { branchId: query.branchId });
+    }
+
+    return qb.getRawMany<CancellationRow>();
+  }
+
+  private async getCancelledInvoiceCount(query: {
+    from: Date;
+    to: Date;
+    branchId?: string;
+  }) {
+    const qb = this.orderItemRepository
+      .createQueryBuilder('oi')
+      .innerJoin('orders', 'o', 'o.id = oi.order_id')
+      .select('COUNT(DISTINCT o.id)', 'count')
+      .where('o.cancelled_at BETWEEN :from AND :to', {
+        from: query.from,
+        to: query.to,
+      })
+      .andWhere('o.status = :cancelledOrderStatus', {
+        cancelledOrderStatus: ORDER_STATUS.CANCELLED,
+      });
+
+    if (query.branchId) {
+      qb.andWhere('o.branch_id = :branchId', { branchId: query.branchId });
+    }
+
+    const row = await qb.getRawOne<{ count: string }>();
+    return Number(row?.count || 0);
+  }
+
+  private mergeCancellationRows(rows: CancellationRow[]) {
+    const merged = new Map<string, CancellationRow>();
+
+    for (const row of rows) {
+      const key = row.productId || row.productName;
+      const current = merged.get(key);
+      if (!current) {
+        merged.set(key, { ...row });
+        continue;
+      }
+
+      current.quantity = String(
+        Number(current.quantity || 0) + Number(row.quantity || 0),
+      );
+      current.amount = String(
+        Number(current.amount || 0) + Number(row.amount || 0),
+      );
+      current.invoiceCount = String(
+        Number(current.invoiceCount || 0) + Number(row.invoiceCount || 0),
+      );
+    }
+
+    return Array.from(merged.values()).sort(
+      (a, b) => Number(b.quantity || 0) - Number(a.quantity || 0),
+    );
   }
 
   private getMenuItemTypeCase() {

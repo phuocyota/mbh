@@ -8,6 +8,7 @@ import {
 } from '@nestjs/swagger';
 import { ReportsService } from './reports.service';
 import {
+  CancellationReportQueryDto,
   CustomerReportQueryDto,
   DateRangeQueryDto,
   MenuPerformanceQueryDto,
@@ -71,6 +72,18 @@ export class ReportsController {
   })
   async menuPerformance(@Query() query: MenuPerformanceQueryDto) {
     return this.reportsService.menuPerformance(query);
+  }
+
+  @Get('cancellations')
+  @ApiOperation({ summary: 'Báo cáo tình trạng hủy món' })
+  @ApiQuery({
+    name: 'filter',
+    required: false,
+    description: 'Time filter: today, yesterday, 7days, thisMonth, lastMonth',
+    enum: ['today', 'yesterday', '7days', 'thisMonth', 'lastMonth'],
+  })
+  async cancellationReport(@Query() query: CancellationReportQueryDto) {
+    return this.reportsService.cancellationReport(query);
   }
 
   @Get('top-products')
