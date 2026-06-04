@@ -1,7 +1,8 @@
-import { Entity, Column, OneToMany } from 'typeorm';
+import { Entity, Column, OneToMany, ManyToOne, JoinColumn } from 'typeorm';
 import { Exclude } from 'class-transformer';
 import { BaseEntity } from '../common/sql/base.entity';
 import { COMMON_STATUS, USER_ROLE } from '../common/constant/constant';
+import { Branch } from './branch.entity';
 
 @Entity('users')
 export class User extends BaseEntity {
@@ -24,6 +25,9 @@ export class User extends BaseEntity {
   @Column('varchar', { default: COMMON_STATUS.ACTIVE })
   status: string; // ACTIVE, INACTIVE
 
+  @Column('uuid', { nullable: true, name: 'branch_id' })
+  branchId: string;
+
   @Column('varchar', { nullable: true })
   avatar: string;
 
@@ -43,6 +47,10 @@ export class User extends BaseEntity {
   note: string;
 
   // Relations
+  @ManyToOne(() => Branch, { nullable: true })
+  @JoinColumn({ name: 'branch_id' })
+  branch: Branch;
+
   @OneToMany('Order', 'cashier')
   orders: any[];
 

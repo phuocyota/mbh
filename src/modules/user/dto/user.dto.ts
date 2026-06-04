@@ -22,4 +22,16 @@ export class UserDto extends BaseDto {
     example: 'ACTIVE',
   })
   status: string;
+
+  @ApiProperty({
+    description: 'Branch ID for manager users',
+    required: false,
+  })
+  branchId?: string;
+
+  @ApiProperty({
+    description: 'Branch name for manager users',
+    required: false,
+  })
+  branchName?: string;
 }

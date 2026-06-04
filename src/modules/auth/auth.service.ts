@@ -32,11 +32,20 @@ export class AuthService {
   }
 
   async login(user: any, deviceId?: string) {
+    const managerBranch =
+      user.role === USER_ROLE.MANAGER
+        ? {
+            branchId: user.branchId || null,
+            branchName: user.branch?.name || null,
+          }
+        : {};
+
     const payload = {
       email: user.email,
       userId: user.id,
       userType: user.role,
       deviceId: deviceId || 'default-device',
+      ...managerBranch,
     };
 
     const result: any = {
@@ -46,6 +55,7 @@ export class AuthService {
       deviceId: deviceId || 'default-device',
       fullName: user.fullName,
       avatar: user.avatar || null,
+      ...managerBranch,
     };
 
     // Add student-specific info if role is STUDENT

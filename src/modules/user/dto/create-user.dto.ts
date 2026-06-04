@@ -5,6 +5,7 @@ import {
   IsEmail,
   IsOptional,
   IsEnum,
+  IsUUID,
 } from 'class-validator';
 import {
   ACTIVE_INACTIVE_STATUS_VALUES,
@@ -62,6 +63,14 @@ export class CreateUserDto {
   @IsOptional()
   @IsEnum(ACTIVE_INACTIVE_STATUS_VALUES)
   status?: string;
+
+  @ApiProperty({
+    description: 'Branch ID for manager users',
+    required: false,
+  })
+  @IsOptional()
+  @IsUUID()
+  branchId?: string;
 
   @ApiProperty({
     description: 'Card ID for RFID/card login',

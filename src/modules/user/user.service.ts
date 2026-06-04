@@ -21,7 +21,10 @@ export class UserService extends BaseService<User> {
   }
 
   async findByEmail(email: string): Promise<User | null> {
-    return this.userRepository.findOne({ where: { email } });
+    return this.userRepository.findOne({
+      where: { email },
+      relations: ['branch'],
+    });
   }
 
   async createStaffUser(data: {
@@ -40,7 +43,10 @@ export class UserService extends BaseService<User> {
 
   async getMe(userId: string) {
     const customerInfo = await this.customerService.getUserCustomerInfo(userId);
-    const user = await this.findById(userId);
+    const user = await this.userRepository.findOne({
+      where: { id: userId },
+      relations: ['branch'],
+    });
 
     if (!user) {
       throw new NotFoundException('User not found');
@@ -59,6 +65,8 @@ export class UserService extends BaseService<User> {
       birthday: user.birthday,
       note: user.note,
       avatar: user.avatar,
+      branchId: user.branchId || null,
+      branchName: user.branch?.name || null,
     };
   }
 
