@@ -71,3 +71,18 @@ export class CustomerReportQueryDto extends DateRangeQueryDto {
   @IsIn(CUSTOMER_REPORT_FILTERS)
   filter?: (typeof CUSTOMER_REPORT_FILTERS)[number];
 }
+
+const MENU_PERFORMANCE_GROUPS = ['category', 'type'] as const;
+
+export class MenuPerformanceQueryDto extends CustomerReportQueryDto {
+  @ApiProperty({
+    description:
+      'Nhóm dữ liệu biểu đồ: category = theo nhóm món, type = đồ ăn/đồ uống',
+    enum: MENU_PERFORMANCE_GROUPS,
+    required: false,
+    default: 'category',
+  })
+  @IsOptional()
+  @IsIn(MENU_PERFORMANCE_GROUPS)
+  groupBy?: (typeof MENU_PERFORMANCE_GROUPS)[number];
+}

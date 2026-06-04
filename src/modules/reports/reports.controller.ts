@@ -10,6 +10,7 @@ import { ReportsService } from './reports.service';
 import {
   CustomerReportQueryDto,
   DateRangeQueryDto,
+  MenuPerformanceQueryDto,
   TopProductsQueryDto,
 } from './dto/report-query.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -54,6 +55,24 @@ export class ReportsController {
     return this.reportsService.customerStats(query);
   }
 
+  @Get('menu-performance')
+  @ApiOperation({ summary: 'Báo cáo hiệu quả thực đơn' })
+  @ApiQuery({
+    name: 'filter',
+    required: false,
+    description: 'Time filter: today, yesterday, 7days, thisMonth, lastMonth',
+    enum: ['today', 'yesterday', '7days', 'thisMonth', 'lastMonth'],
+  })
+  @ApiQuery({
+    name: 'groupBy',
+    required: false,
+    description: 'category = theo nhóm món, type = đồ ăn/đồ uống',
+    enum: ['category', 'type'],
+  })
+  async menuPerformance(@Query() query: MenuPerformanceQueryDto) {
+    return this.reportsService.menuPerformance(query);
+  }
+
   @Get('top-products')
   @ApiOperation({ summary: 'Top sản phẩm bán chạy' })
   async topProducts(@Query() query: TopProductsQueryDto) {
@@ -83,13 +102,17 @@ export class ReportsController {
   }
 
   @Get('end-of-day')
-  @ApiOperation({ summary: 'Báo cáo cuối ngày theo sản phẩm (reportDataEndDay)' })
+  @ApiOperation({
+    summary: 'Báo cáo cuối ngày theo sản phẩm (reportDataEndDay)',
+  })
   async endOfDay(@Query() query: DateRangeQueryDto) {
     return this.reportsService.endOfDay(query);
   }
 
   @Get('inventory')
-  @ApiOperation({ summary: 'Báo cáo tồn kho chi tiết theo mặt hàng (productInventoryData)' })
+  @ApiOperation({
+    summary: 'Báo cáo tồn kho chi tiết theo mặt hàng (productInventoryData)',
+  })
   @ApiQuery({ name: 'branchId', required: false, type: String })
   async inventoryReport(@Query('branchId') branchId?: string) {
     return this.reportsService.inventoryReport(branchId);

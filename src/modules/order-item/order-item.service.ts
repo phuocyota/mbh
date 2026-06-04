@@ -159,11 +159,7 @@ export class OrderItemService extends BaseService<OrderItem> {
     }>();
   }
 
-  async getEndOfDayItems(query: {
-    from: Date;
-    to: Date;
-    branchId?: string;
-  }) {
+  async getEndOfDayItems(query: { from: Date; to: Date; branchId?: string }) {
     const qb = this.orderItemRepository
       .createQueryBuilder('oi')
       .innerJoin('orders', 'o', 'o.id = oi.order_id')
@@ -174,14 +170,8 @@ export class OrderItemService extends BaseService<OrderItem> {
       .addSelect('SUM(oi.quantity)', 'qty')
       .addSelect('COALESCE(SUM(oi.total_amount), 0)', 'total')
       .addSelect('COALESCE(SUM(oi.subtotal), 0)', 'gross')
-      .addSelect(
-        'COALESCE(SUM(oi.total_amount) * 0.1, 0)',
-        'tax',
-      )
-      .addSelect(
-        'COALESCE(SUM(oi.total_amount) * 0.9, 0)',
-        'net',
-      )
+      .addSelect('COALESCE(SUM(oi.total_amount) * 0.1, 0)', 'tax')
+      .addSelect('COALESCE(SUM(oi.total_amount) * 0.9, 0)', 'net')
       .leftJoin('products', 'p', 'p.id = oi.product_id')
       .where('o.created_at BETWEEN :from AND :to', {
         from: query.from,
@@ -216,5 +206,114 @@ export class OrderItemService extends BaseService<OrderItem> {
       tax: string;
       net: string;
     }>();
+  }
+
+  async getMenuAverageRows(query: { from: Date; to: Date; branchId?: string }) {
+    const itemTypeCase = this.getMenuItemTypeCase();
+    const qb = this.createMenuPerformanceBaseQuery(query)
+      .select('COALESCE(SUM(oi.total_amount), 0)', 'totalRevenue')
+      .addSelect('COALESCE(SUM(oi.quantity), 0)', 'totalQuantity')
+      .addSelect(
+        `COALESCE(SUM(CASE WHEN ${itemTypeCase} = 'FOOD' THEN oi.total_amount ELSE 0 END), 0)`,
+        'foodRevenue',
+      )
+      .addSelect(
+        `COALESCE(SUM(CASE WHEN ${itemTypeCase} = 'FOOD' THEN oi.quantity ELSE 0 END), 0)`,
+        'foodQuantity',
+      )
+      .addSelect(
+        `COALESCE(SUM(CASE WHEN ${itemTypeCase} = 'DRINK' THEN oi.total_amount ELSE 0 END), 0)`,
+        'drinkRevenue',
+      )
+      .addSelect(
+        `COALESCE(SUM(CASE WHEN ${itemTypeCase} = 'DRINK' THEN oi.quantity ELSE 0 END), 0)`,
+        'drinkQuantity',
+      );
+
+    return qb.getRawOne<{
+      totalRevenue: string;
+      totalQuantity: string;
+      foodRevenue: string;
+      foodQuantity: string;
+      drinkRevenue: string;
+      drinkQuantity: string;
+    }>();
+  }
+
+  async getMenuPerformanceGroups(query: {
+    from: Date;
+    to: Date;
+    branchId?: string;
+    groupBy: 'category' | 'type';
+  }) {
+    const itemTypeCase = this.getMenuItemTypeCase();
+    const groupId =
+      query.groupBy === 'type'
+        ? itemTypeCase
+        : "COALESCE(CAST(c.id AS text), 'unknown')";
+    const groupName =
+      query.groupBy === 'type'
+        ? `CASE WHEN ${itemTypeCase} = 'DRINK' THEN 'Đồ uống' ELSE 'Đồ ăn' END`
+        : "COALESCE(c.name, 'Chưa phân loại')";
+
+    const qb = this.createMenuPerformanceBaseQuery(query)
+      .select(groupId, 'id')
+      .addSelect(groupName, 'name')
+      .addSelect('COALESCE(SUM(oi.total_amount), 0)', 'revenue')
+      .addSelect('COALESCE(SUM(oi.quantity), 0)', 'quantity')
+      .addSelect('COUNT(DISTINCT o.id)', 'orderCount')
+      .groupBy(groupId)
+      .addGroupBy(groupName)
+      .orderBy('"revenue"', 'DESC');
+
+    return qb.getRawMany<{
+      id: string;
+      name: string;
+      revenue: string;
+      quantity: string;
+      orderCount: string;
+    }>();
+  }
+
+  private createMenuPerformanceBaseQuery(query: {
+    from: Date;
+    to: Date;
+    branchId?: string;
+  }) {
+    const qb = this.orderItemRepository
+      .createQueryBuilder('oi')
+      .innerJoin('orders', 'o', 'o.id = oi.order_id')
+      .leftJoin('products', 'p', 'p.id = oi.product_id')
+      .leftJoin('categories', 'c', 'c.id = p.category_id')
+      .where('o.created_at BETWEEN :from AND :to', {
+        from: query.from,
+        to: query.to,
+      })
+      .andWhere('o.payment_status = :paymentStatus', {
+        paymentStatus: ORDER_PAYMENT_STATUS.PAID,
+      })
+      .andWhere('oi.status = :itemStatus', {
+        itemStatus: ORDER_ITEM_STATUS.NORMAL,
+      });
+
+    if (query.branchId) {
+      qb.andWhere('o.branch_id = :branchId', { branchId: query.branchId });
+    }
+
+    return qb;
+  }
+
+  private getMenuItemTypeCase() {
+    return `
+      CASE
+        WHEN COALESCE(c.name, '') ILIKE '%đồ uống%'
+          OR COALESCE(c.name, '') ILIKE '%do uong%'
+          OR COALESCE(c.name, '') ILIKE '%nước%'
+          OR COALESCE(c.name, '') ILIKE '%nuoc%'
+          OR lower(COALESCE(p.unit, '')) IN ('ly', 'coc', 'cốc', 'chai', 'lon')
+        THEN 'DRINK'
+        ELSE 'FOOD'
+      END
+    `;
   }
 }

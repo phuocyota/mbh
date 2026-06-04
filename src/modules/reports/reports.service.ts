@@ -178,6 +178,66 @@ export class ReportsService {
     };
   }
 
+  async menuPerformance(query: {
+    from?: string;
+    to?: string;
+    branchId?: string;
+    filter?: string;
+    groupBy?: 'category' | 'type';
+  }) {
+    const { from, to } = this.resolveCustomerRange(query);
+    const groupBy = query.groupBy || 'category';
+    const [averageRow, groupRows] = await Promise.all([
+      this.orderItemService.getMenuAverageRows({
+        from,
+        to,
+        branchId: query.branchId,
+      }),
+      this.orderItemService.getMenuPerformanceGroups({
+        from,
+        to,
+        branchId: query.branchId,
+        groupBy,
+      }),
+    ]);
+
+    const totalRevenue = Number(averageRow?.totalRevenue || 0);
+    const totalQuantity = Number(averageRow?.totalQuantity || 0);
+    const foodRevenue = Number(averageRow?.foodRevenue || 0);
+    const foodQuantity = Number(averageRow?.foodQuantity || 0);
+    const drinkRevenue = Number(averageRow?.drinkRevenue || 0);
+    const drinkQuantity = Number(averageRow?.drinkQuantity || 0);
+
+    return {
+      filter: query.filter || null,
+      from,
+      to,
+      branchId: query.branchId || null,
+      groupBy,
+      summary: {
+        averagePerItem: this.safeAverage(totalRevenue, totalQuantity),
+        averageFood: this.safeAverage(foodRevenue, foodQuantity),
+        averageDrink: this.safeAverage(drinkRevenue, drinkQuantity),
+        totalRevenue,
+        totalQuantity,
+      },
+      groups: groupRows.map((row) => {
+        const revenue = Number(row.revenue || 0);
+        return {
+          id: row.id,
+          name: row.name,
+          revenue,
+          quantity: Number(row.quantity || 0),
+          orderCount: Number(row.orderCount || 0),
+          percentage:
+            totalRevenue > 0
+              ? Number(((revenue / totalRevenue) * 100).toFixed(2))
+              : 0,
+        };
+      }),
+    };
+  }
+
   async topProducts(query: {
     from?: string;
     to?: string;
@@ -290,11 +350,7 @@ export class ReportsService {
     }));
   }
 
-  async endOfDay(query: {
-    from?: string;
-    to?: string;
-    branchId?: string;
-  }) {
+  async endOfDay(query: { from?: string; to?: string; branchId?: string }) {
     const { from, to } = this.resolveRange(query);
     const rows = await this.orderItemService.getEndOfDayItems({
       from,
@@ -333,5 +389,13 @@ export class ReportsService {
         updatedAt: item.updatedAt,
       })),
     };
+  }
+
+  private safeAverage(total: number, quantity: number) {
+    if (quantity <= 0) {
+      return 0;
+    }
+
+    return Math.round(total / quantity);
   }
 }

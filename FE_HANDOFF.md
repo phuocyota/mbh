@@ -106,31 +106,31 @@ Authorization: Bearer <accessToken>
 
 ### Field Notes
 
-| Field | Mô tả |
-|-------|-------|
-| `user` | Thông tin học sinh (id, fullName, avatarUrl) |
-| `wallet.balance` | Số dư hiện tại (number) |
-| `notifications` | 5 thông báo gần nhất |
-| `todayOrder` | Đơn hàng hôm nay, `null` nếu chưa có |
-| `recentHistory` | 5 giao dịch gần nhất |
-| `statistics.week/month` | Chi tiêu và giới hạn để hiển thị progress bar |
-| `createdAt`, `orderedAt` | ISO datetime có timezone |
+| Field                    | Mô tả                                         |
+| ------------------------ | --------------------------------------------- |
+| `user`                   | Thông tin học sinh (id, fullName, avatarUrl)  |
+| `wallet.balance`         | Số dư hiện tại (number)                       |
+| `notifications`          | 5 thông báo gần nhất                          |
+| `todayOrder`             | Đơn hàng hôm nay, `null` nếu chưa có          |
+| `recentHistory`          | 5 giao dịch gần nhất                          |
+| `statistics.week/month`  | Chi tiêu và giới hạn để hiển thị progress bar |
+| `createdAt`, `orderedAt` | ISO datetime có timezone                      |
 
 ### Enums
 
 ```ts
 type OrderStatus = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11;
 
-type TransactionStatus = "PENDING" | "COMPLETED" | "FAILED" | "REFUNDED";
+type TransactionStatus = 'PENDING' | 'COMPLETED' | 'FAILED' | 'REFUNDED';
 
 type NotificationType =
-  | "ORDER_CREATED"
-  | "ORDER_RECEIVED"
-  | "PAYMENT_DEDUCTED"
-  | "TOPUP_SUCCESS"
-  | "SYSTEM";
+  | 'ORDER_CREATED'
+  | 'ORDER_RECEIVED'
+  | 'PAYMENT_DEDUCTED'
+  | 'TOPUP_SUCCESS'
+  | 'SYSTEM';
 
-type TransactionType = "ORDER_PAYMENT" | "TOPUP" | "REFUND";
+type TransactionType = 'ORDER_PAYMENT' | 'TOPUP' | 'REFUND';
 ```
 
 ### Error Response
@@ -436,16 +436,16 @@ Các status quan trọng hiện tại:
 
 ```ts
 type OrderStatus =
-  | 0  // CANCELLED
-  | 1  // PREPARING
-  | 2  // PENDING
-  | 3  // PENDING_PAYMENT
-  | 4  // READY_TO_PICKUP
-  | 5  // DONE
-  | 6  // REFUNDED
-  | 7  // DRAFT
-  | 8  // WAITING
-  | 9  // READY
+  | 0 // CANCELLED
+  | 1 // PREPARING
+  | 2 // PENDING
+  | 3 // PENDING_PAYMENT
+  | 4 // READY_TO_PICKUP
+  | 5 // DONE
+  | 6 // REFUNDED
+  | 7 // DRAFT
+  | 8 // WAITING
+  | 9 // READY
   | 10 // RECEIVED
   | 11; // COMPLETED
 ```
@@ -483,6 +483,7 @@ GET /api/reports/revenue?from=2026-06-03&to=2026-06-03&branchId=branch-id
 ```
 
 Query params:
+
 - `from`: optional, ISO date/datetime. Default: 30 ngày trước `to`
 - `to`: optional, ISO date/datetime. Default: hôm nay
 - `branchId`: optional
@@ -517,6 +518,7 @@ GET /api/reports/customers?filter=7days
 ```
 
 Query params:
+
 - `filter`: `today` | `yesterday` | `7days` | `thisMonth` | `lastMonth` (default: `7days`)
 - `branchId`: optional
 
@@ -538,6 +540,48 @@ Response:
 }
 ```
 
+### Hiệu quả thực đơn
+
+```http
+GET /api/reports/menu-performance?filter=7days&groupBy=category
+```
+
+Query params:
+
+- `filter`: `today` | `yesterday` | `7days` | `thisMonth` | `lastMonth` (default: `7days`)
+- `from`, `to`: optional, nếu truyền sẽ ưu tiên hơn `filter`
+- `branchId`: optional
+- `groupBy`: `category` | `type` (default: `category`)
+
+Response:
+
+```json
+{
+  "filter": "7days",
+  "from": "2026-05-29T00:00:00.000Z",
+  "to": "2026-06-04T23:59:59.999Z",
+  "branchId": null,
+  "groupBy": "category",
+  "summary": {
+    "averagePerItem": 85000,
+    "averageFood": 120000,
+    "averageDrink": 45000,
+    "totalRevenue": 210000,
+    "totalQuantity": 3
+  },
+  "groups": [
+    {
+      "id": "category-id",
+      "name": "Món chính",
+      "revenue": 120000,
+      "quantity": 1,
+      "orderCount": 1,
+      "percentage": 57.14
+    }
+  ]
+}
+```
+
 ---
 
 ## 10. Suppliers (Nhà cung cấp)
@@ -553,6 +597,7 @@ GET /api/suppliers?search=abc
 ```
 
 Query params:
+
 - `status`: `active` | `inactive` | `all`
 - `search`: tìm theo code, name, phone
 
@@ -636,6 +681,7 @@ GET /api/payrolls?status=DRAFT
 ```
 
 Query params:
+
 - `status`: `DRAFT` | `ESTIMATED` | `FINALIZED` | `CANCELLED` | `ALL`
 
 Response:
