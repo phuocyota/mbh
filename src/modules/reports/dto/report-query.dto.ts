@@ -4,8 +4,10 @@ import {
   IsUUID,
   IsDateString,
   IsInt,
+  IsNumber,
   Min,
   IsIn,
+  Matches,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 
@@ -88,3 +90,38 @@ export class MenuPerformanceQueryDto extends CustomerReportQueryDto {
 }
 
 export class CancellationReportQueryDto extends CustomerReportQueryDto {}
+
+export class MonthlyOrderPlanQueryDto extends DateRangeQueryDto {
+  @ApiProperty({
+    description: 'Month for report in YYYY-MM format. Ignored when from/to is provided.',
+    required: false,
+    example: '2026-06',
+  })
+  @IsOptional()
+  @Matches(/^\d{4}-\d{2}$/)
+  month?: string;
+
+  @ApiProperty({
+    description: 'Minimum plan multiplier',
+    required: false,
+    default: 1.2,
+    example: 1.2,
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  minRate?: number;
+
+  @ApiProperty({
+    description: 'Maximum plan multiplier',
+    required: false,
+    default: 1.5,
+    example: 1.5,
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  maxRate?: number;
+}

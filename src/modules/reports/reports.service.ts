@@ -80,6 +80,29 @@ export class ReportsService {
     return { from, to };
   }
 
+  private resolveMonthlyRange(query: {
+    from?: string;
+    to?: string;
+    month?: string;
+  }): ResolvedDateRange {
+    if (query.from || query.to) {
+      return this.resolveRange(query);
+    }
+
+    const now = new Date();
+    const [year, month] = (query.month || '').split('-').map(Number);
+    const resolvedYear = Number.isInteger(year) ? year : now.getFullYear();
+    const resolvedMonth = Number.isInteger(month) ? month - 1 : now.getMonth();
+
+    const from = new Date(resolvedYear, resolvedMonth, 1);
+    from.setHours(0, 0, 0, 0);
+
+    const to = new Date(resolvedYear, resolvedMonth + 1, 0);
+    to.setHours(23, 59, 59, 999);
+
+    return { from, to };
+  }
+
   async revenueSummary(query: {
     from?: string;
     to?: string;
@@ -458,6 +481,85 @@ export class ReportsService {
         tax: Number(row.tax),
         net: Number(row.net),
       })),
+    };
+  }
+
+  async monthlyOrderPlan(query: {
+    from?: string;
+    to?: string;
+    month?: string;
+    branchId?: string;
+    minRate?: number;
+    maxRate?: number;
+  }) {
+    const { from, to } = this.resolveMonthlyRange(query);
+    const minRate = Number(query.minRate || 1.2);
+    const maxRate = Number(query.maxRate || 1.5);
+    const [rows, revenueRows] = await Promise.all([
+      this.orderItemService.getMonthlyOrderPlanRows({
+        from,
+        to,
+        branchId: query.branchId,
+        minRate,
+        maxRate,
+      }),
+      this.orderService.getRevenueSummaryRows({
+        from,
+        to,
+        branchId: query.branchId,
+      }),
+    ]);
+
+    const revenueMonth = Number(revenueRows.totalRow?.totalRevenue || 0);
+    const firstRow = rows[0];
+
+    return {
+      companyName: 'CONG TY TNHH KIDO EDU',
+      schoolName: firstRow?.branchName || 'KIDO',
+      title: 'Ke hoach dat hang hoa trong Thang',
+      from,
+      to,
+      month: `${from.getFullYear()}-${String(from.getMonth() + 1).padStart(2, '0')}`,
+      branchId: query.branchId || firstRow?.branchId || null,
+      branchName: firstRow?.branchName || null,
+      revenueMonth,
+      note: 'Doanh thu cua thang truoc do ma minh muon lay lam du lieu',
+      planSalesImportWindow: {
+        minRate,
+        maxRate,
+        minPercent: Math.round(minRate * 100),
+        maxPercent: Math.round(maxRate * 100),
+      },
+      dataAvailable: {
+        stockOnHand: false,
+        usagePerMil: false,
+      },
+      data: rows.map((row, index) => {
+        const monthlyUsage = Number(row.monthlyUsage || 0);
+        const minPlan = Math.ceil(monthlyUsage * minRate);
+        const maxPlan = Math.ceil(monthlyUsage * maxRate);
+        const stockOnHand: number | null = null;
+
+        return {
+          stt: index + 1,
+          group: row.groupName,
+          code: row.code,
+          productId: row.productId,
+          name: row.name,
+          unit: row.unit,
+          monthlyUsage,
+          stockOnHand,
+          usagePerMil: null,
+          planSales: {
+            min: minPlan,
+            max: maxPlan,
+          },
+          warningQuantity: null,
+          suggestedOrderQuantity:
+            stockOnHand === null ? maxPlan : Math.max(maxPlan - stockOnHand, 0),
+          revenue: Number(row.revenue || 0),
+        };
+      }),
     };
   }
 

@@ -887,3 +887,95 @@ Body:
   "note": "Ghi chú"
 }
 ```
+
+---
+
+## 13. Monthly Order Plan
+
+API for the "Ke hoach dat hang hoa trong Thang" screen.
+
+```http
+GET /api/reports/monthly-order-plan?month=2026-06&branchId=11111111-1111-4111-8111-111111111111
+GET /api/reports/monthly-order-plan?from=2026-06-01&to=2026-06-30&branchId=11111111-1111-4111-8111-111111111111
+```
+
+Query params:
+
+- `month`: optional, `YYYY-MM`. Ignored when `from` or `to` is provided.
+- `from`: optional, ISO date/datetime.
+- `to`: optional, ISO date/datetime.
+- `branchId`: optional. Manager FE can use `branchId` from login response/token.
+- `minRate`: optional, default `1.2` for `Min 120%`.
+- `maxRate`: optional, default `1.5` for `Max 150%`.
+
+Response:
+
+```json
+{
+  "companyName": "CONG TY TNHH KIDO EDU",
+  "schoolName": "Kido",
+  "title": "Ke hoach dat hang hoa trong Thang",
+  "from": "2026-06-01T00:00:00.000Z",
+  "to": "2026-06-30T23:59:59.999Z",
+  "month": "2026-06",
+  "branchId": "11111111-1111-4111-8111-111111111111",
+  "branchName": "Kido",
+  "revenueMonth": 150000000,
+  "note": "Doanh thu cua thang truoc do ma minh muon lay lam du lieu",
+  "planSalesImportWindow": {
+    "minRate": 1.2,
+    "maxRate": 1.5,
+    "minPercent": 120,
+    "maxPercent": 150
+  },
+  "dataAvailable": {
+    "stockOnHand": false,
+    "usagePerMil": false
+  },
+  "data": [
+    {
+      "stt": 1,
+      "group": "An vat",
+      "code": "KEO002",
+      "productId": "product-id",
+      "name": "Keo vien",
+      "unit": "goi",
+      "monthlyUsage": 20,
+      "stockOnHand": null,
+      "usagePerMil": null,
+      "planSales": {
+        "min": 24,
+        "max": 30
+      },
+      "warningQuantity": null,
+      "suggestedOrderQuantity": 30,
+      "revenue": 100000
+    }
+  ]
+}
+```
+
+Field mapping:
+
+| UI column | Response field |
+| --------- | -------------- |
+| `STT` | `data[].stt` |
+| `NHOM` | `data[].group` |
+| `CODE` | `data[].code` |
+| `TEN HANG` | `data[].name` |
+| `DVT` | `data[].unit` |
+| `So xuat dung cua thang theo doanh thu` | `data[].monthlyUsage` |
+| `Ton Kiem Ke` | `data[].stockOnHand` |
+| `Usage per Mil` | `data[].usagePerMil` |
+| `Min 120%` | `data[].planSales.min` |
+| `Max 150%` | `data[].planSales.max` |
+| `Bao dong` | `data[].warningQuantity` |
+| `So can dat them` | `data[].suggestedOrderQuantity` |
+| `So can dat sau dieu chinh` | FE local editable value |
+
+Notes:
+
+- App has a success response wrapper, so axios reads this report at `response.data.data`.
+- `stockOnHand` and `usagePerMil` currently return `null` because DB has no real source for these columns yet; use `dataAvailable` to detect this.
+- `suggestedOrderQuantity` currently uses `planSales.max` when stock is unavailable.
+

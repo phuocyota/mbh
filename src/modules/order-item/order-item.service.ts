@@ -218,6 +218,63 @@ export class OrderItemService extends BaseService<OrderItem> {
     }>();
   }
 
+  async getMonthlyOrderPlanRows(query: {
+    from: Date;
+    to: Date;
+    branchId?: string;
+    minRate: number;
+    maxRate: number;
+  }) {
+    const qb = this.orderItemRepository
+      .createQueryBuilder('oi')
+      .innerJoin('orders', 'o', 'o.id = oi.order_id')
+      .leftJoin('products', 'p', 'p.id = oi.product_id')
+      .leftJoin('categories', 'c', 'c.id = p.category_id')
+      .leftJoin('branches', 'b', 'b.id = o.branch_id')
+      .select("COALESCE(c.name, 'Chua phan loai')", 'groupName')
+      .addSelect('p.sku', 'code')
+      .addSelect('oi.product_id', 'productId')
+      .addSelect('oi.product_name', 'name')
+      .addSelect('p.unit', 'unit')
+      .addSelect('SUM(oi.quantity)', 'monthlyUsage')
+      .addSelect('COALESCE(SUM(oi.total_amount), 0)', 'revenue')
+      .addSelect('MAX(o.branch_id)', 'branchId')
+      .addSelect('MAX(b.name)', 'branchName')
+      .where('o.created_at BETWEEN :from AND :to', {
+        from: query.from,
+        to: query.to,
+      })
+      .andWhere('o.payment_status = :paymentStatus', {
+        paymentStatus: ORDER_PAYMENT_STATUS.PAID,
+      })
+      .andWhere('oi.status = :itemStatus', {
+        itemStatus: ORDER_ITEM_STATUS.NORMAL,
+      })
+      .groupBy('c.name')
+      .addGroupBy('p.sku')
+      .addGroupBy('oi.product_id')
+      .addGroupBy('oi.product_name')
+      .addGroupBy('p.unit')
+      .orderBy('c.name', 'ASC')
+      .addOrderBy('oi.product_name', 'ASC');
+
+    if (query.branchId) {
+      qb.andWhere('o.branch_id = :branchId', { branchId: query.branchId });
+    }
+
+    return qb.getRawMany<{
+      groupName: string;
+      code: string | null;
+      productId: string;
+      name: string;
+      unit: string | null;
+      monthlyUsage: string;
+      revenue: string;
+      branchId: string | null;
+      branchName: string | null;
+    }>();
+  }
+
   async getMenuAverageRows(query: { from: Date; to: Date; branchId?: string }) {
     const itemTypeCase = this.getMenuItemTypeCase();
     const qb = this.createMenuPerformanceBaseQuery(query)

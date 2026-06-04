@@ -12,6 +12,7 @@ import {
   CustomerReportQueryDto,
   DateRangeQueryDto,
   MenuPerformanceQueryDto,
+  MonthlyOrderPlanQueryDto,
   TopProductsQueryDto,
 } from './dto/report-query.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -120,6 +121,14 @@ export class ReportsController {
   })
   async endOfDay(@Query() query: DateRangeQueryDto) {
     return this.reportsService.endOfDay(query);
+  }
+
+  @Get('monthly-order-plan')
+  @ApiOperation({
+    summary: 'Ke hoach dat hang hoa trong thang',
+  })
+  async monthlyOrderPlan(@Query() query: MonthlyOrderPlanQueryDto) {
+    return this.reportsService.monthlyOrderPlan(query);
   }
 
   @Get('inventory')
