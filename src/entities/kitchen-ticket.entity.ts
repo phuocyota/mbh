@@ -3,13 +3,14 @@ import { BaseEntity } from '../common/sql/base.entity';
 import { Order } from './order.entity';
 import { Branch } from './branch.entity';
 import { KitchenTicketItem } from './kitchen-ticket-item.entity';
+import { DEFAULT_BRANCH_ID } from '../common/constant/default-branch.constant';
 
 @Entity('kitchen_tickets')
 export class KitchenTicket extends BaseEntity {
   @Column('uuid', { name: 'order_id' })
   orderId: string;
 
-  @Column('uuid', { name: 'branch_id' })
+  @Column('uuid', { name: 'branch_id', default: DEFAULT_BRANCH_ID })
   branchId: string;
 
   @Column('varchar', { default: 'WAITING' })

@@ -4,6 +4,7 @@ import { Branch } from './branch.entity';
 import { POSDevice } from './pos-device.entity';
 import { Customer } from './customer.entity';
 import { User } from './user.entity';
+import { DEFAULT_BRANCH_ID } from '../common/constant/default-branch.constant';
 import {
   ORDER_PAYMENT_STATUS,
   ORDER_STATUS,
@@ -17,7 +18,11 @@ export class Order extends BaseEntity {
   @Column('integer', { nullable: true, name: 'order_number', unique: true })
   orderNumber: number;
 
-  @Column('uuid', { nullable: true, name: 'branch_id' })
+  @Column('uuid', {
+    nullable: true,
+    name: 'branch_id',
+    default: DEFAULT_BRANCH_ID,
+  })
   branchId: string;
 
   @Column('uuid', { nullable: true, name: 'pos_device_id' })

@@ -8,6 +8,51 @@ Các API cần JWT gửi header:
 Authorization: Bearer <accessToken>
 ```
 
+## Socket.io - Orders
+
+Socket gateway dùng Socket.io cùng host BE.
+
+Client nên join room theo nhu cầu:
+
+```ts
+socket.emit('orders:join', { branchId: 'branch-id' });
+socket.emit('orders:join', { orderId: 'order-id' });
+socket.emit('dashboard:join', { branchId: 'branch-id' });
+```
+
+Leave room:
+
+```ts
+socket.emit('orders:leave', { branchId: 'branch-id' });
+socket.emit('orders:leave', { orderId: 'order-id' });
+socket.emit('dashboard:leave', { branchId: 'branch-id' });
+```
+
+Order events:
+
+| Event                    | Khi nào emit                                | Payload chính              |
+| ------------------------ | ------------------------------------------- | -------------------------- |
+| `order:created`          | Tạo đơn mới                                 | `order`                    |
+| `order:updated`          | Đơn thay đổi thông tin/tổng tiền            | `order`                    |
+| `order:item-added`       | Thêm món vào đơn                            | `{ order, item }`          |
+| `order:payment-received` | Ghi nhận thanh toán                         | `{ order, payment }`       |
+| `order:paid`             | Đơn chuyển sang đã thanh toán               | `order`                    |
+| `order:preparing`        | Đơn đang chế biến                           | `order`                    |
+| `order:ready-to-pickup`  | Đơn chế biến xong, chờ lấy                  | `order`                    |
+| `order:completed`        | Đơn hoàn tất/khách đã nhận                  | `order`                    |
+| `order:cancelled`        | Đơn bị hủy                                  | `{ order, reason }`        |
+| `order:refunded`         | Đơn được hoàn tiền                          | `order`                    |
+| `order:status-changed`   | Bất kỳ thay đổi trạng thái đơn              | `order`                    |
+| `order:deleted`          | Đơn bị xóa                                  | `{ id, branchId }`         |
+| `dashboard:updated`      | Metric dashboard/report cần refresh dữ liệu | `order` hoặc order payload |
+
+Event được gửi tới:
+
+- `orders:all`
+- `orders:branch:<branchId>` nếu đơn có `branchId`
+- `order:<orderId>`
+- `dashboard` và `dashboard:branch:<branchId>` cho refresh thống kê
+
 ## 1. Parent/Student Home
 
 API lấy thông tin tổng quan cho màn hình Home của phụ huynh/học sinh. Phụ huynh đăng nhập bằng tài khoản học sinh.

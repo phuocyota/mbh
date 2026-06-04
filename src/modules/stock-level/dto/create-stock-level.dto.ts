@@ -1,14 +1,17 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { IsNotEmpty, IsUUID, IsNumber, IsOptional, Min } from 'class-validator';
+import { DEFAULT_BRANCH_ID } from '../../../common/constant/default-branch.constant';
 
 export class CreateStockLevelDto {
   @ApiProperty({
     description: 'Branch ID',
-    example: 'f47ac10b-58cc-4372-a567-0e02b2c3d479',
+    example: DEFAULT_BRANCH_ID,
+    required: false,
+    default: DEFAULT_BRANCH_ID,
   })
-  @IsNotEmpty()
+  @IsOptional()
   @IsUUID()
-  branchId: string;
+  branchId?: string;
 
   @ApiProperty({
     description: 'Product ID',

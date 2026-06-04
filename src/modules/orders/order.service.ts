@@ -137,6 +137,10 @@ export class OrderService {
       status: isFullRefund ? ORDER_STATUS.REFUNDED : order.status,
       updatedBy,
     });
+
+    const updatedOrder = await this.getOrderWithItems(order.id);
+    this.socketService.emitOrderRefunded(updatedOrder);
+    this.socketService.emitOrderStatusChanged(updatedOrder);
   }
 
   async addItemToOrder(orderId: string, createOrderItemDto: any) {
@@ -147,6 +151,10 @@ export class OrderService {
 
     // Update order totals
     await this.recalculateOrderTotals(orderId);
+
+    const updatedOrder = await this.getOrderWithItems(orderId);
+    this.socketService.emitOrderItemAdded(updatedOrder, item);
+    this.socketService.emitOrderUpdated(updatedOrder);
 
     return item;
   }
@@ -236,6 +244,16 @@ export class OrderService {
 
     await this.orderRepository.update(orderId, updateData);
 
+    const updatedOrder = await this.getOrderWithItems(orderId);
+    this.socketService.emitOrderPaymentReceived(updatedOrder, payment);
+    if (isPaid) {
+      this.socketService.emitOrderPaid(updatedOrder);
+      this.socketService.emitOrderPreparing(updatedOrder);
+      this.socketService.emitOrderStatusChanged(updatedOrder);
+    } else {
+      this.socketService.emitOrderUpdated(updatedOrder);
+    }
+
     return payment;
   }
 
@@ -254,6 +272,7 @@ export class OrderService {
     });
 
     const updatedOrder = await this.getOrderWithItems(orderId);
+    this.socketService.emitOrderCompleted(updatedOrder);
     this.socketService.emitOrderStatusChanged(updatedOrder);
     return updatedOrder;
   }
@@ -535,6 +554,9 @@ export class OrderService {
     });
 
     const updatedOrder = await this.getOrderWithItems(orderId);
+    this.socketService.emitOrderPaymentReceived(updatedOrder);
+    this.socketService.emitOrderPaid(updatedOrder);
+    this.socketService.emitOrderReadyToPickup(updatedOrder);
     this.socketService.emitOrderStatusChanged(updatedOrder);
     return updatedOrder;
   }
@@ -553,6 +575,12 @@ export class OrderService {
     });
 
     const updatedOrder = await this.getOrderWithItems(orderId);
+    if (resolvedStatus === ORDER_STATUS.PREPARING) {
+      this.socketService.emitOrderPreparing(updatedOrder);
+    }
+    if (resolvedStatus === ORDER_STATUS.READY_TO_PICKUP) {
+      this.socketService.emitOrderReadyToPickup(updatedOrder);
+    }
     this.socketService.emitOrderStatusChanged(updatedOrder);
     return updatedOrder;
   }
@@ -574,6 +602,10 @@ export class OrderService {
 
     // Return order with cancel info (for FE compatibility)
     const updatedOrder = await this.getOrderWithItems(orderId);
+    this.socketService.emitOrderCancelled(updatedOrder, {
+      reason: dto?.reason ?? 'Không có lý do',
+      isRefunded: dto?.isRefunded ?? true,
+    });
     this.socketService.emitOrderStatusChanged(updatedOrder);
     return {
       ...updatedOrder,

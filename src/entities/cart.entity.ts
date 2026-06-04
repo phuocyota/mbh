@@ -1,5 +1,6 @@
 import { Entity, Column, OneToMany } from 'typeorm';
 import { BaseEntity } from '../common/sql/base.entity';
+import { DEFAULT_BRANCH_ID } from '../common/constant/default-branch.constant';
 
 @Entity('carts')
 export class Cart extends BaseEntity {
@@ -9,7 +10,11 @@ export class Cart extends BaseEntity {
   @Column('varchar', { nullable: true })
   sessionId: string;
 
-  @Column('uuid', { nullable: true, name: 'branch_id' })
+  @Column('uuid', {
+    nullable: true,
+    name: 'branch_id',
+    default: DEFAULT_BRANCH_ID,
+  })
   branchId: string;
 
   @Column('numeric', { precision: 12, scale: 2, default: 0 })

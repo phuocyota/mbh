@@ -1,16 +1,19 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
 import { IsIn, IsOptional, IsString, IsUUID } from 'class-validator';
-import {
-  ORDER_TYPE,
-  PAYMENT_METHOD,
-} from '../../../common/constant/constant';
+import { ORDER_TYPE, PAYMENT_METHOD } from '../../../common/constant/constant';
+import { DEFAULT_BRANCH_ID } from '../../../common/constant/default-branch.constant';
 
 const CART_PAYMENT_METHODS = [PAYMENT_METHOD.WALLET, PAYMENT_METHOD.CASH];
 const CART_ORDER_TYPES = [ORDER_TYPE.TAKEAWAY, ORDER_TYPE.PRE_ORDER];
 
 export class CompleteCartDto {
-  @ApiProperty({ description: 'Branch ID', required: false })
+  @ApiProperty({
+    description: 'Branch ID',
+    required: false,
+    example: DEFAULT_BRANCH_ID,
+    default: DEFAULT_BRANCH_ID,
+  })
   @Transform(({ value }) => value || undefined)
   @IsOptional()
   @IsUUID()

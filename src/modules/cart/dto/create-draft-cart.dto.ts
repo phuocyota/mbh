@@ -1,6 +1,7 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
 import { IsOptional, IsString, IsUUID } from 'class-validator';
+import { DEFAULT_BRANCH_ID } from '../../../common/constant/default-branch.constant';
 
 export class CreateDraftCartDto {
   @ApiPropertyOptional({
@@ -15,7 +16,8 @@ export class CreateDraftCartDto {
 
   @ApiPropertyOptional({
     description: 'Branch ID',
-    example: 'f47ac10b-58cc-4372-a567-0e02b2c3d479',
+    example: DEFAULT_BRANCH_ID,
+    default: DEFAULT_BRANCH_ID,
   })
   @Transform(({ value }) => value || undefined)
   @IsOptional()

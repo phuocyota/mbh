@@ -2,10 +2,11 @@ import { Entity, Column, ManyToOne, OneToMany, JoinColumn } from 'typeorm';
 import { BaseEntity } from '../common/sql/base.entity';
 import { Branch } from './branch.entity';
 import { COMMON_STATUS } from '../common/constant/constant';
+import { DEFAULT_BRANCH_ID } from '../common/constant/default-branch.constant';
 
 @Entity('pos_devices')
 export class POSDevice extends BaseEntity {
-  @Column('uuid', { name: 'branch_id' })
+  @Column('uuid', { name: 'branch_id', default: DEFAULT_BRANCH_ID })
   branchId: string;
 
   @Column('varchar', { name: 'device_code' })

@@ -3,10 +3,11 @@ import { BaseEntity } from '../common/sql/base.entity';
 import { Branch } from './branch.entity';
 import { POSDevice } from './pos-device.entity';
 import { User } from './user.entity';
+import { DEFAULT_BRANCH_ID } from '../common/constant/default-branch.constant';
 
 @Entity('shifts')
 export class Shift extends BaseEntity {
-  @Column('uuid', { name: 'branch_id' })
+  @Column('uuid', { name: 'branch_id', default: DEFAULT_BRANCH_ID })
   branchId: string;
 
   @Column('uuid', { name: 'pos_device_id' })

@@ -1,10 +1,11 @@
 import { Entity, Column, ManyToOne, JoinColumn } from 'typeorm';
 import { BaseEntity } from '../common/sql/base.entity';
 import { Branch } from './branch.entity';
+import { DEFAULT_BRANCH_ID } from '../common/constant/default-branch.constant';
 
 @Entity('stock_transactions')
 export class StockTransaction extends BaseEntity {
-  @Column('uuid', { name: 'branch_id' })
+  @Column('uuid', { name: 'branch_id', default: DEFAULT_BRANCH_ID })
   branchId: string;
 
   @Column('uuid', { name: 'inventory_item_id' })
