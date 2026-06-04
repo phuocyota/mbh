@@ -238,8 +238,8 @@ export class OrderItemService extends BaseService<OrderItem> {
       .addSelect('p.unit', 'unit')
       .addSelect('SUM(oi.quantity)', 'monthlyUsage')
       .addSelect('COALESCE(SUM(oi.total_amount), 0)', 'revenue')
-      .addSelect('MAX(o.branch_id)', 'branchId')
-      .addSelect('MAX(b.name)', 'branchName')
+      .addSelect('o.branch_id', 'branchId')
+      .addSelect('b.name', 'branchName')
       .where('o.created_at BETWEEN :from AND :to', {
         from: query.from,
         to: query.to,
@@ -255,6 +255,8 @@ export class OrderItemService extends BaseService<OrderItem> {
       .addGroupBy('oi.product_id')
       .addGroupBy('oi.product_name')
       .addGroupBy('p.unit')
+      .addGroupBy('o.branch_id')
+      .addGroupBy('b.name')
       .orderBy('c.name', 'ASC')
       .addOrderBy('oi.product_name', 'ASC');
 

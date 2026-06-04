@@ -1,4 +1,4 @@
-import { Controller, Get, Param, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Param, Query, Req, UseGuards } from '@nestjs/common';
 import {
   ApiTags,
   ApiOperation,
@@ -127,8 +127,11 @@ export class ReportsController {
   @ApiOperation({
     summary: 'Ke hoach dat hang hoa trong thang',
   })
-  async monthlyOrderPlan(@Query() query: MonthlyOrderPlanQueryDto) {
-    return this.reportsService.monthlyOrderPlan(query);
+  async monthlyOrderPlan(
+    @Query() query: MonthlyOrderPlanQueryDto,
+    @Req() req: any,
+  ) {
+    return this.reportsService.monthlyOrderPlan(query, req.user);
   }
 
   @Get('inventory')

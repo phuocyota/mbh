@@ -17,6 +17,12 @@ interface ResolvedDateRange {
   to: Date;
 }
 
+type ReportUser = {
+  role?: string;
+  userType?: string;
+  branchId?: string | null;
+};
+
 @Injectable()
 export class ReportsService {
   constructor(
@@ -491,22 +497,27 @@ export class ReportsService {
     branchId?: string;
     minRate?: number;
     maxRate?: number;
-  }) {
+  }, user?: ReportUser) {
     const { from, to } = this.resolveMonthlyRange(query);
+    const userRole = user?.userType || user?.role;
+    const branchId =
+      userRole === 'MANAGER'
+        ? user?.branchId || query.branchId
+        : query.branchId || user?.branchId || undefined;
     const minRate = Number(query.minRate || 1.2);
     const maxRate = Number(query.maxRate || 1.5);
     const [rows, revenueRows] = await Promise.all([
       this.orderItemService.getMonthlyOrderPlanRows({
         from,
         to,
-        branchId: query.branchId,
+        branchId,
         minRate,
         maxRate,
       }),
       this.orderService.getRevenueSummaryRows({
         from,
         to,
-        branchId: query.branchId,
+        branchId,
       }),
     ]);
 
@@ -520,7 +531,7 @@ export class ReportsService {
       from,
       to,
       month: `${from.getFullYear()}-${String(from.getMonth() + 1).padStart(2, '0')}`,
-      branchId: query.branchId || firstRow?.branchId || null,
+      branchId: branchId || firstRow?.branchId || null,
       branchName: firstRow?.branchName || null,
       revenueMonth,
       note: 'Doanh thu cua thang truoc do ma minh muon lay lam du lieu',

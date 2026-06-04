@@ -897,6 +897,7 @@ API for the "Ke hoach dat hang hoa trong Thang" screen.
 ```http
 GET /api/reports/monthly-order-plan?month=2026-06&branchId=11111111-1111-4111-8111-111111111111
 GET /api/reports/monthly-order-plan?from=2026-06-01&to=2026-06-30&branchId=11111111-1111-4111-8111-111111111111
+GET /api/reports/monthly-order-plan?month=2026-06
 ```
 
 Query params:
@@ -904,7 +905,7 @@ Query params:
 - `month`: optional, `YYYY-MM`. Ignored when `from` or `to` is provided.
 - `from`: optional, ISO date/datetime.
 - `to`: optional, ISO date/datetime.
-- `branchId`: optional. Manager FE can use `branchId` from login response/token.
+- `branchId`: optional. For `MANAGER`, BE uses `branchId` from JWT token first, so FE can omit this param.
 - `minRate`: optional, default `1.2` for `Min 120%`.
 - `maxRate`: optional, default `1.5` for `Max 150%`.
 
