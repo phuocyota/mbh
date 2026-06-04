@@ -513,7 +513,7 @@ Response:
 ### Thống kê khách hàng
 
 ```http
-GET /api/dashboard/customers?filter=7days
+GET /api/reports/customers?filter=7days
 ```
 
 Query params:

@@ -18,6 +18,7 @@ import {
   ORDER_PAYMENT_STATUS,
   ORDER_STATUS,
   PAYMENT_METHOD,
+  REVENUE_ORDER_STATUSES,
   resolveOrderStatus,
 } from '../../common/constant/constant';
 
@@ -385,6 +386,89 @@ export class OrderService {
       orderCount: string;
       revenue: string;
     }>();
+  }
+
+  async getServingStatsRow(query: { branchId?: string }) {
+    const servingStatuses = [
+      ORDER_STATUS.PREPARING,
+      ORDER_STATUS.READY_TO_PICKUP,
+    ];
+
+    const qb = this.orderRepository
+      .createQueryBuilder('o')
+      .select('COUNT(o.id)', 'servingOrders')
+      .addSelect(
+        'COUNT(DISTINCT COALESCE(CAST(o.customer_id AS text), CAST(o.id AS text)))',
+        'servingCustomers',
+      )
+      .where('o.payment_status = :paymentStatus', {
+        paymentStatus: ORDER_PAYMENT_STATUS.PAID,
+      })
+      .andWhere('o.status IN (:...statuses)', {
+        statuses: servingStatuses,
+      });
+
+    if (query.branchId) {
+      qb.andWhere('o.branch_id = :branchId', {
+        branchId: query.branchId,
+      });
+    }
+
+    return qb.getRawOne<{
+      servingOrders: string;
+      servingCustomers: string;
+    }>();
+  }
+
+  async getCustomerStatsRows(query: {
+    from: Date;
+    to: Date;
+    branchId?: string;
+  }) {
+    const baseQb = this.orderRepository
+      .createQueryBuilder('o')
+      .where('o.created_at BETWEEN :from AND :to', {
+        from: query.from,
+        to: query.to,
+      })
+      .andWhere('o.payment_status = :paymentStatus', {
+        paymentStatus: ORDER_PAYMENT_STATUS.PAID,
+      })
+      .andWhere('o.status IN (:...statuses)', {
+        statuses: REVENUE_ORDER_STATUSES,
+      });
+
+    if (query.branchId) {
+      baseQb.andWhere('o.branch_id = :branchId', {
+        branchId: query.branchId,
+      });
+    }
+
+    const dailyRows = await baseQb
+      .clone()
+      .select("TO_CHAR(o.created_at, 'YYYY-MM-DD')", 'date')
+      .addSelect(
+        'COUNT(DISTINCT COALESCE(CAST(o.customer_id AS text), CAST(o.id AS text)))',
+        'uniqueCustomers',
+      )
+      .addSelect('COUNT(o.id)', 'totalOrders')
+      .groupBy('date')
+      .orderBy('date', 'ASC')
+      .getRawMany<{
+        date: string;
+        uniqueCustomers: string;
+        totalOrders: string;
+      }>();
+
+    const totalRow = await baseQb
+      .clone()
+      .select(
+        'COUNT(DISTINCT COALESCE(CAST(o.customer_id AS text), CAST(o.id AS text)))',
+        'count',
+      )
+      .getRawOne<{ count: string }>();
+
+    return { dailyRows, totalRow };
   }
 
   async getShiftOrderAggregate(query: {

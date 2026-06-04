@@ -1,5 +1,12 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsOptional, IsUUID, IsDateString, IsInt, Min } from 'class-validator';
+import {
+  IsOptional,
+  IsUUID,
+  IsDateString,
+  IsInt,
+  Min,
+  IsIn,
+} from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class DateRangeQueryDto {
@@ -42,4 +49,25 @@ export class TopProductsQueryDto extends DateRangeQueryDto {
   @IsInt()
   @Min(1)
   limit?: number;
+}
+
+const CUSTOMER_REPORT_FILTERS = [
+  'today',
+  'yesterday',
+  '7days',
+  'thisMonth',
+  'lastMonth',
+] as const;
+
+export class CustomerReportQueryDto extends DateRangeQueryDto {
+  @ApiProperty({
+    description:
+      'Preset khoảng thời gian. Bị bỏ qua nếu truyền from/to cụ thể.',
+    enum: CUSTOMER_REPORT_FILTERS,
+    required: false,
+    default: '7days',
+  })
+  @IsOptional()
+  @IsIn(CUSTOMER_REPORT_FILTERS)
+  filter?: (typeof CUSTOMER_REPORT_FILTERS)[number];
 }

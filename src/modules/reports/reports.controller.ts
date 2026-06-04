@@ -7,7 +7,11 @@ import {
   ApiQuery,
 } from '@nestjs/swagger';
 import { ReportsService } from './reports.service';
-import { DateRangeQueryDto, TopProductsQueryDto } from './dto/report-query.dto';
+import {
+  CustomerReportQueryDto,
+  DateRangeQueryDto,
+  TopProductsQueryDto,
+} from './dto/report-query.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
 @ApiTags('Reports')
@@ -29,6 +33,25 @@ export class ReportsController {
   @ApiOperation({ summary: 'Doanh thu theo từng ngày' })
   async revenueDaily(@Query() query: DateRangeQueryDto) {
     return this.reportsService.revenueDaily(query);
+  }
+
+  @Get('serving')
+  @ApiOperation({ summary: 'Thống kê đơn và khách đang phục vụ' })
+  @ApiQuery({ name: 'branchId', required: false, type: String })
+  async servingStats(@Query('branchId') branchId?: string) {
+    return this.reportsService.servingStats({ branchId });
+  }
+
+  @Get('customer')
+  @ApiOperation({ summary: 'Thống kê lượt khách hàng' })
+  @ApiQuery({
+    name: 'filter',
+    required: false,
+    description: 'Time filter: today, yesterday, 7days, thisMonth, lastMonth',
+    enum: ['today', 'yesterday', '7days', 'thisMonth', 'lastMonth'],
+  })
+  async customerStats(@Query() query: CustomerReportQueryDto) {
+    return this.reportsService.customerStats(query);
   }
 
   @Get('top-products')

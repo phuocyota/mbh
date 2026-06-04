@@ -12,6 +12,11 @@ interface DateRange {
   to?: string;
 }
 
+interface ResolvedDateRange {
+  from: Date;
+  to: Date;
+}
+
 @Injectable()
 export class ReportsService {
   constructor(
@@ -23,7 +28,7 @@ export class ReportsService {
     private stockLevelService: StockLevelService,
   ) {}
 
-  private resolveRange(range: DateRange): { from: Date; to: Date } {
+  private resolveRange(range: DateRange): ResolvedDateRange {
     const to = range.to ? new Date(range.to) : new Date();
     to.setHours(23, 59, 59, 999);
 
@@ -31,6 +36,46 @@ export class ReportsService {
       ? new Date(range.from)
       : new Date(to.getFullYear(), to.getMonth(), to.getDate() - 30);
     from.setHours(0, 0, 0, 0);
+
+    return { from, to };
+  }
+
+  private resolveCustomerRange(query: {
+    from?: string;
+    to?: string;
+    filter?: string;
+  }): ResolvedDateRange {
+    if (query.from || query.to) {
+      return this.resolveRange(query);
+    }
+
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    let from = new Date(today);
+    from.setHours(0, 0, 0, 0);
+    let to = new Date(today);
+    to.setHours(23, 59, 59, 999);
+
+    switch (query.filter || '7days') {
+      case 'today':
+        break;
+      case 'yesterday':
+        from.setDate(from.getDate() - 1);
+        to.setDate(to.getDate() - 1);
+        break;
+      case 'thisMonth':
+        from = new Date(now.getFullYear(), now.getMonth(), 1);
+        break;
+      case 'lastMonth':
+        from = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+        to = new Date(now.getFullYear(), now.getMonth(), 0);
+        to.setHours(23, 59, 59, 999);
+        break;
+      case '7days':
+      default:
+        from.setDate(from.getDate() - 6);
+        break;
+    }
 
     return { from, to };
   }
@@ -89,6 +134,46 @@ export class ReportsService {
         day: row.day,
         orderCount: Number(row.orderCount),
         revenue: Number(row.revenue),
+      })),
+    };
+  }
+
+  async servingStats(query: { branchId?: string }) {
+    const row = await this.orderService.getServingStatsRow({
+      branchId: query.branchId,
+    });
+
+    return {
+      branchId: query.branchId || null,
+      servingOrders: Number(row?.servingOrders || 0),
+      servingCustomers: Number(row?.servingCustomers || 0),
+    };
+  }
+
+  async customerStats(query: {
+    from?: string;
+    to?: string;
+    branchId?: string;
+    filter?: string;
+  }) {
+    const { from, to } = this.resolveCustomerRange(query);
+    const { dailyRows, totalRow } =
+      await this.orderService.getCustomerStatsRows({
+        from,
+        to,
+        branchId: query.branchId,
+      });
+
+    return {
+      filter: query.filter || null,
+      from,
+      to,
+      branchId: query.branchId || null,
+      totalCustomers: Number(totalRow?.count || 0),
+      daily: dailyRows.map((row) => ({
+        date: row.date,
+        customers: Number(row.uniqueCustomers),
+        orders: Number(row.totalOrders),
       })),
     };
   }
