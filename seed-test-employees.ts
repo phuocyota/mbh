@@ -1,7 +1,7 @@
 import { createConnection } from 'typeorm';
 import * as dotenv from 'dotenv';
 import { v4 as uuidv4 } from 'uuid';
-import { Employee } from './src/entities';
+import { Employee, WorkSchedule } from './src/entities';
 
 dotenv.config();
 
@@ -20,6 +20,10 @@ const seedTestEmployees = async () => {
 
   try {
     console.log('🌱 Starting seed for test employees...');
+
+    const employeeRepository = connection.getRepository(Employee);
+    const workScheduleRepository = connection.getRepository(WorkSchedule);
+    const seededEmployees: Employee[] = [];
 
     const employees = [
       {
@@ -45,21 +49,75 @@ const seedTestEmployees = async () => {
     ];
 
     for (const employeeData of employees) {
-      let employee = await connection.getRepository(Employee).findOne({
+      let employee = await employeeRepository.findOne({
         where: { code: employeeData.code },
       });
 
       if (!employee) {
-        employee = connection.getRepository(Employee).create({
+        employee = employeeRepository.create({
           id: uuidv4(),
           ...employeeData,
         });
-        await connection.getRepository(Employee).save(employee);
+        await employeeRepository.save(employee);
         console.log('✅ Employee created:', employee.code, '-', employee.fullName);
       } else {
         Object.assign(employee, employeeData);
-        await connection.getRepository(Employee).save(employee);
+        await employeeRepository.save(employee);
         console.log('✅ Employee updated:', employee.code, '-', employee.fullName);
+      }
+
+      seededEmployees.push(employee);
+    }
+
+    const formatDate = (date: Date) => {
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const day = String(date.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    };
+
+    const today = new Date();
+    const currentDay = today.getDay() === 0 ? 7 : today.getDay();
+    const monday = new Date(today);
+    monday.setHours(12, 0, 0, 0);
+    monday.setDate(today.getDate() - currentDay + 1);
+
+    const schedulePatterns = [
+      ['full', 'morning', 'full', 'afternoon', 'full', null, null],
+      ['morning', 'afternoon', 'full', 'morning', 'afternoon', null, null],
+    ];
+
+    for (const [employeeIndex, employee] of seededEmployees.entries()) {
+      const pattern = schedulePatterns[employeeIndex] || schedulePatterns[0];
+
+      for (const [dayIndex, shift] of pattern.entries()) {
+        if (!shift) continue;
+
+        const workDate = new Date(monday);
+        workDate.setDate(monday.getDate() + dayIndex);
+        const workDateString = formatDate(workDate);
+
+        let workSchedule = await workScheduleRepository.findOne({
+          where: {
+            employeeId: employee.id,
+            workDate: workDateString,
+          },
+        });
+
+        if (!workSchedule) {
+          workSchedule = workScheduleRepository.create({
+            id: uuidv4(),
+            employeeId: employee.id,
+            workDate: workDateString,
+            shift,
+            note: 'Dữ liệu mẫu chấm công',
+          });
+        } else {
+          workSchedule.shift = shift;
+          workSchedule.note = 'Dữ liệu mẫu chấm công';
+        }
+
+        await workScheduleRepository.save(workSchedule);
       }
     }
 
@@ -68,6 +126,8 @@ const seedTestEmployees = async () => {
     for (const employee of employees) {
       console.log(`├─ ${employee.code} | ${employee.fullName} | ${employee.status}`);
     }
+    console.log('\n📅 Test Time-sheet:');
+    console.log(`└─ Seeded work schedules for week ${formatDate(monday)}`);
   } catch (error) {
     console.error('❌ Seed error:', error);
   } finally {
