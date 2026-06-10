@@ -490,6 +490,57 @@ export class OrderService {
     return { dailyRows, totalRow };
   }
 
+  async getEmployeeSalesRows(query: {
+    from: Date;
+    to: Date;
+    branchId?: string;
+    employeeId?: string;
+    limit?: number;
+  }) {
+    const qb = this.orderRepository
+      .createQueryBuilder('o')
+      .leftJoin('users', 'u', 'u.id = o.cashier_id')
+      .select("COALESCE(CAST(o.cashier_id AS text), 'unknown')", 'id')
+      .addSelect("COALESCE(u.full_name, 'Không xác định')", 'employee')
+      .addSelect('COUNT(o.id)', 'orders')
+      .addSelect('COALESCE(SUM(o.subtotal), 0)', 'totalAmount')
+      .addSelect('COALESCE(SUM(o.discount_amount), 0)', 'discount')
+      .addSelect('COALESCE(SUM(o.total_amount), 0)', 'revenue')
+      .where('o.created_at BETWEEN :from AND :to', {
+        from: query.from,
+        to: query.to,
+      })
+      .andWhere('o.payment_status = :paymentStatus', {
+        paymentStatus: ORDER_PAYMENT_STATUS.PAID,
+      })
+      .groupBy('o.cashier_id')
+      .addGroupBy('u.full_name')
+      .orderBy('"revenue"', 'DESC');
+
+    if (query.branchId) {
+      qb.andWhere('o.branch_id = :branchId', { branchId: query.branchId });
+    }
+
+    if (query.employeeId) {
+      qb.andWhere('o.cashier_id = :employeeId', {
+        employeeId: query.employeeId,
+      });
+    }
+
+    if (query.limit) {
+      qb.limit(query.limit);
+    }
+
+    return qb.getRawMany<{
+      id: string;
+      employee: string;
+      orders: string;
+      totalAmount: string;
+      discount: string;
+      revenue: string;
+    }>();
+  }
+
   async getShiftOrderAggregate(query: {
     cashierId: string;
     branchId: string;

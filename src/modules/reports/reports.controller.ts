@@ -11,6 +11,7 @@ import {
   CancellationReportQueryDto,
   CustomerReportQueryDto,
   DateRangeQueryDto,
+  EmployeeReportQueryDto,
   MenuPerformanceQueryDto,
   MonthlyOrderPlanQueryDto,
   TopProductsQueryDto,
@@ -94,6 +95,29 @@ export class ReportsController {
     @Req() req: any,
   ) {
     return this.reportsService.cancellationReport(query, req.user);
+  }
+
+  @Get('employee')
+  @ApiOperation({
+    summary: 'Báo cáo nhân viên: bán hàng, thu ngân, lợi nhuận',
+  })
+  @ApiQuery({
+    name: 'filter',
+    required: false,
+    description: 'Time filter: today, yesterday, 7days, thisMonth, lastMonth',
+    enum: ['today', 'yesterday', '7days', 'thisMonth', 'lastMonth'],
+  })
+  @ApiQuery({
+    name: 'employeeId',
+    required: false,
+    description: 'Cashier/user ID mapped from orders.cashier_id',
+    type: String,
+  })
+  async employeeReport(
+    @Query() query: EmployeeReportQueryDto,
+    @Req() req: any,
+  ) {
+    return this.reportsService.employeeReport(query, req.user);
   }
 
   @Get('top-products')

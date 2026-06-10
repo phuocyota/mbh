@@ -277,6 +277,106 @@ export class OrderItemService extends BaseService<OrderItem> {
     }>();
   }
 
+  async getEmployeeCashierRows(query: {
+    from: Date;
+    to: Date;
+    branchId?: string;
+    employeeId?: string;
+  }) {
+    const qb = this.orderItemRepository
+      .createQueryBuilder('oi')
+      .innerJoin('orders', 'o', 'o.id = oi.order_id')
+      .leftJoin('users', 'u', 'u.id = o.cashier_id')
+      .select("COALESCE(CAST(o.cashier_id AS text), 'unknown')", 'id')
+      .addSelect("COALESCE(u.full_name, 'Không xác định')", 'employee')
+      .addSelect('COALESCE(SUM(oi.quantity), 0)', 'quantity')
+      .addSelect('COALESCE(SUM(oi.total_amount), 0)', 'revenue')
+      .where('o.created_at BETWEEN :from AND :to', {
+        from: query.from,
+        to: query.to,
+      })
+      .andWhere('o.payment_status = :paymentStatus', {
+        paymentStatus: ORDER_PAYMENT_STATUS.PAID,
+      })
+      .andWhere('oi.status = :itemStatus', {
+        itemStatus: ORDER_ITEM_STATUS.NORMAL,
+      })
+      .groupBy('o.cashier_id')
+      .addGroupBy('u.full_name')
+      .orderBy('"revenue"', 'DESC');
+
+    if (query.branchId) {
+      qb.andWhere('o.branch_id = :branchId', { branchId: query.branchId });
+    }
+
+    if (query.employeeId) {
+      qb.andWhere('o.cashier_id = :employeeId', {
+        employeeId: query.employeeId,
+      });
+    }
+
+    return qb.getRawMany<{
+      id: string;
+      employee: string;
+      quantity: string;
+      revenue: string;
+    }>();
+  }
+
+  async getEmployeeProfitRows(query: {
+    from: Date;
+    to: Date;
+    branchId?: string;
+    employeeId?: string;
+  }) {
+    const qb = this.orderItemRepository
+      .createQueryBuilder('oi')
+      .innerJoin('orders', 'o', 'o.id = oi.order_id')
+      .leftJoin('users', 'u', 'u.id = o.cashier_id')
+      .leftJoin('products', 'p', 'p.id = oi.product_id')
+      .select("COALESCE(CAST(o.cashier_id AS text), 'unknown')", 'id')
+      .addSelect("COALESCE(u.full_name, 'Không xác định')", 'employee')
+      .addSelect('COALESCE(SUM(oi.subtotal), 0)', 'totalPurchase')
+      .addSelect('COALESCE(SUM(oi.discount_amount), 0)', 'discount')
+      .addSelect('COALESCE(SUM(oi.total_amount), 0)', 'revenue')
+      .addSelect(
+        'COALESCE(SUM(COALESCE(p.cost_price, 0) * oi.quantity), 0)',
+        'cost',
+      )
+      .where('o.created_at BETWEEN :from AND :to', {
+        from: query.from,
+        to: query.to,
+      })
+      .andWhere('o.payment_status = :paymentStatus', {
+        paymentStatus: ORDER_PAYMENT_STATUS.PAID,
+      })
+      .andWhere('oi.status = :itemStatus', {
+        itemStatus: ORDER_ITEM_STATUS.NORMAL,
+      })
+      .groupBy('o.cashier_id')
+      .addGroupBy('u.full_name')
+      .orderBy('"revenue"', 'DESC');
+
+    if (query.branchId) {
+      qb.andWhere('o.branch_id = :branchId', { branchId: query.branchId });
+    }
+
+    if (query.employeeId) {
+      qb.andWhere('o.cashier_id = :employeeId', {
+        employeeId: query.employeeId,
+      });
+    }
+
+    return qb.getRawMany<{
+      id: string;
+      employee: string;
+      totalPurchase: string;
+      discount: string;
+      revenue: string;
+      cost: string;
+    }>();
+  }
+
   async getMenuAverageRows(query: { from: Date; to: Date; branchId?: string }) {
     const itemTypeCase = this.getMenuItemTypeCase();
     const qb = this.createMenuPerformanceBaseQuery(query)

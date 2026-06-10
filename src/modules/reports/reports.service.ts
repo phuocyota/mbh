@@ -387,6 +387,105 @@ export class ReportsService {
     };
   }
 
+  async employeeReport(
+    query: {
+      from?: string;
+      to?: string;
+      branchId?: string;
+      filter?: string;
+      employeeId?: string;
+      limit?: number;
+    },
+    user?: ReportUser,
+  ) {
+    const { from, to } = this.resolveCustomerRange(query);
+    const branchId = this.resolveBranchId(query.branchId, user);
+    const limit = Math.min(Math.max(Number(query.limit) || 10, 1), 100);
+    const reportQuery = {
+      from,
+      to,
+      branchId,
+      employeeId: query.employeeId,
+    };
+
+    const [salesRows, chartRows, cashierRows, profitRows] = await Promise.all([
+      this.orderService.getEmployeeSalesRows(reportQuery),
+      this.orderService.getEmployeeSalesRows({ ...reportQuery, limit }),
+      this.orderItemService.getEmployeeCashierRows(reportQuery),
+      this.orderItemService.getEmployeeProfitRows(reportQuery),
+    ]);
+
+    const sales = salesRows.map((row) => ({
+      id: row.id,
+      employee: row.employee,
+      orders: Number(row.orders || 0),
+      totalAmount: Number(row.totalAmount || 0),
+      discount: Number(row.discount || 0),
+      revenue: Number(row.revenue || 0),
+    }));
+
+    const cashier = cashierRows.map((row) => ({
+      id: row.id,
+      employee: row.employee,
+      quantity: Number(row.quantity || 0),
+      revenue: Number(row.revenue || 0),
+    }));
+
+    const profit = profitRows.map((row) => {
+      const revenue = Number(row.revenue || 0);
+      const cost = Number(row.cost || 0);
+
+      return {
+        id: row.id,
+        employee: row.employee,
+        totalPurchase: Number(row.totalPurchase || 0),
+        discount: Number(row.discount || 0),
+        revenue,
+        cost,
+        profit: revenue - cost,
+      };
+    });
+
+    return {
+      filter: query.filter || null,
+      from,
+      to,
+      branchId: branchId || null,
+      employeeId: query.employeeId || null,
+      employees: sales.map((row) => ({
+        id: row.id,
+        code: null,
+        name: row.employee,
+        department: null,
+        position: 'Thu ngân',
+        workDays: 0,
+        workHours: 0,
+        overtime: 0,
+        late: 0,
+        absent: 0,
+        salary: 0,
+        performance: 0,
+      })),
+      chart: chartRows.map((row) => ({
+        id: row.id,
+        name: row.employee,
+        revenue: Number(row.revenue || 0),
+      })),
+      sales,
+      cashier,
+      profit,
+      summary: {
+        orders: sales.reduce((sum, row) => sum + row.orders, 0),
+        totalAmount: sales.reduce((sum, row) => sum + row.totalAmount, 0),
+        discount: sales.reduce((sum, row) => sum + row.discount, 0),
+        revenue: sales.reduce((sum, row) => sum + row.revenue, 0),
+        quantity: cashier.reduce((sum, row) => sum + row.quantity, 0),
+        cost: profit.reduce((sum, row) => sum + row.cost, 0),
+        profit: profit.reduce((sum, row) => sum + row.profit, 0),
+      },
+    };
+  }
+
   async topProducts(
     query: {
       from?: string;

@@ -683,6 +683,119 @@ Response:
 }
 ```
 
+### Báo cáo nhân viên
+
+Tương ứng màn FE `/report-employee` và các mock:
+
+- `employeeReportData.js`
+- `employeeChartData.js`
+- `employeeReportTableTimeData.js`
+- `employeeCashierReportData.js`
+- `employeeProfitReportData.js`
+
+```http
+GET /api/reports/employee?from=2026-06-08&to=2026-06-14
+GET /api/reports/employee?from=2026-06-08&to=2026-06-14&branchId=branch-id&employeeId=user-id&limit=10
+GET /api/reports/employee?filter=7days
+```
+
+Query params:
+
+- `filter`: `today` | `yesterday` | `7days` | `thisMonth` | `lastMonth` (default: `7days`)
+- `from`, `to`: optional, ISO date/datetime. Nếu truyền sẽ ưu tiên hơn `filter`.
+- `branchId`: optional. For `MANAGER`, BE uses `branchId` from JWT token first, so FE can omit this param.
+- `employeeId`: optional, UUID. Hiện map theo `orders.cashier_id`.
+- `limit`: optional, default `10`, range `1..100`. Dùng cho top doanh thu trong `chart`.
+
+Response:
+
+```json
+{
+  "filter": "7days",
+  "from": "2026-06-08T00:00:00.000Z",
+  "to": "2026-06-14T23:59:59.999Z",
+  "branchId": null,
+  "employeeId": null,
+  "employees": [
+    {
+      "id": "user-id",
+      "code": null,
+      "name": "Nguyen Van A",
+      "department": null,
+      "position": "Thu ngan",
+      "workDays": 0,
+      "workHours": 0,
+      "overtime": 0,
+      "late": 0,
+      "absent": 0,
+      "salary": 0,
+      "performance": 0
+    }
+  ],
+  "chart": [
+    {
+      "id": "user-id",
+      "name": "Nguyen Van A",
+      "revenue": 153840000
+    }
+  ],
+  "sales": [
+    {
+      "id": "user-id",
+      "employee": "Nguyen Van A",
+      "orders": 125,
+      "totalAmount": 158840000,
+      "discount": 5000000,
+      "revenue": 153840000
+    }
+  ],
+  "cashier": [
+    {
+      "id": "user-id",
+      "employee": "Nguyen Van A",
+      "quantity": 125,
+      "revenue": 25800000
+    }
+  ],
+  "profit": [
+    {
+      "id": "user-id",
+      "employee": "Nguyen Van A",
+      "totalPurchase": 158840000,
+      "discount": 5000000,
+      "revenue": 153840000,
+      "cost": 98000000,
+      "profit": 55840000
+    }
+  ],
+  "summary": {
+    "orders": 125,
+    "totalAmount": 158840000,
+    "discount": 5000000,
+    "revenue": 153840000,
+    "quantity": 125,
+    "cost": 98000000,
+    "profit": 55840000
+  }
+}
+```
+
+Field mapping:
+
+| FE mock/component | Response field |
+| ----------------- | -------------- |
+| `employeeReportData.js` / employee select | `employees` |
+| `employeeChartData.js` / chart top seller | `chart` |
+| `employeeReportTableTimeData.js` / sales report | `sales` |
+| `employeeCashierReportData.js` / cashier report | `cashier` |
+| `employeeProfitReportData.js` / profit report | `profit` |
+
+Notes:
+
+- App has a success response wrapper, so axios reads this report at `response.data.data`.
+- Current schema links report sales to `orders.cashier_id` (`users.id`), not the standalone `employees` table.
+- Attendance/payroll fields in `employees` currently return `0/null` until BE joins real work schedule/payroll sources into this report.
+
 ---
 
 ## 10. Suppliers (Nhà cung cấp)
@@ -979,4 +1092,3 @@ Notes:
 - App has a success response wrapper, so axios reads this report at `response.data.data`.
 - `stockOnHand` and `usagePerMil` currently return `null` because DB has no real source for these columns yet; use `dataAvailable` to detect this.
 - `suggestedOrderQuantity` currently uses `planSales.max` when stock is unavailable.
-

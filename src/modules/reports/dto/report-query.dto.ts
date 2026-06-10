@@ -91,9 +91,33 @@ export class MenuPerformanceQueryDto extends CustomerReportQueryDto {
 
 export class CancellationReportQueryDto extends CustomerReportQueryDto {}
 
+export class EmployeeReportQueryDto extends CustomerReportQueryDto {
+  @ApiProperty({
+    description:
+      'Employee/cashier user ID. Maps to orders.cashier_id in current schema.',
+    required: false,
+  })
+  @IsOptional()
+  @IsUUID()
+  employeeId?: string;
+
+  @ApiProperty({
+    description: 'Số lượng nhân viên trả về cho biểu đồ top doanh thu',
+    required: false,
+    default: 10,
+    example: 10,
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  limit?: number;
+}
+
 export class MonthlyOrderPlanQueryDto extends DateRangeQueryDto {
   @ApiProperty({
-    description: 'Month for report in YYYY-MM format. Ignored when from/to is provided.',
+    description:
+      'Month for report in YYYY-MM format. Ignored when from/to is provided.',
     required: false,
     example: '2026-06',
   })
