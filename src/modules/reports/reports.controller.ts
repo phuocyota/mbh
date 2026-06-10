@@ -28,21 +28,24 @@ export class ReportsController {
   @ApiOperation({
     summary: 'Tổng doanh thu trong khoảng + breakdown phương thức TT',
   })
-  async revenueSummary(@Query() query: DateRangeQueryDto) {
-    return this.reportsService.revenueSummary(query);
+  async revenueSummary(@Query() query: DateRangeQueryDto, @Req() req: any) {
+    return this.reportsService.revenueSummary(query, req.user);
   }
 
   @Get('revenue/daily')
   @ApiOperation({ summary: 'Doanh thu theo từng ngày' })
-  async revenueDaily(@Query() query: DateRangeQueryDto) {
-    return this.reportsService.revenueDaily(query);
+  async revenueDaily(@Query() query: DateRangeQueryDto, @Req() req: any) {
+    return this.reportsService.revenueDaily(query, req.user);
   }
 
   @Get('serving')
   @ApiOperation({ summary: 'Thống kê đơn và khách đang phục vụ' })
   @ApiQuery({ name: 'branchId', required: false, type: String })
-  async servingStats(@Query('branchId') branchId?: string) {
-    return this.reportsService.servingStats({ branchId });
+  async servingStats(
+    @Query('branchId') branchId: string | undefined,
+    @Req() req: any,
+  ) {
+    return this.reportsService.servingStats({ branchId }, req.user);
   }
 
   @Get('customer')
@@ -53,8 +56,8 @@ export class ReportsController {
     description: 'Time filter: today, yesterday, 7days, thisMonth, lastMonth',
     enum: ['today', 'yesterday', '7days', 'thisMonth', 'lastMonth'],
   })
-  async customerStats(@Query() query: CustomerReportQueryDto) {
-    return this.reportsService.customerStats(query);
+  async customerStats(@Query() query: CustomerReportQueryDto, @Req() req: any) {
+    return this.reportsService.customerStats(query, req.user);
   }
 
   @Get('menu-performance')
@@ -71,8 +74,11 @@ export class ReportsController {
     description: 'category = theo nhóm món, type = đồ ăn/đồ uống',
     enum: ['category', 'type'],
   })
-  async menuPerformance(@Query() query: MenuPerformanceQueryDto) {
-    return this.reportsService.menuPerformance(query);
+  async menuPerformance(
+    @Query() query: MenuPerformanceQueryDto,
+    @Req() req: any,
+  ) {
+    return this.reportsService.menuPerformance(query, req.user);
   }
 
   @Get('cancellations')
@@ -83,14 +89,17 @@ export class ReportsController {
     description: 'Time filter: today, yesterday, 7days, thisMonth, lastMonth',
     enum: ['today', 'yesterday', '7days', 'thisMonth', 'lastMonth'],
   })
-  async cancellationReport(@Query() query: CancellationReportQueryDto) {
-    return this.reportsService.cancellationReport(query);
+  async cancellationReport(
+    @Query() query: CancellationReportQueryDto,
+    @Req() req: any,
+  ) {
+    return this.reportsService.cancellationReport(query, req.user);
   }
 
   @Get('top-products')
   @ApiOperation({ summary: 'Top sản phẩm bán chạy' })
-  async topProducts(@Query() query: TopProductsQueryDto) {
-    return this.reportsService.topProducts(query);
+  async topProducts(@Query() query: TopProductsQueryDto, @Req() req: any) {
+    return this.reportsService.topProducts(query, req.user);
   }
 
   @Get('shifts/:shiftId/summary')
@@ -105,22 +114,25 @@ export class ReportsController {
   @Get('stock')
   @ApiOperation({ summary: 'Tồn kho hiện tại (theo chi nhánh nếu có)' })
   @ApiQuery({ name: 'branchId', required: false, type: String })
-  async stockSnapshot(@Query('branchId') branchId?: string) {
-    return this.reportsService.stockSnapshot(branchId);
+  async stockSnapshot(
+    @Query('branchId') branchId: string | undefined,
+    @Req() req: any,
+  ) {
+    return this.reportsService.stockSnapshot(branchId, req.user);
   }
 
   @Get('bottom-products')
   @ApiOperation({ summary: 'Sản phẩm bán chậm nhất (lowSelling)' })
-  async bottomProducts(@Query() query: TopProductsQueryDto) {
-    return this.reportsService.bottomProducts(query);
+  async bottomProducts(@Query() query: TopProductsQueryDto, @Req() req: any) {
+    return this.reportsService.bottomProducts(query, req.user);
   }
 
   @Get('end-of-day')
   @ApiOperation({
     summary: 'Báo cáo cuối ngày theo sản phẩm (reportDataEndDay)',
   })
-  async endOfDay(@Query() query: DateRangeQueryDto) {
-    return this.reportsService.endOfDay(query);
+  async endOfDay(@Query() query: DateRangeQueryDto, @Req() req: any) {
+    return this.reportsService.endOfDay(query, req.user);
   }
 
   @Get('monthly-order-plan')
@@ -139,7 +151,10 @@ export class ReportsController {
     summary: 'Báo cáo tồn kho chi tiết theo mặt hàng (productInventoryData)',
   })
   @ApiQuery({ name: 'branchId', required: false, type: String })
-  async inventoryReport(@Query('branchId') branchId?: string) {
-    return this.reportsService.inventoryReport(branchId);
+  async inventoryReport(
+    @Query('branchId') branchId: string | undefined,
+    @Req() req: any,
+  ) {
+    return this.reportsService.inventoryReport(branchId, req.user);
   }
 }

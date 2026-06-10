@@ -1,11 +1,11 @@
-import { Injectable } from '@nestjs/common';
+import { ForbiddenException, Injectable } from '@nestjs/common';
 import { OrderService } from '../orders/order.service';
 import { OrderItemService } from '../order-item/order-item.service';
 import { PaymentService } from '../payment/payment.service';
 import { ShiftService } from '../shift/shift.service';
 import { CashMovementService } from '../cash-movement/cash-movement.service';
 import { StockLevelService } from '../stock-level/stock-level.service';
-import { CASH_MOVEMENT_TYPE } from '../../common/constant/constant';
+import { CASH_MOVEMENT_TYPE, USER_ROLE } from '../../common/constant/constant';
 
 interface DateRange {
   from?: string;
@@ -109,28 +109,46 @@ export class ReportsService {
     return { from, to };
   }
 
-  async revenueSummary(query: {
-    from?: string;
-    to?: string;
-    branchId?: string;
-  }) {
+  private resolveBranchId(queryBranchId?: string, user?: ReportUser) {
+    const userRole = (user?.userType || user?.role || '').toUpperCase();
+
+    if (userRole === USER_ROLE.MANAGER) {
+      if (!user?.branchId) {
+        throw new ForbiddenException('Manager token does not include branchId');
+      }
+
+      return user.branchId;
+    }
+
+    return queryBranchId;
+  }
+
+  async revenueSummary(
+    query: {
+      from?: string;
+      to?: string;
+      branchId?: string;
+    },
+    user?: ReportUser,
+  ) {
     const { from, to } = this.resolveRange(query);
+    const branchId = this.resolveBranchId(query.branchId, user);
     const { totalRow, refundedRow } =
       await this.orderService.getRevenueSummaryRows({
         from,
         to,
-        branchId: query.branchId,
+        branchId,
       });
     const paymentBreakdown = await this.paymentService.getPaymentBreakdown({
       from,
       to,
-      branchId: query.branchId,
+      branchId,
     });
 
     return {
       from,
       to,
-      branchId: query.branchId || null,
+      branchId: branchId || null,
       orderCount: Number(totalRow?.orderCount || 0),
       totalRevenue: Number(totalRow?.totalRevenue || 0),
       totalDiscount: Number(totalRow?.totalDiscount || 0),
@@ -147,18 +165,22 @@ export class ReportsService {
     };
   }
 
-  async revenueDaily(query: { from?: string; to?: string; branchId?: string }) {
+  async revenueDaily(
+    query: { from?: string; to?: string; branchId?: string },
+    user?: ReportUser,
+  ) {
     const { from, to } = this.resolveRange(query);
+    const branchId = this.resolveBranchId(query.branchId, user);
     const rows = await this.orderService.getDailyRevenueRows({
       from,
       to,
-      branchId: query.branchId,
+      branchId,
     });
 
     return {
       from,
       to,
-      branchId: query.branchId || null,
+      branchId: branchId || null,
       data: rows.map((row) => ({
         day: row.day,
         orderCount: Number(row.orderCount),
@@ -167,37 +189,42 @@ export class ReportsService {
     };
   }
 
-  async servingStats(query: { branchId?: string }) {
+  async servingStats(query: { branchId?: string }, user?: ReportUser) {
+    const branchId = this.resolveBranchId(query.branchId, user);
     const row = await this.orderService.getServingStatsRow({
-      branchId: query.branchId,
+      branchId,
     });
 
     return {
-      branchId: query.branchId || null,
+      branchId: branchId || null,
       servingOrders: Number(row?.servingOrders || 0),
       servingCustomers: Number(row?.servingCustomers || 0),
     };
   }
 
-  async customerStats(query: {
-    from?: string;
-    to?: string;
-    branchId?: string;
-    filter?: string;
-  }) {
+  async customerStats(
+    query: {
+      from?: string;
+      to?: string;
+      branchId?: string;
+      filter?: string;
+    },
+    user?: ReportUser,
+  ) {
     const { from, to } = this.resolveCustomerRange(query);
+    const branchId = this.resolveBranchId(query.branchId, user);
     const { dailyRows, totalRow } =
       await this.orderService.getCustomerStatsRows({
         from,
         to,
-        branchId: query.branchId,
+        branchId,
       });
 
     return {
       filter: query.filter || null,
       from,
       to,
-      branchId: query.branchId || null,
+      branchId: branchId || null,
       totalCustomers: Number(totalRow?.count || 0),
       daily: dailyRows.map((row) => ({
         date: row.date,
@@ -207,25 +234,29 @@ export class ReportsService {
     };
   }
 
-  async menuPerformance(query: {
-    from?: string;
-    to?: string;
-    branchId?: string;
-    filter?: string;
-    groupBy?: 'category' | 'type';
-  }) {
+  async menuPerformance(
+    query: {
+      from?: string;
+      to?: string;
+      branchId?: string;
+      filter?: string;
+      groupBy?: 'category' | 'type';
+    },
+    user?: ReportUser,
+  ) {
     const { from, to } = this.resolveCustomerRange(query);
+    const branchId = this.resolveBranchId(query.branchId, user);
     const groupBy = query.groupBy || 'category';
     const [averageRow, groupRows] = await Promise.all([
       this.orderItemService.getMenuAverageRows({
         from,
         to,
-        branchId: query.branchId,
+        branchId,
       }),
       this.orderItemService.getMenuPerformanceGroups({
         from,
         to,
-        branchId: query.branchId,
+        branchId,
         groupBy,
       }),
     ]);
@@ -241,7 +272,7 @@ export class ReportsService {
       filter: query.filter || null,
       from,
       to,
-      branchId: query.branchId || null,
+      branchId: branchId || null,
       groupBy,
       summary: {
         averagePerItem: this.safeAverage(totalRevenue, totalQuantity),
@@ -267,17 +298,21 @@ export class ReportsService {
     };
   }
 
-  async cancellationReport(query: {
-    from?: string;
-    to?: string;
-    branchId?: string;
-    filter?: string;
-  }) {
+  async cancellationReport(
+    query: {
+      from?: string;
+      to?: string;
+      branchId?: string;
+      filter?: string;
+    },
+    user?: ReportUser,
+  ) {
     const { from, to } = this.resolveCustomerRange(query);
+    const branchId = this.resolveBranchId(query.branchId, user);
     const reportRows = await this.orderItemService.getCancellationReportRows({
       from,
       to,
-      branchId: query.branchId,
+      branchId,
     });
 
     const stageConfigs = [
@@ -315,7 +350,7 @@ export class ReportsService {
       filter: query.filter || null,
       from,
       to,
-      branchId: query.branchId || null,
+      branchId: branchId || null,
       summary: {
         cancelledItems: totalCancelledItems,
         cancelledInvoices: reportRows.cancelledInvoiceCount,
@@ -352,18 +387,22 @@ export class ReportsService {
     };
   }
 
-  async topProducts(query: {
-    from?: string;
-    to?: string;
-    branchId?: string;
-    limit?: number;
-  }) {
+  async topProducts(
+    query: {
+      from?: string;
+      to?: string;
+      branchId?: string;
+      limit?: number;
+    },
+    user?: ReportUser,
+  ) {
     const { from, to } = this.resolveRange(query);
+    const branchId = this.resolveBranchId(query.branchId, user);
     const limit = Math.min(Math.max(Number(query.limit) || 10, 1), 100);
     const rows = await this.orderItemService.getTopProducts({
       from,
       to,
-      branchId: query.branchId,
+      branchId,
       limit,
     });
 
@@ -437,22 +476,28 @@ export class ReportsService {
     };
   }
 
-  async stockSnapshot(branchId?: string) {
-    return this.stockLevelService.getSnapshot(branchId);
+  async stockSnapshot(branchId?: string, user?: ReportUser) {
+    return this.stockLevelService.getSnapshot(
+      this.resolveBranchId(branchId, user),
+    );
   }
 
-  async bottomProducts(query: {
-    from?: string;
-    to?: string;
-    branchId?: string;
-    limit?: number;
-  }) {
+  async bottomProducts(
+    query: {
+      from?: string;
+      to?: string;
+      branchId?: string;
+      limit?: number;
+    },
+    user?: ReportUser,
+  ) {
     const { from, to } = this.resolveRange(query);
+    const branchId = this.resolveBranchId(query.branchId, user);
     const limit = Math.min(Math.max(Number(query.limit) || 10, 1), 100);
     const rows = await this.orderItemService.getBottomProducts({
       from,
       to,
-      branchId: query.branchId,
+      branchId,
       limit,
     });
 
@@ -464,18 +509,22 @@ export class ReportsService {
     }));
   }
 
-  async endOfDay(query: { from?: string; to?: string; branchId?: string }) {
+  async endOfDay(
+    query: { from?: string; to?: string; branchId?: string },
+    user?: ReportUser,
+  ) {
     const { from, to } = this.resolveRange(query);
+    const branchId = this.resolveBranchId(query.branchId, user);
     const rows = await this.orderItemService.getEndOfDayItems({
       from,
       to,
-      branchId: query.branchId,
+      branchId,
     });
 
     return {
       from,
       to,
-      branchId: query.branchId || null,
+      branchId: branchId || null,
       data: rows.map((row) => ({
         date: row.date,
         code: row.code,
@@ -490,20 +539,19 @@ export class ReportsService {
     };
   }
 
-  async monthlyOrderPlan(query: {
-    from?: string;
-    to?: string;
-    month?: string;
-    branchId?: string;
-    minRate?: number;
-    maxRate?: number;
-  }, user?: ReportUser) {
+  async monthlyOrderPlan(
+    query: {
+      from?: string;
+      to?: string;
+      month?: string;
+      branchId?: string;
+      minRate?: number;
+      maxRate?: number;
+    },
+    user?: ReportUser,
+  ) {
     const { from, to } = this.resolveMonthlyRange(query);
-    const userRole = user?.userType || user?.role;
-    const branchId =
-      userRole === 'MANAGER'
-        ? user?.branchId || query.branchId
-        : query.branchId || user?.branchId || undefined;
+    const branchId = this.resolveBranchId(query.branchId, user);
     const minRate = Number(query.minRate || 1.2);
     const maxRate = Number(query.maxRate || 1.5);
     const [rows, revenueRows] = await Promise.all([
@@ -574,10 +622,11 @@ export class ReportsService {
     };
   }
 
-  async inventoryReport(branchId?: string) {
-    const snapshot = await this.stockLevelService.getSnapshot(branchId);
+  async inventoryReport(branchId?: string, user?: ReportUser) {
+    const resolvedBranchId = this.resolveBranchId(branchId, user);
+    const snapshot = await this.stockLevelService.getSnapshot(resolvedBranchId);
     return {
-      branchId: branchId || null,
+      branchId: resolvedBranchId || null,
       data: snapshot.map((item: any) => ({
         inventoryItemId: item.inventoryItemId,
         name: item.name,
