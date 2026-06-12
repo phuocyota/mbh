@@ -8,7 +8,7 @@ import { RequestLoggerMiddleware } from './common/middleware/request-logger-midd
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
-  const port = 3002;
+  const PORT = 3002;
 
   // Enable CORS for frontend
   app.enableCors({
@@ -22,9 +22,9 @@ async function bootstrap() {
         'http://localhost:5171',
       ];
       // Allow private network IPs (192.168.x.x, 10.x.x.x, 172.16-31.x.x)
-      const privateIpRegex = /^(http:\/\/)(192\.168\.|10\.|172\.(1[6-9]|2[0-9]|3[0-1])\.)[^:]+:\d+$/;
+      const PRIVATE_IP_REGEX = /^(http:\/\/)(192\.168\.|10\.|172\.(1[6-9]|2[0-9]|3[0-1])\.)[^:]+:\d+$/;
       
-      if (!origin || allowedOrigins.includes(origin) || privateIpRegex.test(origin)) {
+      if (!origin || allowedOrigins.includes(origin) || PRIVATE_IP_REGEX.test(origin)) {
         callback(null, true);
       } else {
         callback(new Error(`Origin ${origin} not allowed by CORS`), false);
@@ -71,10 +71,10 @@ async function bootstrap() {
   const document = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('docs', app, document);
 
-  await app.listen(port, '0.0.0.0');
-  console.log(`✅ Application running on port ${port}`);
+  await app.listen(PORT, '0.0.0.0');
+  console.log(`✅ Application running on port ${PORT}`);
   console.log(
-    `📚 Swagger documentation available at http://localhost:${port}/docs`,
+    `📚 Swagger documentation available at http://localhost:${PORT}/docs`,
   );
 }
 void bootstrap();

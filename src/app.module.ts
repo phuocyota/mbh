@@ -4,7 +4,7 @@ import { ConfigModule } from '@nestjs/config';
 import { APP_FILTER } from '@nestjs/core';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
-import { databaseConfig } from './config/database.config';
+import { DATABASE_CONFIG } from './config/database.config';
 import { AllExceptionsFilter } from './common/filter/all-exceptions.filter';
 import { AuthModule } from './modules/auth/auth.module';
 import { ProductModule } from './modules/products/product.module';
@@ -44,7 +44,7 @@ import { SocketModule } from './modules/socket/socket.module';
       isGlobal: true,
       envFilePath: '.env',
     }),
-    TypeOrmModule.forRoot(databaseConfig),
+    TypeOrmModule.forRoot(DATABASE_CONFIG),
     AuthModule,
     UserModule,
     BranchModule,
