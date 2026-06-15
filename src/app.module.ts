@@ -37,6 +37,8 @@ import { WorkScheduleModule } from './modules/work-schedule/work-schedule.module
 import { SupplierModule } from './modules/supplier/supplier.module';
 import { PayrollModule } from './modules/payroll/payroll.module';
 import { SocketModule } from './modules/socket/socket.module';
+import { FinanceModule } from './modules/finance/finance.module';
+import { WarehouseVoucherModule } from './modules/warehouse-voucher/warehouse-voucher.module';
 
 @Module({
   imports: [
@@ -76,6 +78,8 @@ import { SocketModule } from './modules/socket/socket.module';
     SupplierModule,
     PayrollModule,
     SocketModule,
+    FinanceModule,
+    WarehouseVoucherModule,
   ],
   controllers: [AppController],
   providers: [

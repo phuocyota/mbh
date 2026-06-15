@@ -10,6 +10,7 @@ import { OrderItemModule } from '../order-item/order-item.module';
 import { PaymentModule } from '../payment/payment.module';
 import { WalletModule } from '../wallet/wallet.module';
 import { SocketModule } from '../socket/socket.module';
+import { WarehouseVoucherModule } from '../warehouse-voucher/warehouse-voucher.module';
 
 @Module({
   imports: [
@@ -20,6 +21,7 @@ import { SocketModule } from '../socket/socket.module';
     CustomerModule,
     CouponModule,
     SocketModule,
+    WarehouseVoucherModule,
   ],
   providers: [OrderService, OrderNumberService],
   controllers: [OrderController],

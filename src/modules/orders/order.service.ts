@@ -14,6 +14,7 @@ import { PaymentService } from '../payment/payment.service';
 import { WalletService } from '../wallet/wallet.service';
 import { CustomerService } from '../customer/customer.service';
 import { SocketService } from '../socket/socket.service';
+import { WarehouseVoucherService } from '../warehouse-voucher/warehouse-voucher.service';
 import {
   ORDER_PAYMENT_STATUS,
   ORDER_STATUS,
@@ -34,6 +35,7 @@ export class OrderService {
     private customerService: CustomerService,
     private couponService: CouponService,
     private socketService: SocketService,
+    private warehouseVoucherService: WarehouseVoucherService,
   ) {}
 
   async createOrder(createOrderDto: any) {
@@ -245,6 +247,12 @@ export class OrderService {
     await this.orderRepository.update(orderId, updateData);
 
     const updatedOrder = await this.getOrderWithItems(orderId);
+    if (isPaid) {
+      await this.warehouseVoucherService.createExportFromOrder(
+        updatedOrder,
+        paymentDto,
+      );
+    }
     this.socketService.emitOrderPaymentReceived(updatedOrder, payment);
     if (isPaid) {
       this.socketService.emitOrderPaid(updatedOrder);
@@ -605,6 +613,10 @@ export class OrderService {
     });
 
     const updatedOrder = await this.getOrderWithItems(orderId);
+    await this.warehouseVoucherService.createExportFromOrder(
+      updatedOrder,
+      paymentDto,
+    );
     this.socketService.emitOrderPaymentReceived(updatedOrder);
     this.socketService.emitOrderPaid(updatedOrder);
     this.socketService.emitOrderReadyToPickup(updatedOrder);
