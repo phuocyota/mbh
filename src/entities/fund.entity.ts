@@ -20,6 +20,12 @@ export class Fund extends BaseEntity {
   @Column('numeric', { precision: 15, scale: 2, default: 0 })
   balance: number;
 
+  @Column('numeric', { precision: 15, scale: 2, default: 0 })
+  debit: number;
+
+  @Column('numeric', { precision: 15, scale: 2, default: 0 })
+  credit: number;
+
   @Column('varchar', { default: 'active' })
   status: string;
 
