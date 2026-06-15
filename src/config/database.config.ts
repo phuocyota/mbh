@@ -13,7 +13,7 @@ export const DATABASE_CONFIG: TypeOrmModuleOptions = {
   database: process.env.DB_DATABASE || process.env.DB_NAME || 'pos_system',
   entities: [join(__dirname, '../**/*.entity{.ts,.js}')],
   migrations: [join(__dirname, '../migrations/*{.ts,.js}')],
-  synchronize: process.env.NODE_ENV !== 'production',
+  synchronize: true,
   logging: false,
   migrationsRun: true,
 };

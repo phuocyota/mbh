@@ -7,10 +7,11 @@ module.exports = {
   username: process.env.DB_USERNAME || 'postgres',
   password: process.env.DB_PASSWORD || 'postgres',
   database: process.env.DB_DATABASE || process.env.DB_NAME || 'pos_system',
-  synchronize: false,
+  synchronize: true,
   logging: true,
   entities: ['src/entities/**/*.ts'],
   migrations: ['src/migrations/**/*.ts'],
+  migrationsRun: true,
   subscribers: [],
   cli: {
     entitiesDir: 'src/entities',
