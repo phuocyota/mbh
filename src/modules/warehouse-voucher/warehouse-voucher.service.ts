@@ -1,10 +1,25 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, EntityManager, Repository } from 'typeorm';
-import { StockLevel, StockTransaction, WarehouseVoucher, WarehouseVoucherItem } from '../../entities';
+import {
+  Product,
+  StockTransaction,
+  WarehouseVoucher,
+  WarehouseVoucherItem,
+} from '../../entities';
+import { calculateNextStock } from '../../../packages/inventory/src/index.js';
 import { CreateWarehouseVoucherDto } from './dto/create-warehouse-voucher.dto';
 import { FinanceService } from '../finance/finance.service';
 import { DEFAULT_BRANCH_ID } from '../../common/constant/default-branch.constant';
+import {
+  ACCOUNTING_PURPOSE,
+  ACCOUNTING_SOURCE_TYPE,
+  MONEY_VOUCHER_TYPE,
+} from '../../../packages/accounting/src/index.js';
 
 @Injectable()
 export class WarehouseVoucherService {
@@ -13,8 +28,8 @@ export class WarehouseVoucherService {
     private warehouseVoucherRepository: Repository<WarehouseVoucher>,
     @InjectRepository(WarehouseVoucherItem)
     private warehouseVoucherItemRepository: Repository<WarehouseVoucherItem>,
-    @InjectRepository(StockLevel)
-    private stockLevelRepository: Repository<StockLevel>,
+    @InjectRepository(Product)
+    private productRepository: Repository<Product>,
     @InjectRepository(StockTransaction)
     private stockTransactionRepository: Repository<StockTransaction>,
     private financeService: FinanceService,
@@ -22,7 +37,9 @@ export class WarehouseVoucherService {
   ) {}
 
   findAll() {
-    return this.warehouseVoucherRepository.find({ relations: ['items', 'supplier', 'order'] });
+    return this.warehouseVoucherRepository.find({
+      relations: ['items', 'supplier', 'order'],
+    });
   }
 
   createImportVoucher(dto: Omit<CreateWarehouseVoucherDto, 'type'>) {
@@ -33,7 +50,11 @@ export class WarehouseVoucherService {
     return this.createVoucher({ ...dto, type: 'EXPORT' });
   }
 
-  async createExportFromOrder(order: any, payment: any, manager?: EntityManager) {
+  async createExportFromOrder(
+    order: any,
+    payment: any,
+    manager?: EntityManager,
+  ) {
     const items = Array.isArray(order.items)
       ? order.items.map((item: any) => ({
           productId: item.productId,
@@ -64,7 +85,9 @@ export class WarehouseVoucherService {
     const executor = async (trx: EntityManager) => {
       const type = dto.type.toUpperCase();
       if (!['IMPORT', 'EXPORT'].includes(type)) {
-        throw new BadRequestException('Warehouse voucher type must be IMPORT or EXPORT');
+        throw new BadRequestException(
+          'Warehouse voucher type must be IMPORT or EXPORT',
+        );
       }
 
       if (!dto.items || dto.items.length === 0) {
@@ -73,7 +96,7 @@ export class WarehouseVoucherService {
 
       const voucherRepo = trx.getRepository(WarehouseVoucher);
       const itemRepo = trx.getRepository(WarehouseVoucherItem);
-      const stockLevelRepo = trx.getRepository(StockLevel);
+      const productRepo = trx.getRepository(Product);
       const stockTransactionRepo = trx.getRepository(StockTransaction);
 
       const totalAmount = dto.items.reduce((sum, item) => {
@@ -101,7 +124,6 @@ export class WarehouseVoucherService {
         await itemRepo.save(
           itemRepo.create({
             voucherId: voucher.id,
-            inventoryItemId: dtoItem.inventoryItemId,
             productId: dtoItem.productId,
             quantity,
             unitPrice,
@@ -110,13 +132,13 @@ export class WarehouseVoucherService {
           }),
         );
 
-        if (dtoItem.inventoryItemId) {
+        if (dtoItem.productId) {
           await this.applyInventoryChange(
             trx,
-            stockLevelRepo,
+            productRepo,
             stockTransactionRepo,
             voucher,
-            dtoItem.inventoryItemId,
+            dtoItem.productId,
             quantity,
             type,
           );
@@ -126,13 +148,19 @@ export class WarehouseVoucherService {
       if (dto.fundId && totalAmount > 0) {
         const moneyVoucher = await this.financeService.createMoneyVoucher(
           {
-            type: type === 'IMPORT' ? 'PAYMENT' : 'RECEIPT',
+            type:
+              type === 'IMPORT'
+                ? MONEY_VOUCHER_TYPE.PAYMENT
+                : MONEY_VOUCHER_TYPE.RECEIPT,
             fundId: dto.fundId,
             amount: totalAmount,
             orderId: dto.orderId,
             supplierId: dto.supplierId,
-            purpose: type === 'IMPORT' ? 'WAREHOUSE_IMPORT' : 'WAREHOUSE_EXPORT',
-            refType: 'WAREHOUSE_VOUCHER',
+            purpose:
+              type === 'IMPORT'
+                ? ACCOUNTING_PURPOSE.WAREHOUSE_IMPORT
+                : ACCOUNTING_PURPOSE.WAREHOUSE_EXPORT,
+            refType: ACCOUNTING_SOURCE_TYPE.WAREHOUSE_VOUCHER,
             refId: voucher.id,
             note: dto.note,
           },
@@ -145,7 +173,10 @@ export class WarehouseVoucherService {
         }
       }
 
-      return voucherRepo.findOne({ where: { id: voucher.id }, relations: ['items', 'supplier', 'order'] });
+      return voucherRepo.findOne({
+        where: { id: voucher.id },
+        relations: ['items', 'supplier', 'order'],
+      });
     };
 
     if (manager) {
@@ -157,38 +188,34 @@ export class WarehouseVoucherService {
 
   private async applyInventoryChange(
     trx: EntityManager,
-    stockLevelRepo: Repository<StockLevel>,
+    productRepo: Repository<Product>,
     stockTransactionRepo: Repository<StockTransaction>,
     voucher: WarehouseVoucher,
-    inventoryItemId: string,
+    productId: string,
     quantity: number,
     type: string,
   ) {
-    let stockLevel = await stockLevelRepo.findOne({
-      where: { branchId: voucher.branchId, inventoryItemId },
+    const product = await productRepo.findOne({
+      where: { id: productId },
     });
 
-    if (!stockLevel) {
-      stockLevel = stockLevelRepo.create({
-        branchId: voucher.branchId,
-        inventoryItemId,
-        quantity: 0,
-      });
+    if (!product) {
+      throw new NotFoundException(`Product not found: ${productId}`);
     }
 
-    const currentQuantity = Number(stockLevel.quantity || 0);
-    const nextQuantity = type === 'IMPORT' ? currentQuantity + quantity : currentQuantity - quantity;
-    if (nextQuantity < 0) {
-      throw new BadRequestException('Stock quantity is not enough');
-    }
+    const nextQuantity = calculateNextStock(
+      product,
+      quantity,
+      type,
+    );
 
-    stockLevel.quantity = nextQuantity;
-    await stockLevelRepo.save(stockLevel);
+    product.quantity = nextQuantity;
+    await productRepo.save(product);
 
     await stockTransactionRepo.save(
       stockTransactionRepo.create({
         branchId: voucher.branchId,
-        inventoryItemId,
+        productId,
         type,
         quantity,
         refType: type === 'IMPORT' ? 'IMPORT_NOTE' : 'EXPORT_NOTE',

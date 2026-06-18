@@ -1,6 +1,7 @@
 import { Entity, Column, ManyToOne, JoinColumn } from 'typeorm';
 import { BaseEntity } from '../common/sql/base.entity';
 import { Branch } from './branch.entity';
+import { Product } from './product.entity';
 import { DEFAULT_BRANCH_ID } from '../common/constant/default-branch.constant';
 
 @Entity('stock_transactions')
@@ -8,8 +9,8 @@ export class StockTransaction extends BaseEntity {
   @Column('uuid', { name: 'branch_id', default: DEFAULT_BRANCH_ID })
   branchId: string;
 
-  @Column('uuid', { name: 'inventory_item_id' })
-  inventoryItemId: string;
+  @Column('uuid', { name: 'product_id' })
+  productId: string;
 
   @Column('varchar')
   type: string; // IMPORT, EXPORT, SALE, ADJUSTMENT, WASTE
@@ -31,9 +32,9 @@ export class StockTransaction extends BaseEntity {
   @JoinColumn({ name: 'branch_id' })
   branch: Branch;
 
-  @ManyToOne('InventoryItem')
-  @JoinColumn({ name: 'inventory_item_id' })
-  inventoryItem: any;
+  @ManyToOne(() => Product)
+  @JoinColumn({ name: 'product_id' })
+  product: Product;
 
   @ManyToOne('User', 'stockTransactions')
   @JoinColumn({ name: 'created_by' })

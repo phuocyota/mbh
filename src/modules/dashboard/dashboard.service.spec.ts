@@ -1,7 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { DashboardService } from './dashboard.service';
 import { getRepositoryToken } from '@nestjs/typeorm';
-import { Order, Customer } from '../../entities';
+import { Order, Customer, WarehouseVoucher, WorkSchedule } from '../../entities';
 
 // Mock data để test
 type MockOrder = {
@@ -54,6 +54,14 @@ describe('DashboardService', () => {
         {
           provide: getRepositoryToken(Customer),
           useValue: mockCustomerRepository,
+        },
+        {
+          provide: getRepositoryToken(WarehouseVoucher),
+          useValue: {},
+        },
+        {
+          provide: getRepositoryToken(WorkSchedule),
+          useValue: {},
         },
       ],
     }).compile();

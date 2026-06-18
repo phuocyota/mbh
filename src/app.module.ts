@@ -25,9 +25,7 @@ import { CashMovementModule } from './modules/cash-movement/cash-movement.module
 import { StudentProfileModule } from './modules/student-profile/student-profile.module';
 import { KitchenTicketModule } from './modules/kitchen-ticket/kitchen-ticket.module';
 import { KitchenTicketItemModule } from './modules/kitchen-ticket-item/kitchen-ticket-item.module';
-import { StockLevelModule } from './modules/stock-level/stock-level.module';
 import { StockTransactionModule } from './modules/stock-transaction/stock-transaction.module';
-import { InventoryItemModule } from './modules/inventory-item/inventory-item.module';
 import { ReportsModule } from './modules/reports/reports.module';
 import { CartModule } from './modules/cart/cart.module';
 import { CouponModule } from './modules/coupon/coupon.module';
@@ -39,6 +37,10 @@ import { PayrollModule } from './modules/payroll/payroll.module';
 import { SocketModule } from './modules/socket/socket.module';
 import { FinanceModule } from './modules/finance/finance.module';
 import { WarehouseVoucherModule } from './modules/warehouse-voucher/warehouse-voucher.module';
+import { DashboardModule } from './modules/dashboard/dashboard.module';
+import { InventoryItemModule } from './modules/inventory-item/inventory-item.module';
+import { StockTakeModule } from './modules/stock-take/stock-take.module';
+import { StockTransferModule } from './modules/stock-transfer/stock-transfer.module';
 
 @Module({
   imports: [
@@ -66,9 +68,7 @@ import { WarehouseVoucherModule } from './modules/warehouse-voucher/warehouse-vo
     StudentProfileModule,
     KitchenTicketModule,
     KitchenTicketItemModule,
-    StockLevelModule,
     StockTransactionModule,
-    InventoryItemModule,
     ReportsModule,
     CartModule,
     CouponModule,
@@ -80,6 +80,10 @@ import { WarehouseVoucherModule } from './modules/warehouse-voucher/warehouse-vo
     SocketModule,
     FinanceModule,
     WarehouseVoucherModule,
+    DashboardModule,
+    InventoryItemModule,
+    StockTakeModule,
+    StockTransferModule,
   ],
   controllers: [AppController],
   providers: [

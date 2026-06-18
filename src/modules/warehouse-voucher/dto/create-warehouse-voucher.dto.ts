@@ -4,15 +4,10 @@ import { IsArray, IsNotEmpty, IsNumber, IsOptional, IsString, IsUUID, Min, Valid
 import { DEFAULT_BRANCH_ID } from '../../../common/constant/default-branch.constant';
 
 export class CreateWarehouseVoucherItemDto {
-  @ApiProperty({ required: false })
-  @IsOptional()
+  @ApiProperty()
+  @IsNotEmpty()
   @IsUUID()
-  inventoryItemId?: string;
-
-  @ApiProperty({ required: false })
-  @IsOptional()
-  @IsUUID()
-  productId?: string;
+  productId: string;
 
   @ApiProperty({ example: 1 })
   @IsNotEmpty()

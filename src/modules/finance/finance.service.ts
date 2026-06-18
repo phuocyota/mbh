@@ -1,16 +1,31 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, EntityManager, Repository } from 'typeorm';
-import { Debt, Fund, FundTransaction, MoneyVoucher, Supplier } from '../../entities';
+import {
+  Debt,
+  Fund,
+  FundTransaction,
+  MoneyVoucher,
+  Supplier,
+} from '../../entities';
 import { CreateFundDto } from './dto/create-fund.dto';
 import { CreateMoneyVoucherDto } from './dto/create-money-voucher.dto';
-
-const PURPOSE_ACCOUNT_MAP: Record<string, { receiptAccountCode?: string; paymentAccountCode?: string }> = {
-  ORDER_PAYMENT: { receiptAccountCode: '5111' },
-  WAREHOUSE_EXPORT: { receiptAccountCode: '5111' },
-  WAREHOUSE_IMPORT: { paymentAccountCode: '1561' },
-  SUPPLIER_DEBT_OFFSET: { paymentAccountCode: '331' },
-};
+import {
+  ACCOUNTING_SOURCE_TYPE,
+  ACCOUNTING_PURPOSE,
+  AccountingRuleError,
+  createMoneyVoucherCode,
+  DEBT_TRANSACTION_TYPE,
+  defaultAccountingSourceType,
+  getFundBalanceAfterVoucher,
+  MONEY_VOUCHER_TYPE,
+  normalizeMoneyVoucherType,
+  resolveMoneyVoucherPosting,
+} from '../../../packages/accounting/src/index.js';
 
 @Injectable()
 export class FinanceService {
@@ -37,23 +52,33 @@ export class FinanceService {
   }
 
   findMoneyVouchers() {
-    return this.moneyVoucherRepository.find({ relations: ['fund', 'order', 'supplier'] });
+    return this.moneyVoucherRepository.find({
+      relations: ['fund', 'order', 'supplier'],
+    });
   }
 
   createReceipt(dto: Omit<CreateMoneyVoucherDto, 'type'>) {
-    return this.createMoneyVoucher({ ...dto, type: 'RECEIPT' });
+    return this.createMoneyVoucher({
+      ...dto,
+      type: MONEY_VOUCHER_TYPE.RECEIPT,
+    });
   }
 
   createPayment(dto: Omit<CreateMoneyVoucherDto, 'type'>) {
-    return this.createMoneyVoucher({ ...dto, type: 'PAYMENT' });
+    return this.createMoneyVoucher({
+      ...dto,
+      type: MONEY_VOUCHER_TYPE.PAYMENT,
+    });
   }
 
-  async createMoneyVoucher(dto: CreateMoneyVoucherDto, manager?: EntityManager) {
+  async createMoneyVoucher(
+    dto: CreateMoneyVoucherDto,
+    manager?: EntityManager,
+  ) {
     const executor = async (trx: EntityManager) => {
-      const type = dto.type.toUpperCase();
-      if (!['RECEIPT', 'PAYMENT'].includes(type)) {
-        throw new BadRequestException('Money voucher type must be RECEIPT or PAYMENT');
-      }
+      const type = this.mapAccountingRule(() =>
+        normalizeMoneyVoucherType(dto.type),
+      );
 
       const fundRepo = trx.getRepository(Fund);
       const voucherRepo = trx.getRepository(MoneyVoucher);
@@ -66,20 +91,27 @@ export class FinanceService {
         throw new NotFoundException('Fund not found');
       }
 
-      const accountingEntry = this.resolveAccountingEntry(type, fund.accountCode, dto);
+      const accountingEntry = this.mapAccountingRule(() =>
+        resolveMoneyVoucherPosting({
+          type,
+          fundAccountCode: fund.accountCode,
+          purpose: dto.purpose,
+          debitAccountCode: dto.debitAccountCode,
+          creditAccountCode: dto.creditAccountCode,
+        }),
+      );
       const amount = Number(dto.amount);
       const currentBalance = Number(fund.balance || 0);
-      const nextBalance = type === 'RECEIPT' ? currentBalance + amount : currentBalance - amount;
-      if (nextBalance < 0) {
-        throw new BadRequestException('Fund balance is not enough');
-      }
+      const nextBalance = this.mapAccountingRule(() =>
+        getFundBalanceAfterVoucher({ type, currentBalance, amount }),
+      );
 
       const voucher = await voucherRepo.save(
         voucherRepo.create({
           ...dto,
           ...accountingEntry,
           type,
-          code: `${type === 'RECEIPT' ? 'PT' : 'PC'}${Date.now()}`,
+          code: createMoneyVoucherCode(type),
         }),
       );
 
@@ -94,19 +126,26 @@ export class FinanceService {
           balanceAfter: nextBalance,
           debitAccountCode: accountingEntry.debitAccountCode,
           creditAccountCode: accountingEntry.creditAccountCode,
-          refType: dto.refType || 'MONEY_VOUCHER',
+          refType: defaultAccountingSourceType(dto.refType),
           refId: voucher.id,
           orderId: dto.orderId,
           note: dto.note,
         }),
       );
 
-      if (type === 'PAYMENT' && dto.purpose === 'SUPPLIER_DEBT_OFFSET') {
+      if (
+        type === MONEY_VOUCHER_TYPE.PAYMENT &&
+        dto.purpose === ACCOUNTING_PURPOSE.SUPPLIER_DEBT_OFFSET
+      ) {
         if (!dto.supplierId) {
-          throw new BadRequestException('supplierId is required for supplier debt offset');
+          throw new BadRequestException(
+            'supplierId is required for supplier debt offset',
+          );
         }
 
-        const supplier = await supplierRepo.findOne({ where: { id: dto.supplierId } });
+        const supplier = await supplierRepo.findOne({
+          where: { id: dto.supplierId },
+        });
         if (!supplier) {
           throw new NotFoundException('Supplier not found');
         }
@@ -118,17 +157,20 @@ export class FinanceService {
         await debtRepo.save(
           debtRepo.create({
             supplierId: supplier.id,
-            type: 'PAYMENT_OFFSET',
+            type: DEBT_TRANSACTION_TYPE.PAYMENT_OFFSET,
             amount,
             balanceAfter: nextDebt,
-            refType: 'MONEY_VOUCHER',
+            refType: ACCOUNTING_SOURCE_TYPE.MONEY_VOUCHER,
             refId: voucher.id,
             note: dto.note,
           }),
         );
       }
 
-      return voucherRepo.findOne({ where: { id: voucher.id }, relations: ['fund', 'order', 'supplier'] });
+      return voucherRepo.findOne({
+        where: { id: voucher.id },
+        relations: ['fund', 'order', 'supplier'],
+      });
     };
 
     if (manager) {
@@ -138,30 +180,15 @@ export class FinanceService {
     return this.dataSource.transaction(executor);
   }
 
-  private resolveAccountingEntry(type: string, fundAccountCode: string, dto: CreateMoneyVoucherDto) {
-    if (dto.debitAccountCode && dto.creditAccountCode) {
-      return {
-        debitAccountCode: dto.debitAccountCode,
-        creditAccountCode: dto.creditAccountCode,
-      };
-    }
+  private mapAccountingRule<T>(callback: () => T): T {
+    try {
+      return callback();
+    } catch (error) {
+      if (error instanceof AccountingRuleError) {
+        throw new BadRequestException(error.message);
+      }
 
-    const purpose = dto.purpose || 'OTHER';
-    const mapping = PURPOSE_ACCOUNT_MAP[purpose];
-    if (!mapping) {
-      throw new BadRequestException(`Accounting account mapping is required for purpose: ${purpose}`);
+      throw error;
     }
-
-    if (type === 'RECEIPT') {
-      return {
-        debitAccountCode: dto.debitAccountCode || fundAccountCode,
-        creditAccountCode: dto.creditAccountCode || mapping.receiptAccountCode,
-      };
-    }
-
-    return {
-      debitAccountCode: dto.debitAccountCode || mapping.paymentAccountCode,
-      creditAccountCode: dto.creditAccountCode || fundAccountCode,
-    };
   }
 }

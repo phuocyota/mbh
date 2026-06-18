@@ -1,94 +1,68 @@
 import {
-  Controller,
-  Get,
-  Post,
   Body,
-  Param,
-  Put,
+  Controller,
   Delete,
+  Get,
   HttpCode,
   HttpStatus,
+  Param,
+  Post,
+  Put,
+  Query,
+  UseGuards,
 } from '@nestjs/common';
 import {
-  ApiTags,
-  ApiOperation,
-  ApiResponse,
   ApiBearerAuth,
+  ApiOperation,
   ApiParam,
+  ApiQuery,
+  ApiTags,
 } from '@nestjs/swagger';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { InventoryItemService } from './inventory-item.service';
-import { CreateInventoryItemDto } from './dto/create-inventory-item.dto';
-import { InventoryItemDto } from './dto/inventory-item.dto';
 
 @ApiTags('Inventory Items')
 @ApiBearerAuth()
 @Controller('inventory-items')
+@UseGuards(JwtAuthGuard)
 export class InventoryItemController {
-  constructor(private inventoryItemService: InventoryItemService) {}
+  constructor(private readonly inventoryItemService: InventoryItemService) {}
 
   @Get()
-  @ApiOperation({ summary: 'Get all inventory items' })
-  @ApiResponse({
-    status: 200,
-    description: 'List of inventory items',
-    type: [InventoryItemDto],
+  @ApiOperation({
+    summary: 'Compatibility inventory item list backed by products stock',
   })
-  async findAll() {
-    return this.inventoryItemService.findAll();
+  @ApiQuery({ name: 'search', required: false })
+  async findAll(@Query('search') search?: string) {
+    return this.inventoryItemService.findAll(search);
   }
 
   @Get(':id')
-  @ApiOperation({ summary: 'Get inventory item by ID' })
-  @ApiParam({ name: 'id', description: 'Inventory Item ID' })
-  @ApiResponse({
-    status: 200,
-    description: 'Inventory item details',
-    type: InventoryItemDto,
-  })
-  @ApiResponse({ status: 404, description: 'Inventory item not found' })
+  @ApiOperation({ summary: 'Get inventory item by product ID' })
+  @ApiParam({ name: 'id', description: 'Product ID' })
   async findOne(@Param('id') id: string) {
     return this.inventoryItemService.findOne(id);
   }
 
   @Post()
   @HttpCode(HttpStatus.CREATED)
-  @ApiOperation({ summary: 'Create new inventory item' })
-  @ApiResponse({
-    status: 201,
-    description: 'Inventory item created',
-    type: InventoryItemDto,
-  })
-  async create(@Body() createInventoryItemDto: CreateInventoryItemDto) {
-    return this.inventoryItemService.create(createInventoryItemDto, {
-      userId: 'system',
-    } as any);
+  @ApiOperation({ summary: 'Create inventory item as product stock record' })
+  async create(@Body() dto: any) {
+    return this.inventoryItemService.create(dto);
   }
 
   @Put(':id')
-  @ApiOperation({ summary: 'Update inventory item' })
-  @ApiParam({ name: 'id', description: 'Inventory Item ID' })
-  @ApiResponse({
-    status: 200,
-    description: 'Inventory item updated',
-    type: InventoryItemDto,
-  })
-  @ApiResponse({ status: 404, description: 'Inventory item not found' })
-  async update(
-    @Param('id') id: string,
-    @Body() createInventoryItemDto: CreateInventoryItemDto,
-  ) {
-    return this.inventoryItemService.update(id, createInventoryItemDto, {
-      userId: 'system',
-    } as any);
+  @ApiOperation({ summary: 'Update inventory item stock fields' })
+  @ApiParam({ name: 'id', description: 'Product ID' })
+  async update(@Param('id') id: string, @Body() dto: any) {
+    return this.inventoryItemService.update(id, dto);
   }
 
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
-  @ApiOperation({ summary: 'Delete inventory item' })
-  @ApiParam({ name: 'id', description: 'Inventory Item ID' })
-  @ApiResponse({ status: 204, description: 'Inventory item deleted' })
-  @ApiResponse({ status: 404, description: 'Inventory item not found' })
-  async delete(@Param('id') id: string): Promise<void> {
-    await this.inventoryItemService.delete(id, { userId: 'system' } as any);
+  @ApiOperation({ summary: 'Deactivate inventory item product' })
+  @ApiParam({ name: 'id', description: 'Product ID' })
+  async delete(@Param('id') id: string) {
+    await this.inventoryItemService.delete(id);
   }
 }

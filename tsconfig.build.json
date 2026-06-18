@@ -1,11 +1,5 @@
 {
   "extends": "./tsconfig.json",
-  "include": ["src/**/*"],
-  "exclude": [
-    "node_modules",
-    "test",
-    "dist",
-    "mbh-frontend",
-    "**/*spec.ts"
-  ]
+  "include": ["src/**/*", "packages/**/*"],
+  "exclude": ["node_modules", "test", "dist", "mbh-frontend", "**/*spec.ts"]
 }

@@ -21,9 +21,6 @@ export class Branch extends BaseEntity {
   @OneToMany('Order', 'branch')
   orders: any[];
 
-  @OneToMany('StockLevel', 'branch')
-  stockLevels: any[];
-
   @OneToMany('StockTransaction', 'branch')
   stockTransactions: any[];
 

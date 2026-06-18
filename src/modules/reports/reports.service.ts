@@ -1,10 +1,12 @@
 import { ForbiddenException, Injectable } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { Product } from '../../entities';
 import { OrderService } from '../orders/order.service';
 import { OrderItemService } from '../order-item/order-item.service';
 import { PaymentService } from '../payment/payment.service';
 import { ShiftService } from '../shift/shift.service';
 import { CashMovementService } from '../cash-movement/cash-movement.service';
-import { StockLevelService } from '../stock-level/stock-level.service';
 import { CASH_MOVEMENT_TYPE, USER_ROLE } from '../../common/constant/constant';
 
 interface DateRange {
@@ -31,7 +33,8 @@ export class ReportsService {
     private paymentService: PaymentService,
     private shiftService: ShiftService,
     private cashMovementService: CashMovementService,
-    private stockLevelService: StockLevelService,
+    @InjectRepository(Product)
+    private productRepository: Repository<Product>,
   ) {}
 
   private resolveRange(range: DateRange): ResolvedDateRange {
@@ -576,9 +579,14 @@ export class ReportsService {
   }
 
   async stockSnapshot(branchId?: string, user?: ReportUser) {
-    return this.stockLevelService.getSnapshot(
-      this.resolveBranchId(branchId, user),
-    );
+    const products = await this.productRepository.find();
+    return products.map((product) => ({
+      productId: product.id,
+      name: product.name,
+      unit: product.unit,
+      quantity: Number(product.quantity || 0),
+      updatedAt: product.updatedAt,
+    }));
   }
 
   async bottomProducts(
@@ -722,19 +730,7 @@ export class ReportsService {
   }
 
   async inventoryReport(branchId?: string, user?: ReportUser) {
-    const resolvedBranchId = this.resolveBranchId(branchId, user);
-    const snapshot = await this.stockLevelService.getSnapshot(resolvedBranchId);
-    return {
-      branchId: resolvedBranchId || null,
-      data: snapshot.map((item: any) => ({
-        inventoryItemId: item.inventoryItemId,
-        name: item.name,
-        unit: item.unit,
-        quantity: Number(item.quantity),
-        branchId: item.branchId,
-        updatedAt: item.updatedAt,
-      })),
-    };
+    return this.stockSnapshot(branchId, user);
   }
 
   private safeAverage(total: number, quantity: number) {

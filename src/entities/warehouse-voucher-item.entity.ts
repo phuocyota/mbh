@@ -1,7 +1,6 @@
 import { Entity, Column, ManyToOne, JoinColumn } from 'typeorm';
 import { BaseEntity } from '../common/sql/base.entity';
 import { WarehouseVoucher } from './warehouse-voucher.entity';
-import { InventoryItem } from './inventory-item.entity';
 import { Product } from './product.entity';
 
 @Entity('warehouse_voucher_items')
@@ -9,10 +8,7 @@ export class WarehouseVoucherItem extends BaseEntity {
   @Column('uuid', { name: 'voucher_id' })
   voucherId: string;
 
-  @Column('uuid', { name: 'inventory_item_id', nullable: true })
-  inventoryItemId: string;
-
-  @Column('uuid', { name: 'product_id', nullable: true })
+  @Column('uuid', { name: 'product_id' })
   productId: string;
 
   @Column('numeric', { precision: 12, scale: 2 })
@@ -32,10 +28,6 @@ export class WarehouseVoucherItem extends BaseEntity {
   })
   @JoinColumn({ name: 'voucher_id' })
   voucher: WarehouseVoucher;
-
-  @ManyToOne(() => InventoryItem)
-  @JoinColumn({ name: 'inventory_item_id' })
-  inventoryItem: InventoryItem;
 
   @ManyToOne(() => Product)
   @JoinColumn({ name: 'product_id' })
