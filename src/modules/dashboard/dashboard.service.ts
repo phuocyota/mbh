@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { Order, Customer, StockReceiptDetail, WorkSchedule } from '../../entities';
+import { Order, Customer, StockReceiptDetail, WorkSchedule, StockReceiptImport } from '../../entities';
 import {
   ORDER_PAYMENT_STATUS,
   REVENUE_ORDER_STATUSES,
@@ -21,6 +21,8 @@ export class DashboardService {
     private customerRepository: Repository<Customer>,
     @InjectRepository(StockReceiptDetail)
     private stockReceiptDetailRepository: Repository<StockReceiptDetail>,
+    @InjectRepository(StockReceiptImport)
+    private stockReceiptImportRepository: Repository<StockReceiptImport>,
     @InjectRepository(WorkSchedule)
     private workScheduleRepository: Repository<WorkSchedule>,
   ) {}
@@ -193,21 +195,20 @@ export class DashboardService {
       orderQuery.andWhere('order.branchId = :branchId', { branchId });
     }
 
-    const receiptQuery = this.stockReceiptDetailRepository
+    const receiptQuery = this.stockReceiptImportRepository
       .createQueryBuilder('receipt')
       .leftJoin('receipt.supplier', 'supplier')
       .select([
         "'import' as type",
         'receipt.id as id',
-        "CONCAT('NK', TO_CHAR(receipt.createdAt, 'YYYYMMDDHH24MISS')) as code",
+        'receipt.code as code',
         'receipt.totalAmount as amount',
         'receipt.createdAt as "createdAt"',
         "COALESCE(supplier.name, 'Kho') as actor",
-      ])
-      .where('receipt.type = :type', { type: 'IMPORT' });
+      ]);
 
     if (branchId) {
-      receiptQuery.andWhere('receipt.branchId = :branchId', { branchId });
+      receiptQuery.where('receipt.branchId = :branchId', { branchId });
     }
 
     const [orders, receipts] = await Promise.all([

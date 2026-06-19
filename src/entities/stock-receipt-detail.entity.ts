@@ -1,34 +1,32 @@
 import { Entity, Column, ManyToOne, JoinColumn } from 'typeorm';
 import { BaseEntity } from '../common/sql/base.entity';
 import { Product } from './product.entity';
-import { Branch } from './branch.entity';
-import { Supplier } from './supplier.entity';
-import { Order } from './order.entity';
-import { Fund } from './fund.entity';
-import { MoneyVoucher } from './money-voucher.entity';
 import { StockReceiptImport } from './stock-receipt-import.entity';
 import { StockReceiptExport } from './stock-receipt-export.entity';
-import { DEFAULT_BRANCH_ID } from '../common/constant/default-branch.constant';
+import { StockReceiptTransfer } from './stock-receipt-transfer.entity';
 
 @Entity('stock_receipt_detail')
 export class StockReceiptDetail extends BaseEntity {
-  @Column('uuid', { name: 'branch_id', default: DEFAULT_BRANCH_ID })
-  branchId: string;
-
   @Column('uuid', { name: 'product_id' })
   productId: string;
 
-  @Column('uuid', { name: 'supplier_id', nullable: true })
-  supplierId: string;
+  @Column('numeric', { precision: 12, scale: 2 })
+  quantity: number;
 
-  @Column('uuid', { name: 'order_id', nullable: true })
-  orderId: string;
+  @Column('varchar', { name: 'receipt_type' })
+  receiptType: string; // IMPORT, EXPORT, TRANSFER
 
-  @Column('uuid', { name: 'fund_id', nullable: true })
-  fundId: string;
+  @Column('uuid', { name: 'from_id', nullable: true })
+  fromId?: string | null;
 
-  @Column('uuid', { name: 'money_voucher_id', nullable: true })
-  moneyVoucherId: string;
+  @Column('uuid', { name: 'to_id', nullable: true })
+  toId?: string | null;
+
+  @Column('varchar', { name: 'from_type' })
+  fromType: string; // STOCK, VENDOR
+
+  @Column('varchar', { name: 'to_type' })
+  toType: string; // STOCK, VENDOR
 
   @Column('uuid', { name: 'import_id', nullable: true })
   importId: string;
@@ -36,44 +34,12 @@ export class StockReceiptDetail extends BaseEntity {
   @Column('uuid', { name: 'export_id', nullable: true })
   exportId: string;
 
-  @Column('numeric', { precision: 12, scale: 2 })
-  quantity: number;
-
-  @Column('numeric', { precision: 15, scale: 2, default: 0, name: 'unit_price' })
-  unitPrice: number;
-
-  @Column('numeric', { precision: 15, scale: 2, default: 0, name: 'total_amount' })
-  totalAmount: number;
-
-  @Column('varchar')
-  type: string; // IMPORT, EXPORT, TRANSFER
-
-  @Column('text', { nullable: true })
-  note: string;
-
-  @ManyToOne(() => Branch)
-  @JoinColumn({ name: 'branch_id' })
-  branch: Branch;
+  @Column('uuid', { name: 'transfer_id', nullable: true })
+  transferId: string;
 
   @ManyToOne(() => Product)
   @JoinColumn({ name: 'product_id' })
   product: Product;
-
-  @ManyToOne(() => Supplier)
-  @JoinColumn({ name: 'supplier_id' })
-  supplier: Supplier;
-
-  @ManyToOne(() => Order)
-  @JoinColumn({ name: 'order_id' })
-  order: Order;
-
-  @ManyToOne(() => Fund)
-  @JoinColumn({ name: 'fund_id' })
-  fund: Fund;
-
-  @ManyToOne(() => MoneyVoucher)
-  @JoinColumn({ name: 'money_voucher_id' })
-  moneyVoucher: MoneyVoucher;
 
   @ManyToOne(() => StockReceiptImport, (importReceipt) => importReceipt.details, { onDelete: 'CASCADE', nullable: true })
   @JoinColumn({ name: 'import_id' })
@@ -82,4 +48,8 @@ export class StockReceiptDetail extends BaseEntity {
   @ManyToOne(() => StockReceiptExport, (exportReceipt) => exportReceipt.details, { onDelete: 'CASCADE', nullable: true })
   @JoinColumn({ name: 'export_id' })
   exportReceipt: StockReceiptExport;
+
+  @ManyToOne(() => StockReceiptTransfer, (transferReceipt) => transferReceipt.details, { onDelete: 'CASCADE', nullable: true })
+  @JoinColumn({ name: 'transfer_id' })
+  transferReceipt: StockReceiptTransfer;
 }

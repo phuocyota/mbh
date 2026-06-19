@@ -1,6 +1,7 @@
-import { Entity, Column, ManyToOne, JoinColumn } from 'typeorm';
+import { Entity, Column, ManyToOne, OneToMany, JoinColumn } from 'typeorm';
 import { BaseEntity } from '../common/sql/base.entity';
 import { Branch } from './branch.entity';
+import { StockReceiptDetail } from './stock-receipt-detail.entity';
 import { DEFAULT_BRANCH_ID } from '../common/constant/default-branch.constant';
 
 @Entity('stock_receipt_transfer')
@@ -36,4 +37,7 @@ export class StockReceiptTransfer extends BaseEntity {
   @ManyToOne(() => Branch)
   @JoinColumn({ name: 'to_branch_id' })
   toBranch: Branch;
+
+  @OneToMany(() => StockReceiptDetail, (detail) => detail.transferReceipt, { cascade: true })
+  details: StockReceiptDetail[];
 }

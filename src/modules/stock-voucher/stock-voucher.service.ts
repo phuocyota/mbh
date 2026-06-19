@@ -40,10 +40,6 @@ export class StockVoucherService {
     return this.stockReceiptDetailRepository.find({
       relations: [
         'product',
-        'supplier',
-        'order',
-        'fund',
-        'moneyVoucher',
         'importReceipt',
         'exportReceipt',
       ],
@@ -151,21 +147,18 @@ export class StockVoucherService {
         const total = quantity * unitPrice;
 
         const detailData = {
-          branchId: dto.branchId || DEFAULT_BRANCH_ID,
           productId: dtoItem.productId,
-          supplierId: dto.supplierId,
-          orderId: dto.orderId,
-          fundId: dto.fundId,
           quantity,
-          unitPrice,
-          totalAmount: total,
-          type,
-          note: dtoItem.note || dto.note,
+          receiptType: type,
+          fromId: type === 'IMPORT' ? (dto.supplierId || null) : (dto.branchId || DEFAULT_BRANCH_ID),
+          toId: type === 'IMPORT' ? (dto.branchId || DEFAULT_BRANCH_ID) : (dto.orderId || dto.supplierId || null),
+          fromType: type === 'IMPORT' ? 'VENDOR' : 'STOCK',
+          toType: type === 'IMPORT' ? 'STOCK' : 'VENDOR',
           importId: type === 'IMPORT' ? headerReceipt.id : undefined,
           exportId: type === 'EXPORT' ? headerReceipt.id : undefined,
         };
 
-        const detail = await detailRepo.save(detailRepo.create(detailData));
+        const detail = await detailRepo.save(detailRepo.create(detailData as any) as any);
         savedDetails.push(detail);
 
         if (dtoItem.productId) {
@@ -209,11 +202,6 @@ export class StockVoucherService {
           } else {
             await exportRepo.update(headerReceipt.id, { moneyVoucherId: moneyVoucher.id });
           }
-          // Also link to details for compatibility
-          await detailRepo.update(
-            savedDetails.map((detail) => detail.id),
-            { moneyVoucherId: moneyVoucher.id },
-          );
         }
       }
 
@@ -221,10 +209,6 @@ export class StockVoucherService {
         where: savedDetails.map((detail) => ({ id: detail.id })),
         relations: [
           'product',
-          'supplier',
-          'order',
-          'fund',
-          'moneyVoucher',
           'importReceipt',
           'exportReceipt',
         ],

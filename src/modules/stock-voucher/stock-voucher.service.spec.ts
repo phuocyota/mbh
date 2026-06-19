@@ -124,7 +124,11 @@ describe('StockVoucherService', () => {
         expect.objectContaining({
           productId: 'product-id-1',
           quantity: 5,
-          unitPrice: 100,
+          receiptType: 'IMPORT',
+          fromId: 'supplier-id-1',
+          toId: 'branch-id-1',
+          fromType: 'VENDOR',
+          toType: 'STOCK',
           importId: 'import-id',
         }),
       );
@@ -134,7 +138,6 @@ describe('StockVoucherService', () => {
         'import-id',
         { moneyVoucherId: 'money-voucher-id' },
       );
-      expect(mockRepositories.StockReceiptDetail.update).toHaveBeenCalled();
       expect(result).toBeDefined();
     });
   });
@@ -172,7 +175,11 @@ describe('StockVoucherService', () => {
         expect.objectContaining({
           productId: 'product-id-2',
           quantity: 2,
-          unitPrice: 150,
+          receiptType: 'EXPORT',
+          fromId: 'branch-id-2',
+          toId: 'order-id-1',
+          fromType: 'STOCK',
+          toType: 'VENDOR',
           exportId: 'export-id',
         }),
       );
