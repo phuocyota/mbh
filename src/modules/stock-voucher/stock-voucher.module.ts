@@ -1,6 +1,14 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { Product, StockReceiptDetail, StockReceiptImport, StockReceiptExport } from '../../entities';
+import {
+  Product,
+  StockReceiptDetail,
+  StockReceiptImport,
+  StockReceiptExport,
+  StockReceiptTransfer,
+  Stock,
+  StockItem,
+} from '../../entities';
 import { FinanceModule } from '../finance/finance.module';
 import { StockVoucherController } from './stock-voucher.controller';
 import { StockVoucherService } from './stock-voucher.service';
@@ -12,6 +20,9 @@ import { StockVoucherService } from './stock-voucher.service';
       StockReceiptDetail,
       StockReceiptImport,
       StockReceiptExport,
+      StockReceiptTransfer,
+      Stock,
+      StockItem,
     ]),
     FinanceModule,
   ],

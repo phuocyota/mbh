@@ -33,6 +33,16 @@ export class CreateStockVoucherDto {
   @IsUUID()
   branchId?: string;
 
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsUUID()
+  fromBranchId?: string;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsUUID()
+  toBranchId?: string;
+
   @ApiProperty({ example: 'IMPORT' })
   @IsNotEmpty()
   @IsString()

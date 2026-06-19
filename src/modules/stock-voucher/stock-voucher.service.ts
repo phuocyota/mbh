@@ -10,6 +10,9 @@ import {
   StockReceiptDetail,
   StockReceiptImport,
   StockReceiptExport,
+  StockReceiptTransfer,
+  Stock,
+  StockItem,
 } from '../../entities';
 import { calculateNextStock } from '../../../packages/inventory/src/index.js';
 import { CreateStockVoucherDto } from './dto/create-stock-voucher.dto';
@@ -32,6 +35,12 @@ export class StockVoucherService {
     private stockReceiptImportRepository: Repository<StockReceiptImport>,
     @InjectRepository(StockReceiptExport)
     private stockReceiptExportRepository: Repository<StockReceiptExport>,
+    @InjectRepository(StockReceiptTransfer)
+    private stockReceiptTransferRepository: Repository<StockReceiptTransfer>,
+    @InjectRepository(Stock)
+    private stockRepository: Repository<Stock>,
+    @InjectRepository(StockItem)
+    private stockItemRepository: Repository<StockItem>,
     private financeService: FinanceService,
     private dataSource: DataSource,
   ) {}
@@ -42,6 +51,7 @@ export class StockVoucherService {
         'product',
         'importReceipt',
         'exportReceipt',
+        'transferReceipt',
       ],
       order: { createdAt: 'DESC' },
     });
@@ -86,12 +96,50 @@ export class StockVoucherService {
     );
   }
 
+  private async getOrCreateBranchStock(
+    stockRepo: Repository<Stock>,
+    branchId: string,
+  ): Promise<Stock> {
+    let stock = await stockRepo.findOne({ where: { branchId } });
+    if (!stock) {
+      stock = await stockRepo.save(
+        stockRepo.create({
+          name: `Kho Chi Nhánh`,
+          branchId,
+        }),
+      );
+    }
+    return stock;
+  }
+
+  private async updateStockItemQuantity(
+    stockItemRepo: Repository<StockItem>,
+    stockId: string,
+    productId: string,
+    quantityChange: number,
+  ) {
+    let stockItem = await stockItemRepo.findOne({
+      where: { stockId, productId },
+    });
+
+    if (!stockItem) {
+      stockItem = stockItemRepo.create({
+        stockId,
+        productId,
+        quantity: 0,
+      });
+    }
+
+    stockItem.quantity = Number(stockItem.quantity) + Number(quantityChange);
+    await stockItemRepo.save(stockItem);
+  }
+
   async createVoucher(dto: CreateStockVoucherDto, manager?: EntityManager) {
     const executor = async (trx: EntityManager) => {
       const type = dto.type.toUpperCase();
-      if (!['IMPORT', 'EXPORT'].includes(type)) {
+      if (!['IMPORT', 'EXPORT', 'TRANSFER'].includes(type)) {
         throw new BadRequestException(
-          'Stock voucher type must be IMPORT or EXPORT',
+          'Stock voucher type must be IMPORT, EXPORT or TRANSFER',
         );
       }
 
@@ -103,19 +151,41 @@ export class StockVoucherService {
       const productRepo = trx.getRepository(Product);
       const importRepo = trx.getRepository(StockReceiptImport);
       const exportRepo = trx.getRepository(StockReceiptExport);
+      const transferRepo = trx.getRepository(StockReceiptTransfer);
+      const stockRepo = trx.getRepository(Stock);
+      const stockItemRepo = trx.getRepository(StockItem);
 
       const totalAmount = dto.items.reduce((sum, item) => {
         return sum + Number(item.quantity) * Number(item.unitPrice || 0);
       }, 0);
 
-      let headerReceipt: StockReceiptImport | StockReceiptExport;
+      const branchId = dto.branchId || DEFAULT_BRANCH_ID;
+      let branchStock: Stock | null = null;
+      let fromStock: Stock | null = null;
+      let toStock: Stock | null = null;
+
+      if (type === 'IMPORT' || type === 'EXPORT') {
+        branchStock = await this.getOrCreateBranchStock(stockRepo, branchId);
+      } else if (type === 'TRANSFER') {
+        const fromBranchId = dto.fromBranchId || branchId;
+        const toBranchId = dto.toBranchId;
+        if (!toBranchId) {
+          throw new BadRequestException(
+            'Destination branch (toBranchId) is required for stock transfers',
+          );
+        }
+        fromStock = await this.getOrCreateBranchStock(stockRepo, fromBranchId);
+        toStock = await this.getOrCreateBranchStock(stockRepo, toBranchId);
+      }
+
+      let headerReceipt: StockReceiptImport | StockReceiptExport | StockReceiptTransfer;
 
       if (type === 'IMPORT') {
         const code = `NK${Date.now()}`;
         headerReceipt = await importRepo.save(
           importRepo.create({
             code,
-            branchId: dto.branchId || DEFAULT_BRANCH_ID,
+            branchId,
             supplierId: dto.supplierId,
             orderId: dto.orderId,
             fundId: dto.fundId,
@@ -124,16 +194,29 @@ export class StockVoucherService {
             note: dto.note,
           }),
         );
-      } else {
+      } else if (type === 'EXPORT') {
         const code = `XK${Date.now()}`;
         headerReceipt = await exportRepo.save(
           exportRepo.create({
             code,
-            branchId: dto.branchId || DEFAULT_BRANCH_ID,
+            branchId,
             orderId: dto.orderId,
             fundId: dto.fundId,
             totalAmount,
             status: 'COMPLETED',
+            note: dto.note,
+          }),
+        );
+      } else {
+        const code = `CK${Date.now()}`;
+        headerReceipt = await transferRepo.save(
+          transferRepo.create({
+            code,
+            fromBranchId: dto.fromBranchId || branchId,
+            toBranchId: dto.toBranchId!,
+            status: 'COMPLETED',
+            receivedAt: new Date(),
+            totalAmount,
             note: dto.note,
           }),
         );
@@ -146,32 +229,66 @@ export class StockVoucherService {
         const unitPrice = Number(dtoItem.unitPrice || 0);
         const total = quantity * unitPrice;
 
+        let fromId: string | null = null;
+        let toId: string | null = null;
+        let fromType = 'STOCK';
+        let toType = 'STOCK';
+
+        if (type === 'IMPORT') {
+          fromId = dto.supplierId || null;
+          fromType = 'VENDOR';
+          toId = branchStock!.id;
+          toType = 'STOCK';
+        } else if (type === 'EXPORT') {
+          fromId = branchStock!.id;
+          fromType = 'STOCK';
+          toId = dto.orderId || dto.supplierId || null;
+          toType = 'VENDOR';
+        } else if (type === 'TRANSFER') {
+          fromId = fromStock!.id;
+          fromType = 'STOCK';
+          toId = toStock!.id;
+          toType = 'STOCK';
+        }
+
         const detailData = {
           productId: dtoItem.productId,
           quantity,
           receiptType: type,
-          fromId: type === 'IMPORT' ? (dto.supplierId || null) : (dto.branchId || DEFAULT_BRANCH_ID),
-          toId: type === 'IMPORT' ? (dto.branchId || DEFAULT_BRANCH_ID) : (dto.orderId || dto.supplierId || null),
-          fromType: type === 'IMPORT' ? 'VENDOR' : 'STOCK',
-          toType: type === 'IMPORT' ? 'STOCK' : 'VENDOR',
+          fromId,
+          toId,
+          fromType,
+          toType,
           importId: type === 'IMPORT' ? headerReceipt.id : undefined,
           exportId: type === 'EXPORT' ? headerReceipt.id : undefined,
+          transferId: type === 'TRANSFER' ? headerReceipt.id : undefined,
         };
 
         const detail = await detailRepo.save(detailRepo.create(detailData as any) as any);
         savedDetails.push(detail);
 
         if (dtoItem.productId) {
+          // Update product general quantity for compatibility
           await this.applyInventoryChange(
             productRepo,
             dtoItem.productId,
             quantity,
             type,
           );
+
+          // Update stock_items quantity
+          if (type === 'IMPORT') {
+            await this.updateStockItemQuantity(stockItemRepo, toId!, dtoItem.productId, quantity);
+          } else if (type === 'EXPORT') {
+            await this.updateStockItemQuantity(stockItemRepo, fromId!, dtoItem.productId, -quantity);
+          } else if (type === 'TRANSFER') {
+            await this.updateStockItemQuantity(stockItemRepo, fromId!, dtoItem.productId, -quantity);
+            await this.updateStockItemQuantity(stockItemRepo, toId!, dtoItem.productId, quantity);
+          }
         }
       }
 
-      if (dto.fundId && totalAmount > 0) {
+      if (dto.fundId && totalAmount > 0 && (type === 'IMPORT' || type === 'EXPORT')) {
         const moneyVoucher = await this.financeService.createMoneyVoucher(
           {
             type:
@@ -199,7 +316,7 @@ export class StockVoucherService {
           // Link money voucher to header
           if (type === 'IMPORT') {
             await importRepo.update(headerReceipt.id, { moneyVoucherId: moneyVoucher.id });
-          } else {
+          } else if (type === 'EXPORT') {
             await exportRepo.update(headerReceipt.id, { moneyVoucherId: moneyVoucher.id });
           }
         }
@@ -211,6 +328,7 @@ export class StockVoucherService {
           'product',
           'importReceipt',
           'exportReceipt',
+          'transferReceipt',
         ],
       });
     };

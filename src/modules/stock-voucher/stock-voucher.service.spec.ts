@@ -7,6 +7,9 @@ import {
   StockReceiptDetail,
   StockReceiptImport,
   StockReceiptExport,
+  StockReceiptTransfer,
+  Stock,
+  StockItem,
 } from '../../entities';
 import { FinanceService } from '../finance/finance.service';
 
@@ -33,6 +36,21 @@ describe('StockVoucherService', () => {
       create: jest.fn((data) => ({ id: 'export-id', ...data })),
       save: jest.fn((entity) => Promise.resolve(entity)),
       update: jest.fn().mockResolvedValue(true),
+    },
+    StockReceiptTransfer: {
+      create: jest.fn((data) => ({ id: 'transfer-id', ...data })),
+      save: jest.fn((entity) => Promise.resolve(entity)),
+      update: jest.fn().mockResolvedValue(true),
+    },
+    Stock: {
+      findOne: jest.fn().mockResolvedValue({ id: 'stock-id-1', branchId: 'branch-id-1' }),
+      create: jest.fn((data) => ({ id: 'stock-id-1', ...data })),
+      save: jest.fn((entity) => Promise.resolve(entity)),
+    },
+    StockItem: {
+      findOne: jest.fn().mockResolvedValue(null),
+      create: jest.fn((data) => ({ id: 'stock-item-id-1', ...data })),
+      save: jest.fn((entity) => Promise.resolve(entity)),
     },
   };
 
@@ -72,6 +90,18 @@ describe('StockVoucherService', () => {
         {
           provide: getRepositoryToken(StockReceiptExport),
           useValue: mockRepositories.StockReceiptExport,
+        },
+        {
+          provide: getRepositoryToken(StockReceiptTransfer),
+          useValue: mockRepositories.StockReceiptTransfer,
+        },
+        {
+          provide: getRepositoryToken(Stock),
+          useValue: mockRepositories.Stock,
+        },
+        {
+          provide: getRepositoryToken(StockItem),
+          useValue: mockRepositories.StockItem,
         },
         {
           provide: FinanceService,
@@ -126,7 +156,7 @@ describe('StockVoucherService', () => {
           quantity: 5,
           receiptType: 'IMPORT',
           fromId: 'supplier-id-1',
-          toId: 'branch-id-1',
+          toId: 'stock-id-1',
           fromType: 'VENDOR',
           toType: 'STOCK',
           importId: 'import-id',
@@ -176,7 +206,7 @@ describe('StockVoucherService', () => {
           productId: 'product-id-2',
           quantity: 2,
           receiptType: 'EXPORT',
-          fromId: 'branch-id-2',
+          fromId: 'stock-id-1',
           toId: 'order-id-1',
           fromType: 'STOCK',
           toType: 'VENDOR',
