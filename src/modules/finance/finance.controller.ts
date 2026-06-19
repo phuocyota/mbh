@@ -3,6 +3,7 @@ import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { FinanceService } from './finance.service';
 import { CreateFundDto } from './dto/create-fund.dto';
 import { CreateMoneyVoucherDto } from './dto/create-money-voucher.dto';
+import { CreateTransferDto } from './dto/create-transfer.dto';
 
 @ApiTags('Finance')
 @ApiBearerAuth()
@@ -38,5 +39,35 @@ export class FinanceController {
   @ApiOperation({ summary: 'Create payment voucher' })
   createPayment(@Body() dto: Omit<CreateMoneyVoucherDto, 'type'>) {
     return this.financeService.createPayment(dto);
+  }
+
+  @Get('receipts/received')
+  @ApiOperation({ summary: 'Get all received receipts (PT)' })
+  findReceiptsReceived() {
+    return this.financeService.findReceiptsReceived();
+  }
+
+  @Get('receipts/paid')
+  @ApiOperation({ summary: 'Get all paid receipts (PC)' })
+  findReceiptsPaid() {
+    return this.financeService.findReceiptsPaid();
+  }
+
+  @Get('transfers')
+  @ApiOperation({ summary: 'Get all fund transfers (CQ)' })
+  findTransfers() {
+    return this.financeService.findTransfers();
+  }
+
+  @Get('details')
+  @ApiOperation({ summary: 'Get all fund details' })
+  findDetails() {
+    return this.financeService.findDetails();
+  }
+
+  @Post('transfers')
+  @ApiOperation({ summary: 'Create fund transfer (CQ)' })
+  createTransfer(@Body() dto: CreateTransferDto) {
+    return this.financeService.createTransfer(dto);
   }
 }

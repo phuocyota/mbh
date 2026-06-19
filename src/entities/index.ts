@@ -38,4 +38,8 @@ export { StockReceiptImport } from './stock-receipt-import.entity';
 export { StockReceiptExport } from './stock-receipt-export.entity';
 export { Stock } from './stock.entity';
 export { StockItem } from './stock-item.entity';
+export { FundReceiptReceived } from './fund-receipt-received.entity';
+export { FundReceiptPaid } from './fund-receipt-paid.entity';
+export { FundReceiptTransfer } from './fund-receipt-transfer.entity';
+export { FundDetail } from './fund-detail.entity';
 

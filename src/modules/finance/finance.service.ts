@@ -11,9 +11,14 @@ import {
   FundTransaction,
   MoneyVoucher,
   Supplier,
+  FundReceiptReceived,
+  FundReceiptPaid,
+  FundReceiptTransfer,
+  FundDetail,
 } from '../../entities';
 import { CreateFundDto } from './dto/create-fund.dto';
 import { CreateMoneyVoucherDto } from './dto/create-money-voucher.dto';
+import { CreateTransferDto } from './dto/create-transfer.dto';
 import {
   ACCOUNTING_SOURCE_TYPE,
   ACCOUNTING_PURPOSE,
@@ -40,6 +45,14 @@ export class FinanceService {
     private debtRepository: Repository<Debt>,
     @InjectRepository(Supplier)
     private supplierRepository: Repository<Supplier>,
+    @InjectRepository(FundReceiptReceived)
+    private fundReceiptReceivedRepository: Repository<FundReceiptReceived>,
+    @InjectRepository(FundReceiptPaid)
+    private fundReceiptPaidRepository: Repository<FundReceiptPaid>,
+    @InjectRepository(FundReceiptTransfer)
+    private fundReceiptTransferRepository: Repository<FundReceiptTransfer>,
+    @InjectRepository(FundDetail)
+    private fundDetailRepository: Repository<FundDetail>,
     private dataSource: DataSource,
   ) {}
 
@@ -116,6 +129,11 @@ export class FinanceService {
       );
 
       fund.balance = nextBalance;
+      if (type === MONEY_VOUCHER_TYPE.RECEIPT) {
+        fund.debit = Number(fund.debit || 0) + amount;
+      } else if (type === MONEY_VOUCHER_TYPE.PAYMENT) {
+        fund.credit = Number(fund.credit || 0) + amount;
+      }
       await fundRepo.save(fund);
 
       await fundTransactionRepo.save(
@@ -132,6 +150,56 @@ export class FinanceService {
           note: dto.note,
         }),
       );
+
+      const receivedRepo = trx.getRepository(FundReceiptReceived);
+      const paidRepo = trx.getRepository(FundReceiptPaid);
+      const detailRepo = trx.getRepository(FundDetail);
+
+      if (type === MONEY_VOUCHER_TYPE.RECEIPT) {
+        const receivedReceipt = await receivedRepo.save(
+          receivedRepo.create({
+            code: `PT${Date.now()}`,
+            branchId: fund.branchId,
+            amount,
+            fundId: fund.id,
+            note: dto.note || dto.purpose,
+            status: 'COMPLETED',
+          }),
+        );
+
+        await detailRepo.save(
+          detailRepo.create({
+            amount,
+            type: 'RECEIVED',
+            category: dto.purpose || 'OTHER',
+            fundId: fund.id,
+            receivedId: receivedReceipt.id,
+            note: dto.note || dto.purpose,
+          }),
+        );
+      } else if (type === MONEY_VOUCHER_TYPE.PAYMENT) {
+        const paidReceipt = await paidRepo.save(
+          paidRepo.create({
+            code: `PC${Date.now()}`,
+            branchId: fund.branchId,
+            amount,
+            fundId: fund.id,
+            note: dto.note || dto.purpose,
+            status: 'COMPLETED',
+          }),
+        );
+
+        await detailRepo.save(
+          detailRepo.create({
+            amount,
+            type: 'PAID',
+            category: dto.purpose || 'OTHER',
+            fundId: fund.id,
+            paidId: paidReceipt.id,
+            note: dto.note || dto.purpose,
+          }),
+        );
+      }
 
       if (
         type === MONEY_VOUCHER_TYPE.PAYMENT &&
@@ -178,6 +246,126 @@ export class FinanceService {
     }
 
     return this.dataSource.transaction(executor);
+  }
+
+  async createTransfer(
+    dto: CreateTransferDto,
+    manager?: EntityManager,
+  ) {
+    const executor = async (trx: EntityManager) => {
+      const fundRepo = trx.getRepository(Fund);
+      const transferRepo = trx.getRepository(FundReceiptTransfer);
+      const detailRepo = trx.getRepository(FundDetail);
+
+      const fromFund = await fundRepo.findOne({ where: { id: dto.fromFundId } });
+      if (!fromFund) {
+        throw new NotFoundException('Source fund not found');
+      }
+
+      const toFund = await fundRepo.findOne({ where: { id: dto.toFundId } });
+      if (!toFund) {
+        throw new NotFoundException('Destination fund not found');
+      }
+
+      if (fromFund.id === toFund.id) {
+        throw new BadRequestException('Source and destination funds cannot be the same');
+      }
+
+      const amount = Number(dto.amount);
+      if (!Number.isFinite(amount) || amount <= 0) {
+        throw new BadRequestException('Transfer amount must be greater than 0');
+      }
+
+      const fromBalance = Number(fromFund.balance || 0);
+      if (fromBalance < amount) {
+        throw new BadRequestException('Fund balance is not enough');
+      }
+
+      // Update fromFund balance (decrease balance, increase credit)
+      fromFund.balance = fromBalance - amount;
+      fromFund.credit = Number(fromFund.credit || 0) + amount;
+      await fundRepo.save(fromFund);
+
+      // Update toFund balance (increase balance, increase debit)
+      toFund.balance = Number(toFund.balance || 0) + amount;
+      toFund.debit = Number(toFund.debit || 0) + amount;
+      await fundRepo.save(toFund);
+
+      const code = `CQ${Date.now()}`;
+
+      const transferReceipt = await transferRepo.save(
+        transferRepo.create({
+          code,
+          amount,
+          fromFundId: fromFund.id,
+          toFundId: toFund.id,
+          note: dto.note,
+          status: 'COMPLETED',
+        }),
+      );
+
+      // Create two details (one PAID at fromFund, one RECEIVED at toFund)
+      await detailRepo.save(
+        detailRepo.create({
+          amount,
+          type: 'PAID',
+          category: 'TRANSFER',
+          fundId: fromFund.id,
+          transferId: transferReceipt.id,
+          note: dto.note || `Chuyển quỹ sang ${toFund.name}`,
+        }),
+      );
+
+      await detailRepo.save(
+        detailRepo.create({
+          amount,
+          type: 'RECEIVED',
+          category: 'TRANSFER',
+          fundId: toFund.id,
+          transferId: transferReceipt.id,
+          note: dto.note || `Nhận chuyển quỹ từ ${fromFund.name}`,
+        }),
+      );
+
+      return transferRepo.findOne({
+        where: { id: transferReceipt.id },
+        relations: ['fromFund', 'toFund', 'details'],
+      });
+    };
+
+    if (manager) {
+      return executor(manager);
+    }
+
+    return this.dataSource.transaction(executor);
+  }
+
+  findReceiptsReceived() {
+    return this.fundReceiptReceivedRepository.find({
+      relations: ['fund', 'details'],
+      order: { createdAt: 'DESC' },
+    });
+  }
+
+  findReceiptsPaid() {
+    return this.fundReceiptPaidRepository.find({
+      relations: ['fund', 'details'],
+      order: { createdAt: 'DESC' },
+    });
+  }
+
+  findTransfers() {
+    return this.fundReceiptTransferRepository.find({
+      relations: ['fromFund', 'toFund', 'details'],
+      order: { createdAt: 'DESC' },
+    });
+  }
+
+  findDetails() {
+    return this.fundDetailRepository.find({
+      relations: ['fund'],
+      order: { createdAt: 'DESC' },
+    });
   }
 
   private mapAccountingRule<T>(callback: () => T): T {
