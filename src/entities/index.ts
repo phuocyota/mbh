@@ -36,4 +36,6 @@ export { StockReceiptTransfer } from './stock-receipt-transfer.entity';
 export { StockReceiptDetail } from './stock-receipt-detail.entity';
 export { StockReceiptImport } from './stock-receipt-import.entity';
 export { StockReceiptExport } from './stock-receipt-export.entity';
+export { Stock } from './stock.entity';
+export { StockItem } from './stock-item.entity';
 
