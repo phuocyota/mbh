@@ -1,8 +1,8 @@
-import { WarehouseVoucherDraft } from './types.js';
-import { WarehouseVoucherType } from './constants.js';
-export declare function validateWarehouseVoucherDraft(voucher: WarehouseVoucherDraft): void;
-export declare function calculateNextStockLevel(currentQuantity: number, quantityChange: number, type: WarehouseVoucherType | string): number;
+import { StockVoucherDraft } from './types.js';
+import { StockVoucherType } from './constants.js';
+export declare function validateStockVoucherDraft(voucher: StockVoucherDraft): void;
+export declare function calculateNextStockLevel(currentQuantity: number, quantityChange: number, type: StockVoucherType | string): number;
 export declare function calculateNextStock(item: {
     id: string;
     quantity: number;
-}, quantityChange: number, type: WarehouseVoucherType | string): number;
+}, quantityChange: number, type: StockVoucherType | string): number;

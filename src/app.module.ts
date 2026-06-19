@@ -35,7 +35,7 @@ import { SupplierModule } from './modules/supplier/supplier.module';
 import { PayrollModule } from './modules/payroll/payroll.module';
 import { SocketModule } from './modules/socket/socket.module';
 import { FinanceModule } from './modules/finance/finance.module';
-import { WarehouseVoucherModule } from './modules/warehouse-voucher/warehouse-voucher.module';
+import { StockVoucherModule } from './modules/stock-voucher/stock-voucher.module';
 import { DashboardModule } from './modules/dashboard/dashboard.module';
 import { InventoryItemModule } from './modules/inventory-item/inventory-item.module';
 import { StockTakeModule } from './modules/stock-take/stock-take.module';
@@ -77,7 +77,7 @@ import { StockTransferModule } from './modules/stock-transfer/stock-transfer.mod
     PayrollModule,
     SocketModule,
     FinanceModule,
-    WarehouseVoucherModule,
+    StockVoucherModule,
     DashboardModule,
     InventoryItemModule,
     StockTakeModule,

@@ -2,8 +2,8 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { Product, StockReceiptDetail } from '../../entities';
 import { FinanceModule } from '../finance/finance.module';
-import { WarehouseVoucherController } from './warehouse-voucher.controller';
-import { WarehouseVoucherService } from './warehouse-voucher.service';
+import { StockVoucherController } from './stock-voucher.controller';
+import { StockVoucherService } from './stock-voucher.service';
 
 @Module({
   imports: [
@@ -13,8 +13,8 @@ import { WarehouseVoucherService } from './warehouse-voucher.service';
     ]),
     FinanceModule,
   ],
-  controllers: [WarehouseVoucherController],
-  providers: [WarehouseVoucherService],
-  exports: [WarehouseVoucherService],
+  controllers: [StockVoucherController],
+  providers: [StockVoucherService],
+  exports: [StockVoucherService],
 })
-export class WarehouseVoucherModule {}
+export class StockVoucherModule {}

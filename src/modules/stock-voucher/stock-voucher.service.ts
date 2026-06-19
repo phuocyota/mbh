@@ -10,7 +10,7 @@ import {
   StockReceiptDetail,
 } from '../../entities';
 import { calculateNextStock } from '../../../packages/inventory/src/index.js';
-import { CreateWarehouseVoucherDto } from './dto/create-warehouse-voucher.dto';
+import { CreateStockVoucherDto } from './dto/create-stock-voucher.dto';
 import { FinanceService } from '../finance/finance.service';
 import { DEFAULT_BRANCH_ID } from '../../common/constant/default-branch.constant';
 import {
@@ -20,7 +20,7 @@ import {
 } from '../../../packages/accounting/src/index.js';
 
 @Injectable()
-export class WarehouseVoucherService {
+export class StockVoucherService {
   constructor(
     @InjectRepository(StockReceiptDetail)
     private stockReceiptDetailRepository: Repository<StockReceiptDetail>,
@@ -37,11 +37,11 @@ export class WarehouseVoucherService {
     });
   }
 
-  createImportVoucher(dto: Omit<CreateWarehouseVoucherDto, 'type'>) {
+  createImportVoucher(dto: Omit<CreateStockVoucherDto, 'type'>) {
     return this.createVoucher({ ...dto, type: 'IMPORT' });
   }
 
-  createExportVoucher(dto: Omit<CreateWarehouseVoucherDto, 'type'>) {
+  createExportVoucher(dto: Omit<CreateStockVoucherDto, 'type'>) {
     return this.createVoucher({ ...dto, type: 'EXPORT' });
   }
 
@@ -76,17 +76,17 @@ export class WarehouseVoucherService {
     );
   }
 
-  async createVoucher(dto: CreateWarehouseVoucherDto, manager?: EntityManager) {
+  async createVoucher(dto: CreateStockVoucherDto, manager?: EntityManager) {
     const executor = async (trx: EntityManager) => {
       const type = dto.type.toUpperCase();
       if (!['IMPORT', 'EXPORT'].includes(type)) {
         throw new BadRequestException(
-          'Warehouse voucher type must be IMPORT or EXPORT',
+          'Stock voucher type must be IMPORT or EXPORT',
         );
       }
 
       if (!dto.items || dto.items.length === 0) {
-        throw new BadRequestException('Warehouse voucher items are required');
+        throw new BadRequestException('Stock voucher items are required');
       }
 
       const detailRepo = trx.getRepository(StockReceiptDetail);
@@ -142,8 +142,8 @@ export class WarehouseVoucherService {
             supplierId: dto.supplierId,
             purpose:
               type === 'IMPORT'
-                ? ACCOUNTING_PURPOSE.WAREHOUSE_IMPORT
-                : ACCOUNTING_PURPOSE.WAREHOUSE_EXPORT,
+                ? ACCOUNTING_PURPOSE.STOCK_IMPORT
+                : ACCOUNTING_PURPOSE.STOCK_EXPORT,
             refType: dto.orderId
               ? ACCOUNTING_SOURCE_TYPE.ORDER
               : ACCOUNTING_SOURCE_TYPE.STOCK_RECEIPT_DETAIL,

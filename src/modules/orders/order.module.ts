@@ -10,7 +10,7 @@ import { OrderItemModule } from '../order-item/order-item.module';
 import { PaymentModule } from '../payment/payment.module';
 import { WalletModule } from '../wallet/wallet.module';
 import { SocketModule } from '../socket/socket.module';
-import { WarehouseVoucherModule } from '../warehouse-voucher/warehouse-voucher.module';
+import { StockVoucherModule } from '../stock-voucher/stock-voucher.module';
 
 @Module({
   imports: [
@@ -21,7 +21,7 @@ import { WarehouseVoucherModule } from '../warehouse-voucher/warehouse-voucher.m
     CustomerModule,
     CouponModule,
     SocketModule,
-    WarehouseVoucherModule,
+    StockVoucherModule,
   ],
   providers: [OrderService, OrderNumberService],
   controllers: [OrderController],

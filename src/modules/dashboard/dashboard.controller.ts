@@ -51,7 +51,7 @@ export class DashboardController {
   }
 
   @Get('recent-activities')
-  @ApiOperation({ summary: 'Recent dashboard activities from orders and warehouse vouchers' })
+  @ApiOperation({ summary: 'Recent dashboard activities from orders and stock vouchers' })
   @ApiQuery({ name: 'limit', required: false, type: Number })
   @ApiQuery({ name: 'branchId', required: false })
   getRecentActivities(

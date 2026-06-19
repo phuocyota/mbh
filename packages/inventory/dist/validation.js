@@ -1,25 +1,25 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.validateWarehouseVoucherDraft = validateWarehouseVoucherDraft;
+exports.validateStockVoucherDraft = validateStockVoucherDraft;
 exports.calculateNextStockLevel = calculateNextStockLevel;
 exports.calculateNextStock = calculateNextStock;
 const errors_js_1 = require("./errors.js");
 const constants_js_1 = require("./constants.js");
-function validateWarehouseVoucherDraft(voucher) {
+function validateStockVoucherDraft(voucher) {
     const type = String(voucher.type || '').toUpperCase();
-    if (!constants_js_1.WAREHOUSE_VOUCHER_TYPES.includes(type)) {
-        throw new errors_js_1.InventoryRuleError(`Warehouse voucher type must be IMPORT or EXPORT, got '${voucher.type}'`);
+    if (!constants_js_1.STOCK_VOUCHER_TYPES.includes(type)) {
+        throw new errors_js_1.InventoryRuleError(`Stock voucher type must be IMPORT or EXPORT, got '${voucher.type}'`);
     }
     if (!voucher.items || voucher.items.length === 0) {
-        throw new errors_js_1.InventoryRuleError('Warehouse voucher must contain at least one item');
+        throw new errors_js_1.InventoryRuleError('Stock voucher must contain at least one item');
     }
     for (const item of voucher.items) {
         if (!Number.isFinite(item.quantity) || item.quantity <= 0) {
-            throw new errors_js_1.InventoryRuleError('Warehouse voucher item quantity must be greater than 0');
+            throw new errors_js_1.InventoryRuleError('Stock voucher item quantity must be greater than 0');
         }
         if (item.unitPrice !== undefined && item.unitPrice !== null) {
             if (!Number.isFinite(item.unitPrice) || item.unitPrice < 0) {
-                throw new errors_js_1.InventoryRuleError('Warehouse voucher item unit price cannot be negative');
+                throw new errors_js_1.InventoryRuleError('Stock voucher item unit price cannot be negative');
             }
         }
     }
@@ -34,10 +34,10 @@ function calculateNextStockLevel(currentQuantity, quantityChange, type) {
     if (change < 0) {
         throw new errors_js_1.InventoryRuleError('Quantity change amount cannot be negative');
     }
-    if (normalizedType === constants_js_1.WAREHOUSE_VOUCHER_TYPE.IMPORT) {
+    if (normalizedType === constants_js_1.STOCK_VOUCHER_TYPE.IMPORT) {
         return current + change;
     }
-    else if (normalizedType === constants_js_1.WAREHOUSE_VOUCHER_TYPE.EXPORT) {
+    else if (normalizedType === constants_js_1.STOCK_VOUCHER_TYPE.EXPORT) {
         const nextQuantity = current - change;
         if (nextQuantity < 0) {
             throw new errors_js_1.InventoryRuleError('Stock quantity is not enough');

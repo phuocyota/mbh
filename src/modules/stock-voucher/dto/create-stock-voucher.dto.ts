@@ -3,7 +3,7 @@ import { Type } from 'class-transformer';
 import { IsArray, IsNotEmpty, IsNumber, IsOptional, IsString, IsUUID, Min, ValidateNested } from 'class-validator';
 import { DEFAULT_BRANCH_ID } from '../../../common/constant/default-branch.constant';
 
-export class CreateWarehouseVoucherItemDto {
+export class CreateStockVoucherItemDto {
   @ApiProperty()
   @IsNotEmpty()
   @IsUUID()
@@ -27,7 +27,7 @@ export class CreateWarehouseVoucherItemDto {
   note?: string;
 }
 
-export class CreateWarehouseVoucherDto {
+export class CreateStockVoucherDto {
   @ApiProperty({ example: DEFAULT_BRANCH_ID, required: false })
   @IsOptional()
   @IsUUID()
@@ -58,9 +58,9 @@ export class CreateWarehouseVoucherDto {
   @IsString()
   note?: string;
 
-  @ApiProperty({ type: [CreateWarehouseVoucherItemDto] })
+  @ApiProperty({ type: [CreateStockVoucherItemDto] })
   @IsArray()
   @ValidateNested({ each: true })
-  @Type(() => CreateWarehouseVoucherItemDto)
-  items: CreateWarehouseVoucherItemDto[];
+  @Type(() => CreateStockVoucherItemDto)
+  items: CreateStockVoucherItemDto[];
 }

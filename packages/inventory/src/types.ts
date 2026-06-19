@@ -1,6 +1,6 @@
-import { WarehouseVoucherType } from './constants.js';
+import { StockVoucherType } from './constants.js';
 
-export interface WarehouseVoucherItemDraft {
+export interface StockVoucherItemDraft {
   inventoryItemId?: string | null;
   productId?: string | null;
   quantity: number;
@@ -9,16 +9,16 @@ export interface WarehouseVoucherItemDraft {
   note?: string | null;
 }
 
-export interface WarehouseVoucherDraft {
+export interface StockVoucherDraft {
   branchId?: string | null;
-  type: WarehouseVoucherType | string;
+  type: StockVoucherType | string;
   code?: string;
   supplierId?: string | null;
   orderId?: string | null;
   totalAmount?: number;
   fundId?: string | null;
   note?: string | null;
-  items: WarehouseVoucherItemDraft[];
+  items: StockVoucherItemDraft[];
 }
 
 export interface StockItem {

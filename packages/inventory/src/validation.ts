@@ -1,26 +1,26 @@
-import { WarehouseVoucherDraft, WarehouseVoucherItemDraft } from './types.js';
+import { StockVoucherDraft } from './types.js';
 import { InventoryRuleError } from './errors.js';
-import { WAREHOUSE_VOUCHER_TYPE, WAREHOUSE_VOUCHER_TYPES, WarehouseVoucherType } from './constants.js';
+import { STOCK_VOUCHER_TYPE, STOCK_VOUCHER_TYPES, StockVoucherType } from './constants.js';
 
-export function validateWarehouseVoucherDraft(voucher: WarehouseVoucherDraft) {
+export function validateStockVoucherDraft(voucher: StockVoucherDraft) {
   const type = String(voucher.type || '').toUpperCase();
-  if (!WAREHOUSE_VOUCHER_TYPES.includes(type as WarehouseVoucherType)) {
+  if (!STOCK_VOUCHER_TYPES.includes(type as StockVoucherType)) {
     throw new InventoryRuleError(
-      `Warehouse voucher type must be IMPORT or EXPORT, got '${voucher.type}'`
+      `Stock voucher type must be IMPORT or EXPORT, got '${voucher.type}'`
     );
   }
 
   if (!voucher.items || voucher.items.length === 0) {
-    throw new InventoryRuleError('Warehouse voucher must contain at least one item');
+    throw new InventoryRuleError('Stock voucher must contain at least one item');
   }
 
   for (const item of voucher.items) {
     if (!Number.isFinite(item.quantity) || item.quantity <= 0) {
-      throw new InventoryRuleError('Warehouse voucher item quantity must be greater than 0');
+      throw new InventoryRuleError('Stock voucher item quantity must be greater than 0');
     }
     if (item.unitPrice !== undefined && item.unitPrice !== null) {
       if (!Number.isFinite(item.unitPrice) || item.unitPrice < 0) {
-        throw new InventoryRuleError('Warehouse voucher item unit price cannot be negative');
+        throw new InventoryRuleError('Stock voucher item unit price cannot be negative');
       }
     }
   }
@@ -29,7 +29,7 @@ export function validateWarehouseVoucherDraft(voucher: WarehouseVoucherDraft) {
 export function calculateNextStockLevel(
   currentQuantity: number,
   quantityChange: number,
-  type: WarehouseVoucherType | string
+  type: StockVoucherType | string
 ): number {
   const normalizedType = String(type || '').toUpperCase();
   const current = Number(currentQuantity || 0);
@@ -42,9 +42,9 @@ export function calculateNextStockLevel(
     throw new InventoryRuleError('Quantity change amount cannot be negative');
   }
 
-  if (normalizedType === WAREHOUSE_VOUCHER_TYPE.IMPORT) {
+  if (normalizedType === STOCK_VOUCHER_TYPE.IMPORT) {
     return current + change;
-  } else if (normalizedType === WAREHOUSE_VOUCHER_TYPE.EXPORT) {
+  } else if (normalizedType === STOCK_VOUCHER_TYPE.EXPORT) {
     const nextQuantity = current - change;
     if (nextQuantity < 0) {
       throw new InventoryRuleError('Stock quantity is not enough');
@@ -58,7 +58,7 @@ export function calculateNextStockLevel(
 export function calculateNextStock(
   item: { id: string; quantity: number },
   quantityChange: number,
-  type: WarehouseVoucherType | string
+  type: StockVoucherType | string
 ): number {
   try {
     return calculateNextStockLevel(item.quantity, quantityChange, type);

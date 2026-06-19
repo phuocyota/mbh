@@ -6,8 +6,8 @@ export type MoneyVoucherType = (typeof MONEY_VOUCHER_TYPE)[keyof typeof MONEY_VO
 export declare const MONEY_VOUCHER_TYPES: ("RECEIPT" | "PAYMENT")[];
 export declare const ACCOUNTING_PURPOSE: {
     readonly ORDER_PAYMENT: "ORDER_PAYMENT";
-    readonly WAREHOUSE_EXPORT: "WAREHOUSE_EXPORT";
-    readonly WAREHOUSE_IMPORT: "WAREHOUSE_IMPORT";
+    readonly STOCK_EXPORT: "STOCK_EXPORT";
+    readonly STOCK_IMPORT: "STOCK_IMPORT";
     readonly SUPPLIER_DEBT_OFFSET: "SUPPLIER_DEBT_OFFSET";
 };
 export type AccountingPurpose = (typeof ACCOUNTING_PURPOSE)[keyof typeof ACCOUNTING_PURPOSE];
@@ -18,7 +18,8 @@ export declare const ACCOUNTING_SOURCE_TYPE: {
     readonly CASH_MOVEMENT: "CASH_MOVEMENT";
     readonly WALLET_TRANSACTION: "WALLET_TRANSACTION";
     readonly MONEY_VOUCHER: "MONEY_VOUCHER";
-    readonly WAREHOUSE_VOUCHER: "WAREHOUSE_VOUCHER";
+    readonly STOCK_VOUCHER: "STOCK_VOUCHER";
+    readonly STOCK_RECEIPT_DETAIL: "STOCK_RECEIPT_DETAIL";
     readonly PAYROLL: "PAYROLL";
 };
 export type AccountingSourceType = (typeof ACCOUNTING_SOURCE_TYPE)[keyof typeof ACCOUNTING_SOURCE_TYPE];
