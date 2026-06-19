@@ -38,8 +38,6 @@ import { FinanceModule } from './modules/finance/finance.module';
 import { StockVoucherModule } from './modules/stock-voucher/stock-voucher.module';
 import { DashboardModule } from './modules/dashboard/dashboard.module';
 import { InventoryItemModule } from './modules/inventory-item/inventory-item.module';
-import { StockTakeModule } from './modules/stock-take/stock-take.module';
-import { StockTransferModule } from './modules/stock-transfer/stock-transfer.module';
 
 @Module({
   imports: [
@@ -80,8 +78,6 @@ import { StockTransferModule } from './modules/stock-transfer/stock-transfer.mod
     StockVoucherModule,
     DashboardModule,
     InventoryItemModule,
-    StockTakeModule,
-    StockTransferModule,
   ],
   controllers: [AppController],
   providers: [

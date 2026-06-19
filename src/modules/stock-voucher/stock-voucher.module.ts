@@ -1,6 +1,6 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { Product, StockReceiptDetail } from '../../entities';
+import { Product, StockReceiptDetail, StockReceiptImport, StockReceiptExport } from '../../entities';
 import { FinanceModule } from '../finance/finance.module';
 import { StockVoucherController } from './stock-voucher.controller';
 import { StockVoucherService } from './stock-voucher.service';
@@ -10,6 +10,8 @@ import { StockVoucherService } from './stock-voucher.service';
     TypeOrmModule.forFeature([
       Product,
       StockReceiptDetail,
+      StockReceiptImport,
+      StockReceiptExport,
     ]),
     FinanceModule,
   ],

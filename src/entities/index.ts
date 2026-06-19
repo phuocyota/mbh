@@ -32,9 +32,8 @@ export { Fund } from './fund.entity';
 export { FundTransaction } from './fund-transaction.entity';
 export { Debt } from './debt.entity';
 export { MoneyVoucher } from './money-voucher.entity';
-export { StockTake } from './stock-take.entity';
-export { StockTakeItem } from './stock-take-item.entity';
-export { StockTransfer } from './stock-transfer.entity';
-export { StockTransferItem } from './stock-transfer-item.entity';
 export { StockReceiptTransfer } from './stock-receipt-transfer.entity';
 export { StockReceiptDetail } from './stock-receipt-detail.entity';
+export { StockReceiptImport } from './stock-receipt-import.entity';
+export { StockReceiptExport } from './stock-receipt-export.entity';
+

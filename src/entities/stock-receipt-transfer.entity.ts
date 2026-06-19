@@ -1,7 +1,6 @@
 import { Entity, Column, ManyToOne, JoinColumn } from 'typeorm';
 import { BaseEntity } from '../common/sql/base.entity';
 import { Branch } from './branch.entity';
-import { StockTransfer } from './stock-transfer.entity';
 import { DEFAULT_BRANCH_ID } from '../common/constant/default-branch.constant';
 
 @Entity('stock_receipt_transfer')
@@ -30,10 +29,6 @@ export class StockReceiptTransfer extends BaseEntity {
   @Column('text', { nullable: true })
   note: string;
 
-  @ManyToOne(() => StockTransfer)
-  @JoinColumn({ name: 'transfer_id' })
-  transfer: StockTransfer;
-
   @ManyToOne(() => Branch)
   @JoinColumn({ name: 'from_branch_id' })
   fromBranch: Branch;
@@ -41,5 +36,4 @@ export class StockReceiptTransfer extends BaseEntity {
   @ManyToOne(() => Branch)
   @JoinColumn({ name: 'to_branch_id' })
   toBranch: Branch;
-
 }

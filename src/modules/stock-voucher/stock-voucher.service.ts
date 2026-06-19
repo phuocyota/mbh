@@ -8,6 +8,8 @@ import { DataSource, EntityManager, Repository } from 'typeorm';
 import {
   Product,
   StockReceiptDetail,
+  StockReceiptImport,
+  StockReceiptExport,
 } from '../../entities';
 import { calculateNextStock } from '../../../packages/inventory/src/index.js';
 import { CreateStockVoucherDto } from './dto/create-stock-voucher.dto';
@@ -26,13 +28,25 @@ export class StockVoucherService {
     private stockReceiptDetailRepository: Repository<StockReceiptDetail>,
     @InjectRepository(Product)
     private productRepository: Repository<Product>,
+    @InjectRepository(StockReceiptImport)
+    private stockReceiptImportRepository: Repository<StockReceiptImport>,
+    @InjectRepository(StockReceiptExport)
+    private stockReceiptExportRepository: Repository<StockReceiptExport>,
     private financeService: FinanceService,
     private dataSource: DataSource,
   ) {}
 
   findAll() {
     return this.stockReceiptDetailRepository.find({
-      relations: ['product', 'supplier', 'order', 'fund', 'moneyVoucher'],
+      relations: [
+        'product',
+        'supplier',
+        'order',
+        'fund',
+        'moneyVoucher',
+        'importReceipt',
+        'exportReceipt',
+      ],
       order: { createdAt: 'DESC' },
     });
   }
@@ -91,10 +105,43 @@ export class StockVoucherService {
 
       const detailRepo = trx.getRepository(StockReceiptDetail);
       const productRepo = trx.getRepository(Product);
+      const importRepo = trx.getRepository(StockReceiptImport);
+      const exportRepo = trx.getRepository(StockReceiptExport);
 
       const totalAmount = dto.items.reduce((sum, item) => {
         return sum + Number(item.quantity) * Number(item.unitPrice || 0);
       }, 0);
+
+      let headerReceipt: StockReceiptImport | StockReceiptExport;
+
+      if (type === 'IMPORT') {
+        const code = `NK${Date.now()}`;
+        headerReceipt = await importRepo.save(
+          importRepo.create({
+            code,
+            branchId: dto.branchId || DEFAULT_BRANCH_ID,
+            supplierId: dto.supplierId,
+            orderId: dto.orderId,
+            fundId: dto.fundId,
+            totalAmount,
+            status: 'COMPLETED',
+            note: dto.note,
+          }),
+        );
+      } else {
+        const code = `XK${Date.now()}`;
+        headerReceipt = await exportRepo.save(
+          exportRepo.create({
+            code,
+            branchId: dto.branchId || DEFAULT_BRANCH_ID,
+            orderId: dto.orderId,
+            fundId: dto.fundId,
+            totalAmount,
+            status: 'COMPLETED',
+            note: dto.note,
+          }),
+        );
+      }
 
       const savedDetails: StockReceiptDetail[] = [];
 
@@ -103,20 +150,22 @@ export class StockVoucherService {
         const unitPrice = Number(dtoItem.unitPrice || 0);
         const total = quantity * unitPrice;
 
-        const detail = await detailRepo.save(
-          detailRepo.create({
-            branchId: dto.branchId || DEFAULT_BRANCH_ID,
-            productId: dtoItem.productId,
-            supplierId: dto.supplierId,
-            orderId: dto.orderId,
-            fundId: dto.fundId,
-            quantity,
-            unitPrice,
-            totalAmount: total,
-            type,
-            note: dtoItem.note || dto.note,
-          }),
-        );
+        const detailData = {
+          branchId: dto.branchId || DEFAULT_BRANCH_ID,
+          productId: dtoItem.productId,
+          supplierId: dto.supplierId,
+          orderId: dto.orderId,
+          fundId: dto.fundId,
+          quantity,
+          unitPrice,
+          totalAmount: total,
+          type,
+          note: dtoItem.note || dto.note,
+          importId: type === 'IMPORT' ? headerReceipt.id : undefined,
+          exportId: type === 'EXPORT' ? headerReceipt.id : undefined,
+        };
+
+        const detail = await detailRepo.save(detailRepo.create(detailData));
         savedDetails.push(detail);
 
         if (dtoItem.productId) {
@@ -147,13 +196,20 @@ export class StockVoucherService {
             refType: dto.orderId
               ? ACCOUNTING_SOURCE_TYPE.ORDER
               : ACCOUNTING_SOURCE_TYPE.STOCK_RECEIPT_DETAIL,
-            refId: dto.orderId || savedDetails[0]?.id,
+            refId: dto.orderId || headerReceipt.id,
             note: dto.note,
           },
           trx,
         );
 
         if (moneyVoucher) {
+          // Link money voucher to header
+          if (type === 'IMPORT') {
+            await importRepo.update(headerReceipt.id, { moneyVoucherId: moneyVoucher.id });
+          } else {
+            await exportRepo.update(headerReceipt.id, { moneyVoucherId: moneyVoucher.id });
+          }
+          // Also link to details for compatibility
           await detailRepo.update(
             savedDetails.map((detail) => detail.id),
             { moneyVoucherId: moneyVoucher.id },
@@ -163,7 +219,15 @@ export class StockVoucherService {
 
       return detailRepo.find({
         where: savedDetails.map((detail) => ({ id: detail.id })),
-        relations: ['product', 'supplier', 'order', 'fund', 'moneyVoucher'],
+        relations: [
+          'product',
+          'supplier',
+          'order',
+          'fund',
+          'moneyVoucher',
+          'importReceipt',
+          'exportReceipt',
+        ],
       });
     };
 
