@@ -2,7 +2,6 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import {
   Product,
-  StockTransaction,
   StockTransfer,
   StockTransferItem,
 } from '../../entities';
@@ -13,7 +12,6 @@ import { StockTransferService } from './stock-transfer.service';
   imports: [
     TypeOrmModule.forFeature([
       Product,
-      StockTransaction,
       StockTransfer,
       StockTransferItem,
     ]),

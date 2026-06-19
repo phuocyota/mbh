@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { Order, Customer, WarehouseVoucher, WorkSchedule } from '../../entities';
+import { Order, Customer, StockReceiptDetail, WorkSchedule } from '../../entities';
 import {
   ORDER_PAYMENT_STATUS,
   REVENUE_ORDER_STATUSES,
@@ -19,8 +19,8 @@ export class DashboardService {
     private orderRepository: Repository<Order>,
     @InjectRepository(Customer)
     private customerRepository: Repository<Customer>,
-    @InjectRepository(WarehouseVoucher)
-    private warehouseVoucherRepository: Repository<WarehouseVoucher>,
+    @InjectRepository(StockReceiptDetail)
+    private stockReceiptDetailRepository: Repository<StockReceiptDetail>,
     @InjectRepository(WorkSchedule)
     private workScheduleRepository: Repository<WorkSchedule>,
   ) {}
@@ -193,32 +193,32 @@ export class DashboardService {
       orderQuery.andWhere('order.branchId = :branchId', { branchId });
     }
 
-    const voucherQuery = this.warehouseVoucherRepository
-      .createQueryBuilder('voucher')
-      .leftJoin('voucher.supplier', 'supplier')
+    const receiptQuery = this.stockReceiptDetailRepository
+      .createQueryBuilder('receipt')
+      .leftJoin('receipt.supplier', 'supplier')
       .select([
         "'import' as type",
-        'voucher.id as id',
-        'voucher.code as code',
-        'voucher.totalAmount as amount',
-        'voucher.createdAt as "createdAt"',
+        'receipt.id as id',
+        "CONCAT('NK', TO_CHAR(receipt.createdAt, 'YYYYMMDDHH24MISS')) as code",
+        'receipt.totalAmount as amount',
+        'receipt.createdAt as "createdAt"',
         "COALESCE(supplier.name, 'Kho') as actor",
       ])
-      .where('voucher.type = :type', { type: 'IMPORT' });
+      .where('receipt.type = :type', { type: 'IMPORT' });
 
     if (branchId) {
-      voucherQuery.andWhere('voucher.branchId = :branchId', { branchId });
+      receiptQuery.andWhere('receipt.branchId = :branchId', { branchId });
     }
 
-    const [orders, vouchers] = await Promise.all([
+    const [orders, receipts] = await Promise.all([
       orderQuery.orderBy('order.createdAt', 'DESC').limit(normalizedLimit).getRawMany(),
-      voucherQuery
-        .orderBy('voucher.createdAt', 'DESC')
+      receiptQuery
+        .orderBy('receipt.createdAt', 'DESC')
         .limit(normalizedLimit)
         .getRawMany(),
     ]);
 
-    return [...orders, ...vouchers]
+    return [...orders, ...receipts]
       .map((item) => ({
         type: item.type,
         id: item.id,

@@ -41,7 +41,7 @@ export class StockTransferController {
   }
 
   @Post(':id/complete')
-  @ApiOperation({ summary: 'Complete stock transfer and write stock transactions' })
+  @ApiOperation({ summary: 'Complete stock transfer voucher' })
   complete(@Param('id') id: string) {
     return this.stockTransferService.complete(id);
   }

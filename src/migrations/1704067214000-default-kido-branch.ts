@@ -9,7 +9,6 @@ export class DefaultKidoBranch1704067214000 implements MigrationInterface {
     'carts',
     'orders',
     'kitchen_tickets',
-    'stock_transactions',
     'stock_levels',
     'shifts',
     'pos_devices',

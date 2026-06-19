@@ -57,9 +57,6 @@ export class User extends BaseEntity {
   @OneToMany('WalletTransaction', 'createdBy')
   walletTransactions: any[];
 
-  @OneToMany('StockTransaction', 'createdBy')
-  stockTransactions: any[];
-
   @OneToMany('Refund', 'createdBy')
   refunds: any[];
 

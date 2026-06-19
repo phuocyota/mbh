@@ -4,7 +4,6 @@ import {
   Product,
   StockTake,
   StockTakeItem,
-  StockTransaction,
 } from '../../entities';
 import { StockTakeController } from './stock-take.controller';
 import { StockTakeService } from './stock-take.service';
@@ -15,7 +14,6 @@ import { StockTakeService } from './stock-take.service';
       Product,
       StockTake,
       StockTakeItem,
-      StockTransaction,
     ]),
   ],
   providers: [StockTakeService],

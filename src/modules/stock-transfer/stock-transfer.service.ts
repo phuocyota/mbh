@@ -7,7 +7,6 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, EntityManager, Repository } from 'typeorm';
 import {
   Product,
-  StockTransaction,
   StockTransfer,
   StockTransferItem,
 } from '../../entities';
@@ -27,8 +26,6 @@ export class StockTransferService {
     private readonly stockTransferItemRepository: Repository<StockTransferItem>,
     @InjectRepository(Product)
     private readonly productRepository: Repository<Product>,
-    @InjectRepository(StockTransaction)
-    private readonly stockTransactionRepository: Repository<StockTransaction>,
     private readonly dataSource: DataSource,
   ) {}
 
@@ -128,32 +125,6 @@ export class StockTransferService {
       if (!transfer.items?.length) {
         throw new BadRequestException('Stock transfer items are required');
       }
-
-      const stockTransactionRepo = trx.getRepository(StockTransaction);
-
-      for (const item of transfer.items) {
-        await stockTransactionRepo.save([
-          stockTransactionRepo.create({
-            branchId: transfer.fromBranchId,
-            productId: item.productId,
-            type: 'TRANSFER_OUT',
-            quantity: Number(item.quantity),
-            refType: 'STOCK_TRANSFER',
-            refId: transfer.id,
-            note: transfer.note,
-          }),
-          stockTransactionRepo.create({
-            branchId: transfer.toBranchId,
-            productId: item.productId,
-            type: 'TRANSFER_IN',
-            quantity: Number(item.quantity),
-            refType: 'STOCK_TRANSFER',
-            refId: transfer.id,
-            note: transfer.note,
-          }),
-        ]);
-      }
-
       transfer.status = STOCK_TRANSFER_STATUS.COMPLETED;
       transfer.transferredAt = transfer.transferredAt || new Date();
       await trx.getRepository(StockTransfer).save(transfer);

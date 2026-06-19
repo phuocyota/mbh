@@ -9,7 +9,6 @@ import {
   Product,
   StockTake,
   StockTakeItem,
-  StockTransaction,
 } from '../../entities';
 import { DEFAULT_BRANCH_ID } from '../../common/constant/default-branch.constant';
 import {
@@ -31,8 +30,6 @@ export class StockTakeService {
     private readonly stockTakeItemRepository: Repository<StockTakeItem>,
     @InjectRepository(Product)
     private readonly productRepository: Repository<Product>,
-    @InjectRepository(StockTransaction)
-    private readonly stockTransactionRepository: Repository<StockTransaction>,
     private readonly dataSource: DataSource,
   ) {}
 
@@ -107,7 +104,6 @@ export class StockTakeService {
       }
 
       const productRepo = trx.getRepository(Product);
-      const stockTransactionRepo = trx.getRepository(StockTransaction);
 
       for (const item of stockTake.items) {
         const product = await productRepo.findOne({
@@ -117,23 +113,8 @@ export class StockTakeService {
           throw new NotFoundException(`Product not found: ${item.productId}`);
         }
 
-        const difference = Number(item.actualQuantity) - Number(product.quantity || 0);
         product.quantity = Number(item.actualQuantity);
         await productRepo.save(product);
-
-        if (difference !== 0) {
-          await stockTransactionRepo.save(
-            stockTransactionRepo.create({
-              branchId: stockTake.branchId,
-              productId: item.productId,
-              type: 'ADJUSTMENT',
-              quantity: difference,
-              refType: 'STOCK_TAKE',
-              refId: stockTake.id,
-              note: stockTake.note,
-            }),
-          );
-        }
       }
 
       stockTake.status = STOCK_TAKE_STATUS.COMPLETED;
