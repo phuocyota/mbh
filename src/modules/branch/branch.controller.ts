@@ -1,6 +1,7 @@
 import {
   Controller,
   Get,
+  Header,
   Post,
   Body,
   Param,
@@ -27,6 +28,12 @@ export class BranchController {
   constructor(private branchService: BranchService) {}
 
   @Get()
+  @Header(
+    'Cache-Control',
+    'no-store, no-cache, must-revalidate, proxy-revalidate',
+  )
+  @Header('Pragma', 'no-cache')
+  @Header('Expires', '0')
   @ApiOperation({ summary: 'Get all branches' })
   @ApiResponse({
     status: 200,
