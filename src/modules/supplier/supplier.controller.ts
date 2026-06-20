@@ -68,8 +68,21 @@ export class SupplierController {
   })
   async create(@Body() createDto: CreateSupplierDto) {
     const code = await this.supplierService.generateCode();
+    const mappedData = {
+      ...createDto,
+      province: createDto.city || createDto.province,
+      idCard: createDto.cccd || createDto.idCard,
+      companyName: createDto.company || createDto.companyName,
+      code,
+    };
+    
+    // Clean up FE specific fields to avoid TypeORM mismatch or other issues
+    delete (mappedData as any).city;
+    delete (mappedData as any).cccd;
+    delete (mappedData as any).company;
+
     return this.supplierService.create(
-      { ...createDto, code },
+      mappedData,
       { userId: 'system' } as any,
     );
   }
@@ -87,8 +100,25 @@ export class SupplierController {
     @Param('id') id: string,
     @Body() updateDto: UpdateSupplierDto,
   ) {
-    return this.supplierService.update(id, updateDto, { userId: 'system' } as any);
+    const mappedData = {
+      ...updateDto,
+    };
+    if ((updateDto as any).city !== undefined) {
+      (mappedData as any).province = (updateDto as any).city;
+      delete (mappedData as any).city;
+    }
+    if ((updateDto as any).cccd !== undefined) {
+      (mappedData as any).idCard = (updateDto as any).cccd;
+      delete (mappedData as any).cccd;
+    }
+    if ((updateDto as any).company !== undefined) {
+      (mappedData as any).companyName = (updateDto as any).company;
+      delete (mappedData as any).company;
+    }
+
+    return this.supplierService.update(id, mappedData, { userId: 'system' } as any);
   }
+
 
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
