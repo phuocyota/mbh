@@ -42,4 +42,5 @@ export { FundReceiptReceived } from './fund-receipt-received.entity';
 export { FundReceiptPaid } from './fund-receipt-paid.entity';
 export { FundReceiptTransfer } from './fund-receipt-transfer.entity';
 export { FundDetail } from './fund-detail.entity';
-
+export { StockTake } from './stock-take.entity';
+export { StockTakeItem } from './stock-take-item.entity';

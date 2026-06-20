@@ -71,4 +71,27 @@ export class DashboardController {
   getEmployeeAttendance(@Query('filter') filter = 'today') {
     return this.dashboardService.getEmployeeAttendance(filter);
   }
+
+  @Get('revenue/hourly')
+  @ApiOperation({ summary: 'Dashboard hourly revenue stats' })
+  @ApiQuery({ name: 'date', required: false })
+  @ApiQuery({ name: 'branchId', required: false })
+  getHourlyRevenueStats(
+    @Query('date') date?: string,
+    @Query('branchId') branchId?: string,
+  ) {
+    return this.dashboardService.getHourlyRevenueStats(date, branchId);
+  }
+
+  @Get('customers/hourly')
+  @ApiOperation({ summary: 'Dashboard hourly customer stats' })
+  @ApiQuery({ name: 'date', required: false })
+  @ApiQuery({ name: 'branchId', required: false })
+  getHourlyCustomerStats(
+    @Query('date') date?: string,
+    @Query('branchId') branchId?: string,
+  ) {
+    return this.dashboardService.getHourlyCustomerStats(date, branchId);
+  }
 }
+

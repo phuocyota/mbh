@@ -315,4 +315,98 @@ export class DashboardService {
       ? `${wholeHours} giờ ${minutes} phút`
       : `${wholeHours} giờ`;
   }
+
+  async getHourlyRevenueStats(dateStr?: string, branchId?: string) {
+    const targetDate = dateStr ? new Date(dateStr) : new Date();
+    const from = new Date(targetDate.getFullYear(), targetDate.getMonth(), targetDate.getDate(), 0, 0, 0, 0);
+    const to = new Date(targetDate.getFullYear(), targetDate.getMonth(), targetDate.getDate(), 23, 59, 59, 999);
+
+    const query = this.orderRepository
+      .createQueryBuilder('order')
+      .select([
+        'EXTRACT(HOUR FROM order.createdAt) as hour',
+        'COUNT(order.id) as orderCount',
+        'COALESCE(SUM(order.totalAmount), 0) as revenue',
+      ])
+      .where('order.createdAt BETWEEN :from AND :to', { from, to })
+      .andWhere('order.paymentStatus = :paymentStatus', {
+        paymentStatus: ORDER_PAYMENT_STATUS.PAID,
+      })
+      .andWhere('order.status IN (:...statuses)', {
+        statuses: REVENUE_ORDER_STATUSES,
+      });
+
+    if (branchId) {
+      query.andWhere('order.branchId = :branchId', { branchId });
+    }
+
+    const rows = await query
+      .groupBy('EXTRACT(HOUR FROM order.createdAt)')
+      .getRawMany();
+
+    const revenueMap = new Map<number, number>();
+    rows.forEach(row => {
+      revenueMap.set(Math.floor(Number(row.hour)), Number(row.revenue));
+    });
+
+    const labels: string[] = [];
+    const values: number[] = [];
+    for (let h = 6; h <= 21; h++) {
+      labels.push(`${String(h).padStart(2, '0')}h`);
+      values.push(revenueMap.get(h) || 0);
+    }
+
+    return {
+      date: from.toISOString().slice(0, 10),
+      labels,
+      values,
+    };
+  }
+
+  async getHourlyCustomerStats(dateStr?: string, branchId?: string) {
+    const targetDate = dateStr ? new Date(dateStr) : new Date();
+    const from = new Date(targetDate.getFullYear(), targetDate.getMonth(), targetDate.getDate(), 0, 0, 0, 0);
+    const to = new Date(targetDate.getFullYear(), targetDate.getMonth(), targetDate.getDate(), 23, 59, 59, 999);
+
+    const query = this.orderRepository
+      .createQueryBuilder('order')
+      .select([
+        'EXTRACT(HOUR FROM order.createdAt) as hour',
+        'COUNT(DISTINCT order.customerId) as customers',
+      ])
+      .where('order.createdAt BETWEEN :from AND :to', { from, to })
+      .andWhere('order.paymentStatus = :paymentStatus', {
+        paymentStatus: ORDER_PAYMENT_STATUS.PAID,
+      })
+      .andWhere('order.status IN (:...statuses)', {
+        statuses: REVENUE_ORDER_STATUSES,
+      });
+
+    if (branchId) {
+      query.andWhere('order.branchId = :branchId', { branchId });
+    }
+
+    const rows = await query
+      .groupBy('EXTRACT(HOUR FROM order.createdAt)')
+      .getRawMany();
+
+    const customerMap = new Map<number, number>();
+    rows.forEach(row => {
+      customerMap.set(Math.floor(Number(row.hour)), Number(row.customers));
+    });
+
+    const labels: string[] = [];
+    const values: number[] = [];
+    for (let h = 6; h <= 21; h++) {
+      labels.push(`${String(h).padStart(2, '0')}h`);
+      values.push(customerMap.get(h) || 0);
+    }
+
+    return {
+      date: from.toISOString().slice(0, 10),
+      labels,
+      values,
+    };
+  }
 }
+
