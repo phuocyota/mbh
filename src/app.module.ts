@@ -23,8 +23,6 @@ import { RefundItemModule } from './modules/refund-item/refund-item.module';
 import { ShiftModule } from './modules/shift/shift.module';
 import { CashMovementModule } from './modules/cash-movement/cash-movement.module';
 import { StudentProfileModule } from './modules/student-profile/student-profile.module';
-import { KitchenTicketModule } from './modules/kitchen-ticket/kitchen-ticket.module';
-import { KitchenTicketItemModule } from './modules/kitchen-ticket-item/kitchen-ticket-item.module';
 import { ReportsModule } from './modules/reports/reports.module';
 import { CartModule } from './modules/cart/cart.module';
 import { CouponModule } from './modules/coupon/coupon.module';
@@ -65,8 +63,6 @@ import { StockTransferModule } from './modules/stock-transfer/stock-transfer.mod
     ShiftModule,
     CashMovementModule,
     StudentProfileModule,
-    KitchenTicketModule,
-    KitchenTicketItemModule,
     ReportsModule,
     CartModule,
     CouponModule,

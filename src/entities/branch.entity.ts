@@ -23,7 +23,4 @@ export class Branch extends BaseEntity {
 
   @OneToMany('Shift', 'branch')
   shifts: any[];
-
-  @OneToMany('KitchenTicket', 'branch')
-  kitchenTickets: any[];
 }

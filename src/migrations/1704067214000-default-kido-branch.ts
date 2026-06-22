@@ -8,7 +8,6 @@ export class DefaultKidoBranch1704067214000 implements MigrationInterface {
   private readonly branchTables = [
     'carts',
     'orders',
-    'kitchen_tickets',
     'stock_levels',
     'shifts',
     'pos_devices',

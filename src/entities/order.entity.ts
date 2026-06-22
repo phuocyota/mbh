@@ -136,7 +136,4 @@ export class Order extends BaseEntity {
 
   @OneToMany('Refund', 'order')
   refunds: any[];
-
-  @OneToMany('KitchenTicket', 'order')
-  kitchenTickets: any[];
 }
