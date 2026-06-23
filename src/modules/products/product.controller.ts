@@ -76,9 +76,7 @@ export class ProductController {
   @ApiResponse({ status: 201, description: 'Product created' })
   @Post()
   async create(@Body() createProductDto: any) {
-    return this.productService.create(createProductDto, {
-      userId: 'system',
-    } as any);
+    return this.productService.createProduct(createProductDto);
   }
 
   @ApiOperation({ summary: 'Update product' })
@@ -86,9 +84,7 @@ export class ProductController {
   @ApiResponse({ status: 200, description: 'Product updated' })
   @Put(':id')
   async update(@Param('id') id: string, @Body() updateProductDto: any) {
-    return this.productService.update(id, updateProductDto, {
-      userId: 'system',
-    } as any);
+    return this.productService.updateProduct(id, updateProductDto);
   }
 
   @ApiOperation({ summary: 'Bulk update products' })

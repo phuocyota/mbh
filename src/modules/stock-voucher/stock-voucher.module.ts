@@ -1,7 +1,6 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import {
-  Product,
   StockReceiptDetail,
   StockReceiptImport,
   StockReceiptExport,
@@ -16,7 +15,6 @@ import { StockVoucherService } from './stock-voucher.service';
 @Module({
   imports: [
     TypeOrmModule.forFeature([
-      Product,
       StockReceiptDetail,
       StockReceiptImport,
       StockReceiptExport,

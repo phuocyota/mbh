@@ -1,7 +1,7 @@
 import { ForbiddenException, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { Product } from '../../entities';
+import { Product, StockItem } from '../../entities';
 import { OrderService } from '../orders/order.service';
 import { OrderItemService } from '../order-item/order-item.service';
 import { PaymentService } from '../payment/payment.service';
@@ -35,6 +35,8 @@ export class ReportsService {
     private cashMovementService: CashMovementService,
     @InjectRepository(Product)
     private productRepository: Repository<Product>,
+    @InjectRepository(StockItem)
+    private stockItemRepository: Repository<StockItem>,
   ) {}
 
   private resolveRange(range: DateRange): ResolvedDateRange {
@@ -579,13 +581,43 @@ export class ReportsService {
   }
 
   async stockSnapshot(branchId?: string, user?: ReportUser) {
-    const products = await this.productRepository.find();
-    return products.map((product) => ({
-      productId: product.id,
-      name: product.name,
-      unit: product.unit,
-      quantity: Number(product.quantity || 0),
-      updatedAt: product.updatedAt,
+    const resolvedBranchId = this.resolveBranchId(branchId, user);
+    const query = this.productRepository
+      .createQueryBuilder('product')
+      .leftJoin('stock_items', 'stockItem', 'stockItem.product_id = product.id')
+      .leftJoin('stocks', 'stock', 'stock.id = stockItem.stock_id')
+      .select('product.id', 'productId')
+      .addSelect('product.sku', 'sku')
+      .addSelect('product.name', 'name')
+      .addSelect('product.unit', 'unit')
+      .addSelect('MAX(COALESCE(stockItem.updated_at, product.updated_at))', 'updatedAt')
+      .where('product.is_active = :isActive', { isActive: true })
+      .groupBy('product.id')
+      .addGroupBy('product.sku')
+      .addGroupBy('product.name')
+      .addGroupBy('product.unit')
+      .orderBy('product.name', 'ASC');
+
+    if (resolvedBranchId) {
+      query
+        .addSelect(
+          'COALESCE(SUM(CASE WHEN stock.branch_id = :branchId THEN stockItem.quantity ELSE 0 END), 0)',
+          'quantity',
+        )
+        .setParameter('branchId', resolvedBranchId);
+    } else {
+      query.addSelect('COALESCE(SUM(stockItem.quantity), 0)', 'quantity');
+    }
+
+    const rows = await query.getRawMany();
+
+    return rows.map((row) => ({
+      productId: row.productId,
+      sku: row.sku,
+      name: row.name,
+      unit: row.unit,
+      quantity: Number(row.quantity || 0),
+      updatedAt: row.updatedAt,
     }));
   }
 
@@ -661,7 +693,7 @@ export class ReportsService {
     const branchId = this.resolveBranchId(query.branchId, user);
     const minRate = Number(query.minRate || 1.2);
     const maxRate = Number(query.maxRate || 1.5);
-    const [rows, revenueRows] = await Promise.all([
+    const [rows, revenueRows, stockRows] = await Promise.all([
       this.orderItemService.getMonthlyOrderPlanRows({
         from,
         to,
@@ -674,7 +706,11 @@ export class ReportsService {
         to,
         branchId,
       }),
+      this.getStockOnHandByProduct(branchId),
     ]);
+    const stockByProductId = new Map(
+      stockRows.map((row) => [row.productId, Number(row.quantity || 0)]),
+    );
 
     const revenueMonth = Number(revenueRows.totalRow?.totalRevenue || 0);
     const firstRow = rows[0];
@@ -697,14 +733,14 @@ export class ReportsService {
         maxPercent: Math.round(maxRate * 100),
       },
       dataAvailable: {
-        stockOnHand: false,
+        stockOnHand: true,
         usagePerMil: false,
       },
       data: rows.map((row, index) => {
         const monthlyUsage = Number(row.monthlyUsage || 0);
         const minPlan = Math.ceil(monthlyUsage * minRate);
         const maxPlan = Math.ceil(monthlyUsage * maxRate);
-        const stockOnHand: number | null = null;
+        const stockOnHand = stockByProductId.get(row.productId) || 0;
 
         return {
           stt: index + 1,
@@ -721,8 +757,7 @@ export class ReportsService {
             max: maxPlan,
           },
           warningQuantity: null,
-          suggestedOrderQuantity:
-            stockOnHand === null ? maxPlan : Math.max(maxPlan - stockOnHand, 0),
+          suggestedOrderQuantity: Math.max(maxPlan - stockOnHand, 0),
           revenue: Number(row.revenue || 0),
         };
       }),
@@ -739,5 +774,20 @@ export class ReportsService {
     }
 
     return Math.round(total / quantity);
+  }
+
+  private async getStockOnHandByProduct(branchId?: string) {
+    const query = this.stockItemRepository
+      .createQueryBuilder('stockItem')
+      .innerJoin('stockItem.stock', 'stock')
+      .select('stockItem.productId', 'productId')
+      .addSelect('COALESCE(SUM(stockItem.quantity), 0)', 'quantity')
+      .groupBy('stockItem.productId');
+
+    if (branchId) {
+      query.where('stock.branchId = :branchId', { branchId });
+    }
+
+    return query.getRawMany<{ productId: string; quantity: string }>();
   }
 }

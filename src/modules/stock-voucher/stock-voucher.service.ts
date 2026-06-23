@@ -1,12 +1,10 @@
 import {
   BadRequestException,
   Injectable,
-  NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, EntityManager, Repository } from 'typeorm';
 import {
-  Product,
   StockReceiptDetail,
   StockReceiptImport,
   StockReceiptExport,
@@ -14,7 +12,6 @@ import {
   Stock,
   StockItem,
 } from '../../entities';
-import { calculateNextStock } from '../../../packages/inventory/src/index.js';
 import { CreateStockVoucherDto } from './dto/create-stock-voucher.dto';
 import { FinanceService } from '../finance/finance.service';
 import { DEFAULT_BRANCH_ID } from '../../common/constant/default-branch.constant';
@@ -29,8 +26,6 @@ export class StockVoucherService {
   constructor(
     @InjectRepository(StockReceiptDetail)
     private stockReceiptDetailRepository: Repository<StockReceiptDetail>,
-    @InjectRepository(Product)
-    private productRepository: Repository<Product>,
     @InjectRepository(StockReceiptImport)
     private stockReceiptImportRepository: Repository<StockReceiptImport>,
     @InjectRepository(StockReceiptExport)
@@ -148,7 +143,6 @@ export class StockVoucherService {
       }
 
       const detailRepo = trx.getRepository(StockReceiptDetail);
-      const productRepo = trx.getRepository(Product);
       const importRepo = trx.getRepository(StockReceiptImport);
       const exportRepo = trx.getRepository(StockReceiptExport);
       const transferRepo = trx.getRepository(StockReceiptTransfer);
@@ -268,15 +262,6 @@ export class StockVoucherService {
         savedDetails.push(detail);
 
         if (dtoItem.productId) {
-          // Update product general quantity for compatibility
-          await this.applyInventoryChange(
-            productRepo,
-            dtoItem.productId,
-            quantity,
-            type,
-          );
-
-          // Update stock_items quantity
           if (type === 'IMPORT') {
             await this.updateStockItemQuantity(stockItemRepo, toId!, dtoItem.productId, quantity);
           } else if (type === 'EXPORT') {
@@ -338,29 +323,5 @@ export class StockVoucherService {
     }
 
     return this.dataSource.transaction(executor);
-  }
-
-  private async applyInventoryChange(
-    productRepo: Repository<Product>,
-    productId: string,
-    quantity: number,
-    type: string,
-  ) {
-    const product = await productRepo.findOne({
-      where: { id: productId },
-    });
-
-    if (!product) {
-      throw new NotFoundException(`Product not found: ${productId}`);
-    }
-
-    const nextQuantity = calculateNextStock(
-      product,
-      quantity,
-      type,
-    );
-
-    product.quantity = nextQuantity;
-    await productRepo.save(product);
   }
 }

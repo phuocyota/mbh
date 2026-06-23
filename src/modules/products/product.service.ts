@@ -55,12 +55,14 @@ export class ProductService extends BaseService<Product> {
   }
 
   async createProduct(createProductDto: any) {
-    const product = this.productRepository.create(createProductDto);
+    const productDto = this.withoutQuantity(createProductDto);
+    const product = this.productRepository.create(productDto);
     return this.productRepository.save(product);
   }
 
   async updateProduct(id: string, updateProductDto: any) {
-    await this.productRepository.update(id, updateProductDto);
+    const productDto = this.withoutQuantity(updateProductDto);
+    await this.productRepository.update(id, productDto);
     return this.findOne(id);
   }
 
@@ -129,5 +131,11 @@ export class ProductService extends BaseService<Product> {
         maxPrice: filter.maxPrice,
       });
     }
+  }
+
+  private withoutQuantity(dto: any) {
+    const productDto = { ...dto };
+    delete productDto.quantity;
+    return productDto;
   }
 }

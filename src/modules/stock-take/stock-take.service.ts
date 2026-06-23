@@ -180,13 +180,6 @@ export class StockTakeService {
         // Set to actual quantity
         stockItem.quantity = Number(item.actualQuantity);
         await stockItemRepo.save(stockItem);
-
-        // Adjust compatibility product quantity
-        const product = await productRepo.findOne({ where: { id: item.productId } });
-        if (product) {
-          product.quantity = Number(product.quantity || 0) + Number(item.differenceQuantity);
-          await productRepo.save(product);
-        }
       }
 
       stockTake.status = 'COMPLETED';
