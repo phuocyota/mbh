@@ -11,8 +11,20 @@ export class StockFundReceiptReason extends BaseEntity {
   @Column('uuid', { name: 'fund_id', nullable: true })
   fundId: string;
 
+  @Column('varchar', { nullable: true })
+  code: string;
+
   @Column('varchar')
   reason: string;
+
+  @Column('varchar', { name: 'debit_account_code', nullable: true })
+  debitAccountCode: string;
+
+  @Column('varchar', { name: 'credit_account_code', nullable: true })
+  creditAccountCode: string;
+
+  @Column('varchar', { name: 'tax_account_code', nullable: true })
+  taxAccountCode: string;
 
   @Column('text', { nullable: true })
   note: string;
