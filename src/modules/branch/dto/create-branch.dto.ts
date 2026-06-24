@@ -1,5 +1,11 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsNotEmpty, IsString, IsOptional, IsEnum } from 'class-validator';
+import {
+  IsNotEmpty,
+  IsString,
+  IsOptional,
+  IsEnum,
+  IsNumber,
+} from 'class-validator';
 import {
   ACTIVE_INACTIVE_STATUS_VALUES,
   COMMON_STATUS,
@@ -31,4 +37,14 @@ export class CreateBranchDto {
   @IsOptional()
   @IsEnum(ACTIVE_INACTIVE_STATUS_VALUES)
   status?: string;
+
+  @ApiProperty({
+    description: 'Branch-level max debt setting for customers in this branch',
+    example: 50000,
+    required: false,
+    default: 50000,
+  })
+  @IsOptional()
+  @IsNumber()
+  maxCustomerDebt?: number;
 }

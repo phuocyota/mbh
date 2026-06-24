@@ -33,8 +33,9 @@ export class CustomerDto extends BaseDto {
   status: string;
 
   @ApiProperty({
-    description: 'Customer spending limit',
+    description:
+      'Remaining debt allowance for this customer; actual debt is based on wallet balance',
     example: 50000,
   })
-  spendingLimit: number;
+  debtLimit: number;
 }

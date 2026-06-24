@@ -16,4 +16,10 @@ export class BranchDto extends BaseDto {
     example: 'ACTIVE',
   })
   status: string;
+
+  @ApiProperty({
+    description: 'Branch-level max debt setting for customers in this branch',
+    example: 50000,
+  })
+  maxCustomerDebt: number;
 }

@@ -60,13 +60,15 @@ export class CreateCustomerDto {
   status?: string;
 
   @ApiProperty({
-    description: 'Customer spending limit',
+    description:
+      'Remaining debt allowance for this customer; actual debt is based on wallet balance',
     example: 50000,
     required: false,
+    default: 50000,
   })
   @IsOptional()
   @Type(() => Number)
   @IsNumber()
   @Min(0)
-  spendingLimit?: number;
+  debtLimit?: number;
 }

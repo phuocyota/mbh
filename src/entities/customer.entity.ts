@@ -24,13 +24,14 @@ export class Customer extends BaseEntity {
   @Column('varchar', { default: COMMON_STATUS.ACTIVE })
   status: string;
 
+  // Customer-level remaining debt allowance. Actual debt is derived from negative wallet balance.
   @Column('numeric', {
     precision: 12,
     scale: 2,
     default: 50000,
-    name: 'spending_limit',
+    name: 'debt_limit',
   })
-  spendingLimit: number;
+  debtLimit: number;
 
   @Column('uuid', { nullable: true, name: 'user_id', unique: true })
   userId: string;

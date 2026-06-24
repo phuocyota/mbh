@@ -4,9 +4,10 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { EntityManager, Repository } from 'typeorm';
 import { Wallet } from '../../entities/wallet.entity';
 import { WalletTransaction } from '../../entities/wallet-transaction.entity';
+import { Customer } from '../../entities/customer.entity';
 import { BaseService } from '../../common/sql/base.service';
 import { ERROR_MESSAGES } from '../../common/constant/error-messages.constant';
 import { CustomerService } from '../customer/customer.service';
@@ -87,26 +88,36 @@ export class WalletService extends BaseService<Wallet> {
       throw new BadRequestException('Số tiền nạp phải lớn hơn 0');
     }
 
-    return this.runInTransaction(async () => {
-      const customer = await this.customerService.findById(customerId);
+    return this.walletRepository.manager.transaction(async (manager) => {
+      const customerRepository = manager.getRepository(Customer);
+      const walletRepository = manager.getRepository(Wallet);
+      const walletTransactionRepository =
+        manager.getRepository(WalletTransaction);
+
+      const customer = await customerRepository.findOne({
+        where: { id: customerId },
+        lock: { mode: 'pessimistic_write' },
+      });
+
       if (!customer) {
         throw new NotFoundException(
           ERROR_MESSAGES.NOT_FOUND_WITH_ID('Customer', customerId),
         );
       }
 
-      let wallet = await this.walletRepository.findOne({
+      let wallet = await walletRepository.findOne({
         where: { customerId },
+        lock: { mode: 'pessimistic_write' },
       });
 
       if (!wallet) {
-        wallet = this.walletRepository.create({
+        wallet = walletRepository.create({
           customerId,
           balance: 0,
           status: COMMON_STATUS.ACTIVE,
           createdBy,
         });
-        wallet = await this.walletRepository.save(wallet);
+        wallet = await walletRepository.save(wallet);
       }
 
       if (wallet.status !== COMMON_STATUS.ACTIVE) {
@@ -118,9 +129,15 @@ export class WalletService extends BaseService<Wallet> {
 
       wallet.balance = balanceAfter;
       wallet.updatedBy = createdBy;
-      await this.walletRepository.save(wallet);
+      await walletRepository.save(wallet);
+      await this.restoreDebtLimitForRecoveredDebt(
+        manager,
+        customerId,
+        balanceBefore,
+        balanceAfter,
+      );
 
-      const tx = this.walletTransactionRepository.create({
+      const tx = walletTransactionRepository.create({
         walletId: wallet.id,
         customerId,
         type: WALLET_TRANSACTION_TYPE.TOPUP,
@@ -131,7 +148,7 @@ export class WalletService extends BaseService<Wallet> {
         note,
         createdBy,
       });
-      const savedTx = await this.walletTransactionRepository.save(tx);
+      const savedTx = await walletTransactionRepository.save(tx);
 
       return {
         walletId: wallet.id,
@@ -149,36 +166,70 @@ export class WalletService extends BaseService<Wallet> {
       return null;
     }
 
-    const wallet = await this.walletRepository.findOne({
-      where: { customerId },
+    // Debt is represented by a negative wallet balance. debtLimit is the customer's
+    // remaining allowance and is reduced only by newly created debt.
+    return this.walletRepository.manager.transaction(async (manager) => {
+      const customerRepository = manager.getRepository(Customer);
+      const walletRepository = manager.getRepository(Wallet);
+      const walletTransactionRepository =
+        manager.getRepository(WalletTransaction);
+
+      const customer = await customerRepository.findOne({
+        where: { id: customerId },
+        lock: { mode: 'pessimistic_write' },
+      });
+
+      if (!customer) {
+        throw new NotFoundException(
+          ERROR_MESSAGES.NOT_FOUND_WITH_ID('Customer', customerId),
+        );
+      }
+
+      const wallet = await walletRepository.findOne({
+        where: { customerId },
+        lock: { mode: 'pessimistic_write' },
+      });
+
+      if (!wallet) {
+        throw new BadRequestException('Customer wallet not found');
+      }
+      if (wallet.status !== COMMON_STATUS.ACTIVE) {
+        throw new BadRequestException('Wallet is not active');
+      }
+
+      const balanceBefore = Number(wallet.balance);
+      const balanceAfter = balanceBefore - amount;
+      const debtBefore = Math.max(0, -balanceBefore);
+      const debtAfter = Math.max(0, -balanceAfter);
+      const debtIncrease = debtAfter - debtBefore;
+
+      if (debtIncrease > 0) {
+        const debtLimit = Number(customer.debtLimit || 0);
+
+        if (debtIncrease > debtLimit) {
+          throw new BadRequestException('Vượt quá số nợ cho phép');
+        }
+
+        customer.debtLimit = debtLimit - debtIncrease;
+        await customerRepository.save(customer);
+      }
+
+      wallet.balance = balanceAfter;
+      await walletRepository.save(wallet);
+
+      const tx = walletTransactionRepository.create({
+        walletId: wallet.id,
+        customerId,
+        type: WALLET_TRANSACTION_TYPE.PAYMENT,
+        amount,
+        balanceBefore,
+        balanceAfter,
+        refType: WALLET_TRANSACTION_REF_TYPE.ORDER,
+        refId: orderId,
+      });
+
+      return walletTransactionRepository.save(tx);
     });
-
-    if (!wallet) {
-      throw new BadRequestException('Customer wallet not found');
-    }
-    if (wallet.status !== COMMON_STATUS.ACTIVE) {
-      throw new BadRequestException('Wallet is not active');
-    }
-    if (Number(wallet.balance) < amount) {
-      throw new BadRequestException('Insufficient wallet balance');
-    }
-
-    const balanceBefore = Number(wallet.balance);
-    const balanceAfter = balanceBefore - amount;
-    await this.walletRepository.update(wallet.id, { balance: balanceAfter });
-
-    const tx = this.walletTransactionRepository.create({
-      walletId: wallet.id,
-      customerId,
-      type: WALLET_TRANSACTION_TYPE.PAYMENT,
-      amount,
-      balanceBefore,
-      balanceAfter,
-      refType: WALLET_TRANSACTION_REF_TYPE.ORDER,
-      refId: orderId,
-    });
-
-    return this.walletTransactionRepository.save(tx);
   }
 
   async refundToWallet(
@@ -205,6 +256,12 @@ export class WalletService extends BaseService<Wallet> {
     wallet.balance = balanceAfter;
     wallet.updatedBy = updatedBy;
     await this.walletRepository.save(wallet);
+    await this.restoreDebtLimitForRecoveredDebt(
+      this.walletRepository.manager,
+      customerId,
+      balanceBefore,
+      balanceAfter,
+    );
 
     const walletTx = this.walletTransactionRepository.create({
       walletId: wallet.id,
@@ -220,6 +277,27 @@ export class WalletService extends BaseService<Wallet> {
     });
 
     return this.walletTransactionRepository.save(walletTx);
+  }
+
+  private async restoreDebtLimitForRecoveredDebt(
+    manager: EntityManager,
+    customerId: string,
+    balanceBefore: number,
+    balanceAfter: number,
+  ): Promise<void> {
+    // When topup/refund reduces a negative wallet balance, restore that amount
+    // back to the customer's remaining debt allowance.
+    const debtBefore = Math.max(0, -balanceBefore);
+    const debtAfter = Math.max(0, -balanceAfter);
+    const debtDecrease = debtBefore - debtAfter;
+
+    if (debtDecrease <= 0) {
+      return;
+    }
+
+    await manager
+      .getRepository(Customer)
+      .increment({ id: customerId }, 'debtLimit', debtDecrease);
   }
 
   /**

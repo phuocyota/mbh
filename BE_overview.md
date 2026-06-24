@@ -949,6 +949,14 @@ npm run deploy
 - Wallet/balance tracking
 - Cash movement tracking
 
+Debt limit logic:
+- `branches.max_customer_debt` is the branch-level setting for customer debt allowance in that branch.
+- `customers.debt_limit` is the remaining debt allowance for one customer.
+- Actual customer debt is derived from wallet balance: negative `wallets.balance` means the customer is in debt.
+- When a wallet order creates new debt, the new debt amount is deducted from `customers.debt_limit`.
+- If the new debt would exceed `customers.debt_limit`, the order is rejected with `Vượt quá số nợ cho phép`.
+- When topup or refund reduces a negative wallet balance, that recovered amount is restored to `customers.debt_limit`.
+
 ### 3. Inventory Management
 - Product catalog
 - Stock level tracking

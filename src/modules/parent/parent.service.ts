@@ -82,7 +82,7 @@ export class ParentService {
       this.getRecentNotifications(customer.id),
       this.getTodayOrder(customer.id),
       this.getRecentHistory(customer.id),
-      this.getStatistics(customer.id, Number(customer.spendingLimit || 0)),
+      this.getStatistics(customer.id, Number(customer.debtLimit || 0)),
     ]);
 
     return {
@@ -184,7 +184,8 @@ export class ParentService {
     return {
       id: order.id,
       status: normalizedStatus,
-      statusText: ORDER_STATUS_TEXT[normalizedStatus] || String(normalizedStatus),
+      statusText:
+        ORDER_STATUS_TEXT[normalizedStatus] || String(normalizedStatus),
       orderedAt: order.createdAt.toISOString(),
       items,
       addons,
@@ -244,7 +245,7 @@ export class ParentService {
 
   private async getStatistics(
     customerId: string,
-    spendingLimit: number,
+    debtLimit: number,
   ): Promise<StatisticsHomeDto> {
     const now = new Date();
     const weekStart = new Date(now);
@@ -265,11 +266,11 @@ export class ParentService {
     return {
       week: {
         spent: weekSpent,
-        limit: spendingLimit,
+        limit: debtLimit,
       },
       month: {
         spent: monthSpent,
-        limit: spendingLimit,
+        limit: debtLimit,
       },
     };
   }
