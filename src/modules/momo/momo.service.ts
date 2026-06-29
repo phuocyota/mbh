@@ -44,7 +44,7 @@ export class MomoService {
     }
 
     const amount = Number(order.totalAmount);
-    const orderInfo = `Thanh toán đơn hàng ${order.orderCode}`;
+    const orderInfo = `Thanh toan don hang ${order.orderCode}`;
     const redirectUrl = this.returnUrl;
     const ipnUrl = this.notifyUrl;
     const requestType = 'captureWallet';
@@ -111,7 +111,7 @@ export class MomoService {
       throw new BadRequestException('Topup amount must be greater than 0');
     }
 
-    const orderInfo = `Nạp tiền vào ví`;
+    const orderInfo = `Nap tien vao vi`;
     const redirectUrl = this.returnUrl;
     const ipnUrl = this.notifyUrl;
     const requestType = 'captureWallet';
