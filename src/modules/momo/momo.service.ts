@@ -13,6 +13,13 @@ import {
   ORDER_PAYMENT_STATUS,
 } from '../../common/constant/constant';
 
+export interface MomoPaymentUrlResponse {
+  payUrl: string;
+  deeplink?: string;
+  qrCode?: string;
+  qrData: string;
+}
+
 @Injectable()
 export class MomoService {
   private readonly logger = new Logger(MomoService.name);
@@ -38,7 +45,7 @@ export class MomoService {
     this.notifyUrl = this.configService.get<string>('MOMO_NOTIFY_URL') || '';
   }
 
-  async createPayment(orderId: string): Promise<{ payUrl: string }> {
+  async createPayment(orderId: string): Promise<MomoPaymentUrlResponse> {
     this.assertReady();
     const order = await this.orderService.findOrderByIdOrThrow(orderId);
 
@@ -87,7 +94,7 @@ export class MomoService {
     const responseData = await this.sendRequest(requestBody);
 
     if (responseData.resultCode === 0) {
-      return { payUrl: responseData.payUrl };
+      return this.toPaymentUrlResponse(responseData);
     }
 
     throw this.createMomoApiException(
@@ -99,7 +106,7 @@ export class MomoService {
   async createTopupPayment(
     customerId: string,
     amount: number,
-  ): Promise<{ payUrl: string }> {
+  ): Promise<MomoPaymentUrlResponse> {
     this.assertReady();
     amount = this.normalizeAmount(amount);
 
@@ -140,7 +147,7 @@ export class MomoService {
     const responseData = await this.sendRequest(requestBody);
 
     if (responseData.resultCode === 0) {
-      return { payUrl: responseData.payUrl };
+      return this.toPaymentUrlResponse(responseData);
     }
 
     throw this.createMomoApiException(
@@ -176,6 +183,15 @@ export class MomoService {
 
     this.logger.error(errorMessage);
     return new BadRequestException(errorMessage);
+  }
+
+  private toPaymentUrlResponse(responseData: any): MomoPaymentUrlResponse {
+    return {
+      payUrl: responseData.payUrl,
+      deeplink: responseData.deeplink,
+      qrCode: responseData.qrCode,
+      qrData: responseData.qrCode || responseData.deeplink || responseData.payUrl,
+    };
   }
 
   async processIpn(ipnData: any): Promise<void> {
