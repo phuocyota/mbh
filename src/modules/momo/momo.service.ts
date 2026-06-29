@@ -25,12 +25,12 @@ export class MomoService {
     private orderService: OrderService,
     private walletService: WalletService,
   ) {
-    this.endpoint = process.env.MOMO_ENDPOINT;
-    this.partnerCode = process.env.MOMO_PARTNER_CODE;
-    this.accessKey = process.env.MOMO_ACCESS_KEY;
-    this.secretKey = process.env.MOMO_SECRET_KEY;
-    this.returnUrl = process.env.MOMO_RETURN_URL;
-    this.notifyUrl = process.env.MOMO_NOTIFY_URL;
+    this.endpoint = process.env.MOMO_ENDPOINT || '';
+    this.partnerCode = process.env.MOMO_PARTNER_CODE || '';
+    this.accessKey = process.env.MOMO_ACCESS_KEY || '';
+    this.secretKey = process.env.MOMO_SECRET_KEY || '';
+    this.returnUrl = process.env.MOMO_RETURN_URL || '';
+    this.notifyUrl = process.env.MOMO_NOTIFY_URL || '';
   }
 
   async createPayment(orderId: string): Promise<{ payUrl: string }> {
