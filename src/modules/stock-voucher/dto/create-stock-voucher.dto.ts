@@ -68,6 +68,16 @@ export class CreateStockVoucherDto {
   @IsString()
   note?: string;
 
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsString()
+  debitAccountCode?: string;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsString()
+  creditAccountCode?: string;
+
   @ApiProperty({ type: [CreateStockVoucherItemDto] })
   @IsArray()
   @ValidateNested({ each: true })

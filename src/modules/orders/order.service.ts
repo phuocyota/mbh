@@ -508,8 +508,8 @@ export class OrderService {
     const qb = this.orderRepository
       .createQueryBuilder('o')
       .leftJoin('users', 'u', 'u.id = o.cashier_id')
-      .select("COALESCE(CAST(o.cashier_id AS text), 'unknown')", 'id')
-      .addSelect("COALESCE(u.full_name, 'Không xác định')", 'employee')
+      .select("COALESCE(CAST(o.cashier_id AS text), 'system')", 'id')
+      .addSelect("COALESCE(u.full_name, 'Hệ thống')", 'employee')
       .addSelect('COUNT(o.id)', 'orders')
       .addSelect('COALESCE(SUM(o.subtotal), 0)', 'totalAmount')
       .addSelect('COALESCE(SUM(o.discount_amount), 0)', 'discount')

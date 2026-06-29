@@ -11,6 +11,7 @@ import {
   StockReceiptTransfer,
   Stock,
   StockItem,
+  StockFundReceiptReason,
 } from '../../entities';
 import { CreateStockVoucherDto } from './dto/create-stock-voucher.dto';
 import { FinanceService } from '../finance/finance.service';
@@ -36,6 +37,8 @@ export class StockVoucherService {
     private stockRepository: Repository<Stock>,
     @InjectRepository(StockItem)
     private stockItemRepository: Repository<StockItem>,
+    @InjectRepository(StockFundReceiptReason)
+    private stockFundReceiptReasonRepository: Repository<StockFundReceiptReason>,
     private financeService: FinanceService,
     private dataSource: DataSource,
   ) {}
@@ -78,12 +81,53 @@ export class StockVoucherService {
       return null;
     }
 
+    let fundId = payment?.fundId;
+    let debitAccountCode: string | undefined;
+    let creditAccountCode: string | undefined;
+
+    if (!fundId && payment?.method) {
+      const PAYMENT_METHOD_TO_REASON_CODE: Record<string, string> = {
+        CASH: 'BH_CASH',
+        BANK_TRANSFER: 'BH_BANK',
+        WALLET: 'BH_WALLET',
+        CARD: 'BH_CARD',
+      };
+      
+      const reasonCode = PAYMENT_METHOD_TO_REASON_CODE[payment.method];
+      if (reasonCode) {
+        const reasonRepo = manager ? manager.getRepository(StockFundReceiptReason) : this.stockFundReceiptReasonRepository;
+        
+        let reason = await reasonRepo.findOne({
+          where: {
+            code: reasonCode,
+            stock: { branchId: order.branchId },
+          },
+        });
+        
+        if (!reason) {
+          reason = await reasonRepo.findOne({
+            where: {
+              code: reasonCode,
+            },
+          });
+        }
+
+        if (reason) {
+          fundId = reason.fundId;
+          debitAccountCode = reason.debitAccountCode;
+          creditAccountCode = reason.creditAccountCode;
+        }
+      }
+    }
+
     return this.createVoucher(
       {
         branchId: order.branchId,
         type: 'EXPORT',
         orderId: order.id,
-        fundId: payment?.fundId,
+        fundId,
+        debitAccountCode,
+        creditAccountCode,
         note: `Xuất kho theo đơn hàng ${order.orderCode}`,
         items,
       },
@@ -293,6 +337,8 @@ export class StockVoucherService {
               : ACCOUNTING_SOURCE_TYPE.STOCK_RECEIPT_DETAIL,
             refId: dto.orderId || headerReceipt.id,
             note: dto.note,
+            debitAccountCode: dto.debitAccountCode,
+            creditAccountCode: dto.creditAccountCode,
           },
           trx,
         );

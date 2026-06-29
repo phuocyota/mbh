@@ -7,6 +7,7 @@ import {
   StockReceiptTransfer,
   Stock,
   StockItem,
+  StockFundReceiptReason,
 } from '../../entities';
 import { FinanceModule } from '../finance/finance.module';
 import { StockVoucherController } from './stock-voucher.controller';
@@ -21,6 +22,7 @@ import { StockVoucherService } from './stock-voucher.service';
       StockReceiptTransfer,
       Stock,
       StockItem,
+      StockFundReceiptReason,
     ]),
     FinanceModule,
   ],
