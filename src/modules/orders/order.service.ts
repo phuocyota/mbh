@@ -624,6 +624,48 @@ export class OrderService {
     return updatedOrder;
   }
 
+  async receiveMomoPayment(
+    orderId: string,
+    paymentDto: { amount: number; transId: string; createdBy?: string },
+  ) {
+    const order = await this.findOrderByIdOrThrow(orderId);
+
+    if (order.paymentStatus !== ORDER_PAYMENT_STATUS.UNPAID) {
+      throw new BadRequestException('Order payment must be in UNPAID status');
+    }
+
+    // MoMo payment creates a payment record
+    await this.paymentService.createSuccessPayment({
+      orderId: orderId,
+      method: PAYMENT_METHOD.WALLET,
+      amount: Number(paymentDto.amount),
+      transactionId: paymentDto.transId,
+    });
+
+    // Update order: set paymentStatus to PAID and status to READY_TO_PICKUP
+    await this.orderRepository.update(orderId, {
+      paymentStatus: ORDER_PAYMENT_STATUS.PAID,
+      status: ORDER_STATUS.READY_TO_PICKUP,
+      paidAmount: paymentDto.amount,
+      paidAt: new Date(),
+    });
+
+    const updatedOrder = await this.getOrderWithItems(orderId);
+    
+    // Create stock voucher (same as cash)
+    await this.stockVoucherService.createExportFromOrder(
+      updatedOrder,
+      { amount: paymentDto.amount, createdBy: paymentDto.createdBy } as any,
+    );
+    
+    // Emit socket events
+    this.socketService.emitOrderPaymentReceived(updatedOrder);
+    this.socketService.emitOrderPaid(updatedOrder);
+    this.socketService.emitOrderReadyToPickup(updatedOrder);
+    this.socketService.emitOrderStatusChanged(updatedOrder);
+    return updatedOrder;
+  }
+
   async updateStatus(orderId: string, status: string | number) {
     await this.findOrderByIdOrThrow(orderId);
     const resolvedStatus = resolveOrderStatus(status);

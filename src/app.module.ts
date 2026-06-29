@@ -38,6 +38,7 @@ import { DashboardModule } from './modules/dashboard/dashboard.module';
 import { InventoryItemModule } from './modules/inventory-item/inventory-item.module';
 import { StockTakeModule } from './modules/stock-take/stock-take.module';
 import { StockTransferModule } from './modules/stock-transfer/stock-transfer.module';
+import { MomoModule } from './modules/momo/momo.module';
 
 @Module({
   imports: [
@@ -78,6 +79,7 @@ import { StockTransferModule } from './modules/stock-transfer/stock-transfer.mod
     InventoryItemModule,
     StockTakeModule,
     StockTransferModule,
+    MomoModule,
   ],
   controllers: [AppController],
   providers: [
