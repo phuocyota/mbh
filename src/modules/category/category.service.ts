@@ -78,16 +78,20 @@ export class CategoryService extends BaseService<Category> {
       .addOrderBy('product.name', 'ASC')
       .getMany();
 
+    const categoriesWithProducts = categories.filter(
+      (category) => (category.products || []).length > 0,
+    );
+
     if (!filter.branchId) {
-      return categories;
+      return categoriesWithProducts;
     }
 
-    const productIds = categories.flatMap((category) =>
+    const productIds = categoriesWithProducts.flatMap((category) =>
       (category.products || []).map((product) => product.id),
     );
 
     if (!productIds.length) {
-      return categories;
+      return categoriesWithProducts;
     }
 
     const stockRows = await this.categoryRepository.manager
@@ -105,12 +109,12 @@ export class CategoryService extends BaseService<Category> {
       stockRows.map((row) => [row.productId, Number(row.quantity || 0)]),
     );
 
-    categories.forEach((category) => {
+    categoriesWithProducts.forEach((category) => {
       (category.products || []).forEach((product) => {
         (product as any).remain = stockByProductId.get(product.id) || 0;
       });
     });
 
-    return categories;
+    return categoriesWithProducts;
   }
 }
