@@ -180,7 +180,7 @@ export class CartService {
     await this.cartRepository.save(cart);
   }
 
-  async completeCart(userId: string, dto: CompleteCartDto) {
+  async completeCart(userId: string, dto: CompleteCartDto, role?: string) {
     if (!userId) {
       throw new BadRequestException('User is required');
     }
@@ -204,7 +204,7 @@ export class CartService {
       branchId: dto.branchId || cartWithItems.branchId || undefined,
       posDeviceId: dto.posDeviceId || undefined,
       customerId: cartWithItems.customerId,
-      cashierId: userId,
+      cashierId: role === 'STUDENT' || role === 'CUSTOMER' ? null : userId,
       orderType: dto.orderType ?? ORDER_TYPE.TAKEAWAY,
       paymentMethod,
       note: dto.note,

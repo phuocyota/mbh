@@ -114,7 +114,8 @@ export class CartController {
   @Post('me/complete')
   async completeMyCart(@Req() req: any, @Body() dto: CompleteCartDto) {
     const userId = req.user?.userId;
-    return this.cartService.completeCart(userId, dto);
+    const role = req.user?.role;
+    return this.cartService.completeCart(userId, dto, role);
   }
 
   @ApiOperation({ summary: 'Clear my cart (via JWT token)' })
