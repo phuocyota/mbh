@@ -631,15 +631,37 @@ export class OrderService {
     const order = await this.findOrderByIdOrThrow(orderId);
 
     if (order.paymentStatus !== ORDER_PAYMENT_STATUS.UNPAID) {
+      const existingPayment =
+        await this.paymentService.findSuccessfulByTransactionCode(
+          paymentDto.transId,
+        );
+      if (existingPayment?.orderId === orderId) {
+        return this.getOrderWithItems(orderId);
+      }
+
       throw new BadRequestException('Order payment must be in UNPAID status');
+    }
+    if (order.status !== ORDER_STATUS.PENDING_PAYMENT) {
+      throw new BadRequestException('Order status must be PENDING_PAYMENT');
+    }
+    if (Number(paymentDto.amount) !== Number(order.totalAmount)) {
+      throw new BadRequestException('MoMo payment amount does not match order');
+    }
+
+    const existingPayment =
+      await this.paymentService.findSuccessfulByTransactionCode(
+        paymentDto.transId,
+      );
+    if (existingPayment) {
+      throw new BadRequestException('MoMo transaction already processed');
     }
 
     // MoMo payment creates a payment record
     await this.paymentService.createSuccessPayment({
       orderId: orderId,
-      method: PAYMENT_METHOD.WALLET,
+      method: PAYMENT_METHOD.MOMO,
       amount: Number(paymentDto.amount),
-      transactionId: paymentDto.transId,
+      transactionCode: paymentDto.transId,
     });
 
     // Update order: set paymentStatus to PAID and status to READY_TO_PICKUP
@@ -651,13 +673,13 @@ export class OrderService {
     });
 
     const updatedOrder = await this.getOrderWithItems(orderId);
-    
+
     // Create stock voucher (same as cash)
-    await this.stockVoucherService.createExportFromOrder(
-      updatedOrder,
-      { amount: paymentDto.amount, createdBy: paymentDto.createdBy } as any,
-    );
-    
+    await this.stockVoucherService.createExportFromOrder(updatedOrder, {
+      amount: paymentDto.amount,
+      createdBy: paymentDto.createdBy,
+    } as any);
+
     // Emit socket events
     this.socketService.emitOrderPaymentReceived(updatedOrder);
     this.socketService.emitOrderPaid(updatedOrder);

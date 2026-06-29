@@ -1,13 +1,17 @@
-import { Injectable, Logger, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  BadRequestException,
+  InternalServerErrorException,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as crypto from 'crypto';
 import { OrderService } from '../orders/order.service';
 import { WalletService } from '../wallet/wallet.service';
-import { ORDER_STATUS, ORDER_PAYMENT_STATUS } from '../../common/constant/constant';
-import * as dotenv from 'dotenv';
-
-dotenv.config();
-
+import {
+  ORDER_STATUS,
+  ORDER_PAYMENT_STATUS,
+} from '../../common/constant/constant';
 
 @Injectable()
 export class MomoService {
@@ -25,15 +29,17 @@ export class MomoService {
     private orderService: OrderService,
     private walletService: WalletService,
   ) {
-    this.endpoint = process.env.MOMO_ENDPOINT || '';
-    this.partnerCode = process.env.MOMO_PARTNER_CODE || '';
-    this.accessKey = process.env.MOMO_ACCESS_KEY || '';
-    this.secretKey = process.env.MOMO_SECRET_KEY || '';
-    this.returnUrl = process.env.MOMO_RETURN_URL || '';
-    this.notifyUrl = process.env.MOMO_NOTIFY_URL || '';
+    this.endpoint = this.configService.get<string>('MOMO_ENDPOINT') || '';
+    this.partnerCode =
+      this.configService.get<string>('MOMO_PARTNER_CODE') || '';
+    this.accessKey = this.configService.get<string>('MOMO_ACCESS_KEY') || '';
+    this.secretKey = this.configService.get<string>('MOMO_SECRET_KEY') || '';
+    this.returnUrl = this.configService.get<string>('MOMO_RETURN_URL') || '';
+    this.notifyUrl = this.configService.get<string>('MOMO_NOTIFY_URL') || '';
   }
 
   async createPayment(orderId: string): Promise<{ payUrl: string }> {
+    this.assertReady();
     const order = await this.orderService.findOrderByIdOrThrow(orderId);
 
     if (order.paymentStatus !== ORDER_PAYMENT_STATUS.UNPAID) {
@@ -43,7 +49,7 @@ export class MomoService {
       throw new BadRequestException('Order status must be PENDING_PAYMENT');
     }
 
-    const amount = Number(order.totalAmount);
+    const amount = this.normalizeAmount(order.totalAmount);
     const orderInfo = `Thanh toan don hang ${order.orderCode}`;
     const redirectUrl = this.returnUrl;
     const ipnUrl = this.notifyUrl;
@@ -53,66 +59,49 @@ export class MomoService {
     const autoCapture = true;
     const lang = 'vi';
 
-    // Transaction ID with timestamp to ensure uniqueness
     const timestamp = Date.now().toString();
-    const requestId = `REQ-${timestamp}-${Math.floor(Math.random() * 10000)}`; // Must be < 50 chars
-    const momoOrderId = orderId + '-' + timestamp; // Can be up to 200 chars
+    const requestId = `REQ-${timestamp}-${Math.floor(Math.random() * 10000)}`;
+    const momoOrderId = `${orderId}-${timestamp}`;
 
-    // Create signature
     const rawSignature = `accessKey=${this.accessKey}&amount=${amount}&extraData=${extraData}&ipnUrl=${ipnUrl}&orderId=${momoOrderId}&orderInfo=${orderInfo}&partnerCode=${this.partnerCode}&redirectUrl=${redirectUrl}&requestId=${requestId}&requestType=${requestType}`;
-
-    const signature = crypto
-      .createHmac('sha256', this.secretKey)
-      .update(rawSignature)
-      .digest('hex');
+    const signature = this.sign(rawSignature);
 
     const requestBody = {
       partnerCode: this.partnerCode,
       partnerName: 'Test',
       storeId: 'MomoTestStore',
-      requestId: requestId,
-      amount: amount,
+      requestId,
+      amount,
       orderId: momoOrderId,
-      orderInfo: orderInfo,
-      redirectUrl: redirectUrl,
-      ipnUrl: ipnUrl,
-      lang: lang,
-      requestType: requestType,
-      autoCapture: autoCapture,
-      extraData: extraData,
-      orderGroupId: orderGroupId,
-      signature: signature,
+      orderInfo,
+      redirectUrl,
+      ipnUrl,
+      lang,
+      requestType,
+      autoCapture,
+      extraData,
+      orderGroupId,
+      signature,
     };
 
-    try {
-      const response = await fetch(this.endpoint, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json; charset=UTF-8',
-        },
-        body: JSON.stringify(requestBody),
-      });
+    const responseData = await this.sendRequest(requestBody);
 
-      const responseData = await response.json();
-
-      if (responseData.resultCode === 0) {
-        return { payUrl: responseData.payUrl };
-      } else {
-        this.logger.error(`MoMo API Error: ${responseData.message}`);
-        throw new BadRequestException('Failed to create MoMo payment URL');
-      }
-    } catch (error) {
-      this.logger.error(`Error calling MoMo API: ${error.message}`);
-      throw new BadRequestException('Failed to communicate with MoMo');
+    if (responseData.resultCode === 0) {
+      return { payUrl: responseData.payUrl };
     }
+
+    this.logger.error(`MoMo API Error: ${responseData.message}`);
+    throw new BadRequestException('Failed to create MoMo payment URL');
   }
 
-  async createTopupPayment(customerId: string, amount: number): Promise<{ payUrl: string }> {
-    if (amount <= 0) {
-      throw new BadRequestException('Topup amount must be greater than 0');
-    }
+  async createTopupPayment(
+    customerId: string,
+    amount: number,
+  ): Promise<{ payUrl: string }> {
+    this.assertReady();
+    amount = this.normalizeAmount(amount);
 
-    const orderInfo = `Nap tien vao vi`;
+    const orderInfo = 'Nap tien vao vi';
     const redirectUrl = this.returnUrl;
     const ipnUrl = this.notifyUrl;
     const requestType = 'captureWallet';
@@ -121,37 +110,42 @@ export class MomoService {
     const autoCapture = true;
     const lang = 'vi';
 
-    // Transaction ID with timestamp to ensure uniqueness. Prefix with TOPUP-
     const timestamp = Date.now().toString();
-    const requestId = `REQ-${timestamp}-${Math.floor(Math.random() * 10000)}`; // Must be < 50 chars
-    const momoOrderId = `TOPUP-${customerId}-${timestamp}`; // Can be up to 200 chars
+    const requestId = `REQ-${timestamp}-${Math.floor(Math.random() * 10000)}`;
+    const momoOrderId = `TOPUP-${customerId}-${timestamp}`;
 
-    // Create signature
     const rawSignature = `accessKey=${this.accessKey}&amount=${amount}&extraData=${extraData}&ipnUrl=${ipnUrl}&orderId=${momoOrderId}&orderInfo=${orderInfo}&partnerCode=${this.partnerCode}&redirectUrl=${redirectUrl}&requestId=${requestId}&requestType=${requestType}`;
-
-    const signature = crypto
-      .createHmac('sha256', this.secretKey)
-      .update(rawSignature)
-      .digest('hex');
+    const signature = this.sign(rawSignature);
 
     const requestBody = {
       partnerCode: this.partnerCode,
       partnerName: 'Test',
       storeId: 'MomoTestStore',
-      requestId: requestId,
-      amount: amount,
+      requestId,
+      amount,
       orderId: momoOrderId,
-      orderInfo: orderInfo,
-      redirectUrl: redirectUrl,
-      ipnUrl: ipnUrl,
-      lang: lang,
-      requestType: requestType,
-      autoCapture: autoCapture,
-      extraData: extraData,
-      orderGroupId: orderGroupId,
-      signature: signature,
+      orderInfo,
+      redirectUrl,
+      ipnUrl,
+      lang,
+      requestType,
+      autoCapture,
+      extraData,
+      orderGroupId,
+      signature,
     };
 
+    const responseData = await this.sendRequest(requestBody);
+
+    if (responseData.resultCode === 0) {
+      return { payUrl: responseData.payUrl };
+    }
+
+    this.logger.error(`MoMo API Error: ${responseData.message}`);
+    throw new BadRequestException('Failed to create MoMo topup URL');
+  }
+
+  private async sendRequest(requestBody: any): Promise<any> {
     try {
       const response = await fetch(this.endpoint, {
         method: 'POST',
@@ -161,14 +155,7 @@ export class MomoService {
         body: JSON.stringify(requestBody),
       });
 
-      const responseData = await response.json();
-
-      if (responseData.resultCode === 0) {
-        return { payUrl: responseData.payUrl };
-      } else {
-        this.logger.error(`MoMo API Error: ${responseData.message}`);
-        throw new BadRequestException('Failed to create MoMo topup URL');
-      }
+      return response.json();
     } catch (error) {
       this.logger.error(`Error calling MoMo API: ${error.message}`);
       throw new BadRequestException('Failed to communicate with MoMo');
@@ -176,6 +163,7 @@ export class MomoService {
   }
 
   async processIpn(ipnData: any): Promise<void> {
+    this.assertReady();
     const {
       partnerCode,
       orderId,
@@ -192,46 +180,117 @@ export class MomoService {
       signature,
     } = ipnData;
 
-    // Verify signature
-    const rawSignature = `accessKey=${this.accessKey}&amount=${amount}&extraData=${extraData}&message=${message}&orderId=${orderId}&orderInfo=${orderInfo}&orderType=${orderType}&partnerCode=${partnerCode}&payType=${payType}&requestId=${requestId}&responseTime=${responseTime}&resultCode=${resultCode}&transId=${transId}`;
+    if (partnerCode !== this.partnerCode) {
+      throw new BadRequestException('Invalid partnerCode');
+    }
 
-    const expectedSignature = crypto
-      .createHmac('sha256', this.secretKey)
-      .update(rawSignature)
-      .digest('hex');
+    const rawSignature = `accessKey=${this.accessKey}&amount=${amount}&extraData=${extraData ?? ''}&message=${message}&orderId=${orderId}&orderInfo=${orderInfo}&orderType=${orderType}&partnerCode=${partnerCode}&payType=${payType}&requestId=${requestId}&responseTime=${responseTime}&resultCode=${resultCode}&transId=${transId}`;
+    const expectedSignature = this.sign(rawSignature);
 
-    if (signature !== expectedSignature) {
+    if (!this.isValidSignature(signature, expectedSignature)) {
       this.logger.error('Invalid MoMo IPN signature');
       throw new BadRequestException('Invalid signature');
     }
 
-    // Extract actual orderId (remove timestamp)
-    const originalOrderId = orderId.split('-')[0];
+    const paidAmount = this.normalizeAmount(amount);
 
     if (resultCode === 0) {
-      // Payment successful
-      if (orderId.startsWith('TOPUP-')) {
-        // This is a top-up transaction
-        // orderId format is TOPUP-<customerId>-<timestamp>
-        const customerId = orderId.split('-')[1];
+      if (String(orderId).startsWith('TOPUP-')) {
+        const customerId = this.extractTopupCustomerId(orderId);
+        const existingTopup = await this.walletService.findMomoTopupByTransId(
+          String(transId),
+        );
+        if (existingTopup) {
+          return;
+        }
+
         await this.walletService.topup(
           customerId,
-          Number(amount),
+          paidAmount,
           'system',
-          `Nạp tiền qua MoMo (GD: ${transId})`
+          `Nap tien qua MoMo (GD: ${transId})`,
         );
       } else {
-        // This is an order payment
+        const originalOrderId = this.extractOrderId(orderId);
         await this.orderService.receiveMomoPayment(originalOrderId, {
-          amount: Number(amount),
+          amount: paidAmount,
           transId: String(transId),
           createdBy: 'system',
         });
       }
     } else {
-      // Payment failed or cancelled
-      this.logger.warn(`MoMo Payment failed for order ${originalOrderId}: ${message}`);
-      // Optionally handle failed payment (e.g. notify user)
+      this.logger.warn(`MoMo Payment failed for order ${orderId}: ${message}`);
     }
+  }
+
+  private assertReady(): void {
+    const missingConfigs = [
+      ['MOMO_ENDPOINT', this.endpoint],
+      ['MOMO_PARTNER_CODE', this.partnerCode],
+      ['MOMO_ACCESS_KEY', this.accessKey],
+      ['MOMO_SECRET_KEY', this.secretKey],
+      ['MOMO_RETURN_URL', this.returnUrl],
+      ['MOMO_NOTIFY_URL', this.notifyUrl],
+    ]
+      .filter(([, value]) => !value)
+      .map(([key]) => key);
+
+    if (missingConfigs.length > 0) {
+      throw new InternalServerErrorException(
+        `Missing MoMo config: ${missingConfigs.join(', ')}`,
+      );
+    }
+  }
+
+  private normalizeAmount(value: number): number {
+    const amount = Number(value);
+    if (!Number.isSafeInteger(amount) || amount <= 0) {
+      throw new BadRequestException('MoMo amount must be a positive integer');
+    }
+
+    return amount;
+  }
+
+  private sign(rawSignature: string): string {
+    return crypto
+      .createHmac('sha256', this.secretKey)
+      .update(rawSignature)
+      .digest('hex');
+  }
+
+  private isValidSignature(
+    signature: string,
+    expectedSignature: string,
+  ): boolean {
+    const signatureBuffer = Buffer.from(String(signature), 'hex');
+    const expectedSignatureBuffer = Buffer.from(expectedSignature, 'hex');
+
+    return (
+      signatureBuffer.length === expectedSignatureBuffer.length &&
+      crypto.timingSafeEqual(signatureBuffer, expectedSignatureBuffer)
+    );
+  }
+
+  private extractOrderId(momoOrderId: string): string {
+    const separatorIndex = momoOrderId.lastIndexOf('-');
+    if (separatorIndex <= 0) {
+      throw new BadRequestException('Invalid MoMo orderId');
+    }
+
+    return momoOrderId.slice(0, separatorIndex);
+  }
+
+  private extractTopupCustomerId(momoOrderId: string): string {
+    if (!momoOrderId.startsWith('TOPUP-')) {
+      throw new BadRequestException('Invalid MoMo topup orderId');
+    }
+
+    const withoutPrefix = momoOrderId.slice('TOPUP-'.length);
+    const separatorIndex = withoutPrefix.lastIndexOf('-');
+    if (separatorIndex <= 0) {
+      throw new BadRequestException('Invalid MoMo topup orderId');
+    }
+
+    return withoutPrefix.slice(0, separatorIndex);
   }
 }

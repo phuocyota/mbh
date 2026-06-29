@@ -326,4 +326,13 @@ export class WalletService extends BaseService<Wallet> {
       total,
     };
   }
+
+  async findMomoTopupByTransId(transId: string) {
+    return this.walletTransactionRepository.findOne({
+      where: {
+        type: WALLET_TRANSACTION_TYPE.TOPUP,
+        note: `Nap tien qua MoMo (GD: ${transId})`,
+      },
+    });
+  }
 }

@@ -3,10 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import { Payment } from '../../entities/payment.entity';
 import { BaseService } from '../../common/sql/base.service';
-import {
-  PAYMENT_METHOD,
-  PAYMENT_STATUS,
-} from '../../common/constant/constant';
+import { PAYMENT_METHOD, PAYMENT_STATUS } from '../../common/constant/constant';
 
 @Injectable()
 export class PaymentService extends BaseService<Payment> {
@@ -41,6 +38,17 @@ export class PaymentService extends BaseService<Payment> {
       where: {
         orderId,
         method: PAYMENT_METHOD.WALLET,
+        status: PAYMENT_STATUS.SUCCESS,
+      },
+    });
+  }
+
+  async findSuccessfulByTransactionCode(
+    transactionCode: string,
+  ): Promise<Payment | null> {
+    return this.paymentRepository.findOne({
+      where: {
+        transactionCode,
         status: PAYMENT_STATUS.SUCCESS,
       },
     });
