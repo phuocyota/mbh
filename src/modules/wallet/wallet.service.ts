@@ -185,13 +185,18 @@ export class WalletService extends BaseService<Wallet> {
         );
       }
 
-      const wallet = await walletRepository.findOne({
+      let wallet = await walletRepository.findOne({
         where: { customerId },
         lock: { mode: 'pessimistic_write' },
       });
 
       if (!wallet) {
-        throw new BadRequestException('Customer wallet not found');
+        wallet = walletRepository.create({
+          customerId,
+          balance: 0,
+          status: COMMON_STATUS.ACTIVE,
+        });
+        wallet = await walletRepository.save(wallet);
       }
       if (wallet.status !== COMMON_STATUS.ACTIVE) {
         throw new BadRequestException('Wallet is not active');
