@@ -54,8 +54,9 @@ export class MomoService {
     const lang = 'vi';
 
     // Transaction ID with timestamp to ensure uniqueness
-    const requestId = orderId + '-' + Date.now();
-    const momoOrderId = requestId;
+    const timestamp = Date.now().toString();
+    const requestId = `REQ-${timestamp}-${Math.floor(Math.random() * 10000)}`; // Must be < 50 chars
+    const momoOrderId = orderId + '-' + timestamp; // Can be up to 200 chars
 
     // Create signature
     const rawSignature = `accessKey=${this.accessKey}&amount=${amount}&extraData=${extraData}&ipnUrl=${ipnUrl}&orderId=${momoOrderId}&orderInfo=${orderInfo}&partnerCode=${this.partnerCode}&redirectUrl=${redirectUrl}&requestId=${requestId}&requestType=${requestType}`;
@@ -121,8 +122,9 @@ export class MomoService {
     const lang = 'vi';
 
     // Transaction ID with timestamp to ensure uniqueness. Prefix with TOPUP-
-    const requestId = `TOPUP-${customerId}-${Date.now()}`;
-    const momoOrderId = requestId;
+    const timestamp = Date.now().toString();
+    const requestId = `REQ-${timestamp}-${Math.floor(Math.random() * 10000)}`; // Must be < 50 chars
+    const momoOrderId = `TOPUP-${customerId}-${timestamp}`; // Can be up to 200 chars
 
     // Create signature
     const rawSignature = `accessKey=${this.accessKey}&amount=${amount}&extraData=${extraData}&ipnUrl=${ipnUrl}&orderId=${momoOrderId}&orderInfo=${orderInfo}&partnerCode=${this.partnerCode}&redirectUrl=${redirectUrl}&requestId=${requestId}&requestType=${requestType}`;
