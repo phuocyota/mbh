@@ -20,8 +20,11 @@ export class MomoController {
   @ApiOperation({ summary: 'Create MoMo topup URL for a customer' })
   @ApiResponse({ status: 201, description: 'Topup URL created' })
   @HttpCode(HttpStatus.CREATED)
-  async createTopup(@Body() body: { customerId: string; amount: number }) {
-    return this.momoService.createTopupPayment(body.customerId, body.amount);
+  async createTopup(
+    @Body('customerId') customerId: string,
+    @Body('amount') amount: number,
+  ) {
+    return this.momoService.createTopupPayment(customerId, amount);
   }
 
   @Post('ipn')
