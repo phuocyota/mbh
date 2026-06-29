@@ -14,6 +14,7 @@ async function bootstrap() {
   app.enableCors({
     origin: (origin, callback) => {
       const allowedOrigins = [
+        'https://be.kidocanteen.kidoedu.vn',
         'https://fe.kidocanteen.kidoedu.vn',
         'https://fe.parent.kidocanteen.kidoedu.vn',
         'https://fe.admin.kidocanteen.kidoedu.vn',

@@ -1,7 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { Product } from 'src/entities';
+import { Product, ProductPriceHistory } from 'src/entities';
 import { BaseService } from '../../common/sql/base.service';
 import { ERROR_MESSAGES } from '../../common/constant/error-messages.constant';
 import { CategoryService } from '../category/category.service';
@@ -16,6 +16,8 @@ export class ProductService extends BaseService<Product> {
   constructor(
     @InjectRepository(Product)
     private productRepository: Repository<Product>,
+    @InjectRepository(ProductPriceHistory)
+    private productPriceHistoryRepository: Repository<ProductPriceHistory>,
     private categoryService: CategoryService,
   ) {
     super(productRepository);
@@ -56,13 +58,73 @@ export class ProductService extends BaseService<Product> {
 
   async createProduct(createProductDto: any) {
     const productDto = this.withoutQuantity(createProductDto);
-    const product = this.productRepository.create(productDto);
-    return this.productRepository.save(product);
+
+    return this.productRepository.manager.transaction(async (manager) => {
+      const productRepository = manager.getRepository(Product);
+      const historyRepository = manager.getRepository(ProductPriceHistory);
+
+      const product = productRepository.create({
+        ...(productDto as Partial<Product>),
+      });
+      const savedProduct = await productRepository.save(product);
+
+      await historyRepository.save(
+        historyRepository.create({
+          productId: savedProduct.id,
+          oldPrice: null,
+          newPrice: Number(savedProduct.price),
+          oldCostPrice: null,
+          newCostPrice:
+            savedProduct.costPrice === null ||
+            savedProduct.costPrice === undefined
+              ? null
+              : Number(savedProduct.costPrice),
+          changeType: 'INITIAL',
+          note: 'Initial price snapshot on product creation',
+        }),
+      );
+
+      return savedProduct;
+    });
   }
 
   async updateProduct(id: string, updateProductDto: any) {
     const productDto = this.withoutQuantity(updateProductDto);
-    await this.productRepository.update(id, productDto);
+
+    await this.productRepository.manager.transaction(async (manager) => {
+      const productRepository = manager.getRepository(Product);
+      const historyRepository = manager.getRepository(ProductPriceHistory);
+
+      const product = await productRepository.findOne({ where: { id } });
+      if (!product) {
+        throw new NotFoundException(
+          ERROR_MESSAGES.NOT_FOUND_WITH_ID('Product', id),
+        );
+      }
+
+      const oldPrice = Number(product.price);
+      const oldCostPrice =
+        product.costPrice === null || product.costPrice === undefined
+          ? null
+          : Number(product.costPrice);
+
+      Object.assign(product, productDto);
+      const savedProduct = await productRepository.save(product);
+
+      await this.recordPriceHistoryIfChanged(historyRepository, {
+        productId: savedProduct.id,
+        oldPrice,
+        newPrice: Number(savedProduct.price),
+        oldCostPrice,
+        newCostPrice:
+          savedProduct.costPrice === null ||
+          savedProduct.costPrice === undefined
+            ? null
+            : Number(savedProduct.costPrice),
+        changeType: 'UPDATE',
+      });
+    });
+
     return this.findOne(id);
   }
 
@@ -84,11 +146,33 @@ export class ProductService extends BaseService<Product> {
           continue;
         }
 
+        const oldPrice = Number(product.price);
+        const oldCostPrice =
+          product.costPrice === null || product.costPrice === undefined
+            ? null
+            : Number(product.costPrice);
+
         product.price = item.price;
         if (updatedBy) {
           product.updatedBy = updatedBy.userId;
         }
-        await this.productRepository.save(product);
+        const savedProduct = await this.productRepository.save(product);
+        await this.recordPriceHistoryIfChanged(
+          this.productPriceHistoryRepository,
+          {
+            productId: savedProduct.id,
+            oldPrice,
+            newPrice: Number(savedProduct.price),
+            oldCostPrice,
+            newCostPrice:
+              savedProduct.costPrice === null ||
+              savedProduct.costPrice === undefined
+                ? null
+                : Number(savedProduct.costPrice),
+            changeType: 'UPDATE',
+            createdBy: updatedBy?.userId,
+          },
+        );
         updatedIds.push(item.id);
       } catch (error) {
         errors.push({ id: item.id, error: error.message });
@@ -137,5 +221,45 @@ export class ProductService extends BaseService<Product> {
     const productDto = { ...dto };
     delete productDto.quantity;
     return productDto;
+  }
+
+  private async recordPriceHistoryIfChanged(
+    historyRepository: Repository<ProductPriceHistory>,
+    data: {
+      productId: string;
+      oldPrice: number | null;
+      newPrice: number | null;
+      oldCostPrice: number | null;
+      newCostPrice: number | null;
+      changeType: string;
+      createdBy?: string;
+    },
+  ) {
+    const priceChanged =
+      this.toNullableNumber(data.oldPrice) !==
+      this.toNullableNumber(data.newPrice);
+    const costPriceChanged =
+      this.toNullableNumber(data.oldCostPrice) !==
+      this.toNullableNumber(data.newCostPrice);
+
+    if (!priceChanged && !costPriceChanged) {
+      return;
+    }
+
+    await historyRepository.save(
+      historyRepository.create({
+        productId: data.productId,
+        oldPrice: data.oldPrice,
+        newPrice: Number(data.newPrice),
+        oldCostPrice: data.oldCostPrice,
+        newCostPrice: data.newCostPrice,
+        changeType: data.changeType,
+        createdBy: data.createdBy,
+      }),
+    );
+  }
+
+  private toNullableNumber(value: number | null | undefined) {
+    return value === null || value === undefined ? null : Number(value);
   }
 }

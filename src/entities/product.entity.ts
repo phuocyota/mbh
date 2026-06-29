@@ -1,6 +1,7 @@
-import { Entity, Column, ManyToOne, JoinColumn } from 'typeorm';
+import { Entity, Column, ManyToOne, JoinColumn, OneToMany } from 'typeorm';
 import { BaseEntity } from '../common/sql/base.entity';
 import { Category } from './category.entity';
+import { ProductPriceHistory } from './product-price-history.entity';
 
 @Entity('products')
 export class Product extends BaseEntity {
@@ -40,4 +41,7 @@ export class Product extends BaseEntity {
   @ManyToOne(() => Category, (category) => category.products)
   @JoinColumn({ name: 'category_id' })
   category: Category;
+
+  @OneToMany(() => ProductPriceHistory, (history) => history.product)
+  priceHistories: ProductPriceHistory[];
 }
