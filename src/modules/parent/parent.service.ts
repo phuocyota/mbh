@@ -104,6 +104,7 @@ export class ParentService {
       id: customer.id,
       fullName: customer.fullName,
       avatarUrl: user?.avatar || null,
+      branchId: user?.branchId || null,
     };
   }
 

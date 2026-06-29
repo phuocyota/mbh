@@ -13,6 +13,13 @@ export class UserHomeDto {
     nullable: true,
   })
   avatarUrl: string | null;
+
+  @ApiProperty({
+    description: 'Branch ID linked to the student user',
+    example: '11111111-1111-4111-8111-111111111111',
+    nullable: true,
+  })
+  branchId: string | null;
 }
 
 export class WalletHomeDto {

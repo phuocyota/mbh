@@ -2,6 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Product, ProductPriceHistory } from 'src/entities';
+import { StockItem } from '../../entities/stock-item.entity';
 import { BaseService } from '../../common/sql/base.service';
 import { ERROR_MESSAGES } from '../../common/constant/error-messages.constant';
 import { CategoryService } from '../category/category.service';
@@ -9,6 +10,7 @@ import { CategoryService } from '../category/category.service';
 type ProductPriceFilter = {
   minPrice?: number;
   maxPrice?: number;
+  branchId?: string;
 };
 
 @Injectable()
@@ -33,12 +35,54 @@ export class ProductService extends BaseService<Product> {
       query.andWhere('p.category_id = :categoryId', { categoryId });
     }
 
+    if (filter.branchId) {
+      query.andWhere(
+        `
+        EXISTS (
+          SELECT 1
+          FROM stock_items stock_item
+          INNER JOIN stocks stock ON stock.id = stock_item.stock_id
+          WHERE stock_item.product_id = p.id
+            AND stock.branch_id = :branchId
+        )
+      `,
+        { branchId: filter.branchId },
+      );
+    }
+
     this.applyPriceFilter(query, 'p', filter);
 
-    return query
+    const products = await query
       .orderBy('category.sort_order', 'ASC')
       .addOrderBy('p.name', 'ASC')
       .getMany();
+
+    if (!filter.branchId || !products.length) {
+      return products;
+    }
+
+    const stockRows = await this.productRepository.manager
+      .getRepository(StockItem)
+      .createQueryBuilder('stockItem')
+      .innerJoin('stockItem.stock', 'stock')
+      .select('stockItem.productId', 'productId')
+      .addSelect('SUM(stockItem.quantity)', 'quantity')
+      .where('stock.branchId = :branchId', { branchId: filter.branchId })
+      .andWhere('stockItem.productId IN (:...productIds)', {
+        productIds: products.map((product) => product.id),
+      })
+      .groupBy('stockItem.productId')
+      .getRawMany<{ productId: string; quantity: string }>();
+
+    const stockByProductId = new Map(
+      stockRows.map((row) => [row.productId, Number(row.quantity || 0)]),
+    );
+
+    products.forEach((product) => {
+      (product as any).remain = stockByProductId.get(product.id) || 0;
+    });
+
+    return products;
   }
 
   async findOne(id: string) {
