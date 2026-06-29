@@ -4,6 +4,10 @@ import * as crypto from 'crypto';
 import { OrderService } from '../orders/order.service';
 import { WalletService } from '../wallet/wallet.service';
 import { ORDER_STATUS, ORDER_PAYMENT_STATUS } from '../../common/constant/constant';
+import * as dotenv from 'dotenv';
+
+dotenv.config();
+
 
 @Injectable()
 export class MomoService {
