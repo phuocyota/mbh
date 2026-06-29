@@ -90,8 +90,10 @@ export class MomoService {
       return { payUrl: responseData.payUrl };
     }
 
-    this.logger.error(`MoMo API Error: ${responseData.message}`);
-    throw new BadRequestException('Failed to create MoMo payment URL');
+    throw this.createMomoApiException(
+      responseData,
+      'Failed to create MoMo payment URL',
+    );
   }
 
   async createTopupPayment(
@@ -141,8 +143,10 @@ export class MomoService {
       return { payUrl: responseData.payUrl };
     }
 
-    this.logger.error(`MoMo API Error: ${responseData.message}`);
-    throw new BadRequestException('Failed to create MoMo topup URL');
+    throw this.createMomoApiException(
+      responseData,
+      'Failed to create MoMo topup URL',
+    );
   }
 
   private async sendRequest(requestBody: any): Promise<any> {
@@ -160,6 +164,18 @@ export class MomoService {
       this.logger.error(`Error calling MoMo API: ${error.message}`);
       throw new BadRequestException('Failed to communicate with MoMo');
     }
+  }
+
+  private createMomoApiException(responseData: any, fallbackMessage: string) {
+    const resultCode = responseData?.resultCode;
+    const message = responseData?.message;
+    const errorMessage =
+      resultCode !== undefined || message
+        ? `MoMo API Error ${resultCode ?? 'unknown'}: ${message ?? fallbackMessage}`
+        : fallbackMessage;
+
+    this.logger.error(errorMessage);
+    return new BadRequestException(errorMessage);
   }
 
   async processIpn(ipnData: any): Promise<void> {
