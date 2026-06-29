@@ -16,6 +16,14 @@ export class MomoController {
     return this.momoService.createPayment(orderId);
   }
 
+  @Post('topup')
+  @ApiOperation({ summary: 'Create MoMo topup URL for a customer' })
+  @ApiResponse({ status: 201, description: 'Topup URL created' })
+  @HttpCode(HttpStatus.CREATED)
+  async createTopup(@Body() body: { customerId: string; amount: number }) {
+    return this.momoService.createTopupPayment(body.customerId, body.amount);
+  }
+
   @Post('ipn')
   @ApiOperation({ summary: 'MoMo Webhook/IPN endpoint' })
   @ApiResponse({ status: 204, description: 'IPN processed successfully' })

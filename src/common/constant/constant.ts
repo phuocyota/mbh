@@ -108,6 +108,7 @@ export const PAYMENT_METHOD = {
   CARD: 'CARD',
   BANK_TRANSFER: 'BANK_TRANSFER',
   QR: 'QR',
+  MOMO: 'MOMO',
 } as const;
 export const PAYMENT_METHOD_VALUES = Object.values(PAYMENT_METHOD);
 
