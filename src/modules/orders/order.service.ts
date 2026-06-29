@@ -719,7 +719,12 @@ export class OrderService {
     const order = await this.findOrderByIdOrThrow(orderId);
 
     if (order.status === ORDER_STATUS.DONE) {
-      throw new Error('Cannot cancel completed orders');
+      throw new BadRequestException('Cannot cancel completed orders');
+    }
+
+    const orderTime = new Date(order.createdAt).getTime();
+    if (Date.now() - orderTime > 15 * 60 * 1000) {
+      throw new BadRequestException('Orders cannot be cancelled after 15 minutes');
     }
 
     await this.orderRepository.update(orderId, {
