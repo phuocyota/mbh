@@ -11,6 +11,14 @@ export const ACTIVE_INACTIVE_STATUS_VALUES = [
   COMMON_STATUS.INACTIVE,
 ] as const;
 
+export const MEAL_PERIOD = {
+  BREAKFAST: 'BREAKFAST',
+  LUNCH: 'LUNCH',
+  AFTERNOON: 'AFTERNOON',
+  DINNER: 'DINNER',
+} as const;
+export const MEAL_PERIOD_VALUES = Object.values(MEAL_PERIOD);
+
 export const CUSTOMER_TYPE = {
   STUDENT: 'STUDENT',
   TEACHER: 'TEACHER',

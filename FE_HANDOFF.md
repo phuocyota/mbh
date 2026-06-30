@@ -277,6 +277,143 @@ Response:
 ]
 ```
 
+## 3.1 Meal Items - Menu theo buoi
+
+API CRUD danh sach mon an theo buoi va theo chi nhanh.
+
+Auth: can JWT.
+
+Meal period values:
+
+- `BREAKFAST`: sang
+- `LUNCH`: trua
+- `AFTERNOON`: chieu
+- `DINNER`: toi
+
+Status values:
+
+- `ACTIVE`
+- `INACTIVE`
+- `DELETED`
+
+Luu y: App co response wrapper, FE doc data tai `response.data.data`.
+
+### Lay danh sach mon theo buoi
+
+```http
+GET /api/meal-items
+GET /api/meal-items?branchId=branch-id
+GET /api/meal-items?branchId=branch-id&mealPeriod=BREAKFAST&status=ACTIVE
+```
+
+Query params:
+
+- `branchId`: optional, filter theo chi nhanh.
+- `mealPeriod`: optional, `BREAKFAST` | `LUNCH` | `AFTERNOON` | `DINNER`.
+- `status`: optional, `ACTIVE` | `INACTIVE` | `DELETED`.
+
+Response `data`:
+
+```json
+[
+  {
+    "id": "meal-item-id",
+    "branchId": "branch-id",
+    "productId": "product-id",
+    "mealPeriod": "BREAKFAST",
+    "sortOrder": 1,
+    "status": "ACTIVE",
+    "note": "Available on weekdays",
+    "branch": {
+      "id": "branch-id",
+      "name": "Kido"
+    },
+    "product": {
+      "id": "product-id",
+      "categoryId": "category-id",
+      "sku": "SKU001",
+      "name": "Banh mi",
+      "description": null,
+      "imageUrl": null,
+      "price": "15000.00",
+      "costPrice": null,
+      "unit": "cai",
+      "isActive": true,
+      "category": {
+        "id": "category-id",
+        "name": "Do an"
+      }
+    }
+  }
+]
+```
+
+### Lay chi tiet
+
+```http
+GET /api/meal-items/:id
+```
+
+Response `data`: mot object giong item trong danh sach, co kem `branch`, `product`, `product.category`.
+
+### Tao mon theo buoi
+
+```http
+POST /api/meal-items
+```
+
+Body:
+
+```json
+{
+  "branchId": "branch-id",
+  "productId": "product-id",
+  "mealPeriod": "BREAKFAST",
+  "sortOrder": 1,
+  "status": "ACTIVE",
+  "note": "Available on weekdays"
+}
+```
+
+Required:
+
+- `branchId`
+- `productId`
+- `mealPeriod`
+
+Optional:
+
+- `sortOrder`: default `0`
+- `status`: default `ACTIVE`
+- `note`
+
+Rule backend: mot chi nhanh khong duoc gan trung cung mot `productId` trong cung mot `mealPeriod`.
+
+### Cap nhat mon theo buoi
+
+```http
+PUT /api/meal-items/:id
+```
+
+Body: partial cua body create.
+
+```json
+{
+  "mealPeriod": "LUNCH",
+  "sortOrder": 2,
+  "status": "ACTIVE",
+  "note": "Only Monday to Friday"
+}
+```
+
+### Xoa mon theo buoi
+
+```http
+DELETE /api/meal-items/:id
+```
+
+Response: HTTP `204 No Content`.
+
 ## 4. Cart APIs
 
 Các API cart dùng JWT của học sinh. Flow FE chính dùng giỏ hàng theo token, từ lấy giỏ hàng, thêm món, xác nhận, đến xử lý thanh toán.

@@ -2,6 +2,7 @@ import { Entity, Column, ManyToOne, JoinColumn, OneToMany } from 'typeorm';
 import { BaseEntity } from '../common/sql/base.entity';
 import { Category } from './category.entity';
 import { ProductPriceHistory } from './product-price-history.entity';
+import { MealItem } from './meal-item.entity';
 
 @Entity('products')
 export class Product extends BaseEntity {
@@ -44,4 +45,7 @@ export class Product extends BaseEntity {
 
   @OneToMany(() => ProductPriceHistory, (history) => history.product)
   priceHistories: ProductPriceHistory[];
+
+  @OneToMany(() => MealItem, (mealItem) => mealItem.product)
+  mealItems: MealItem[];
 }
