@@ -78,6 +78,18 @@ export class CreateStockVoucherDto {
   @IsString()
   creditAccountCode?: string;
 
+  @ApiProperty({
+    required: false,
+    description: 'Payment mode for supplier imports. Use PAID for immediate payment; omit or use DEBT for supplier debt.',
+  })
+  @IsOptional()
+  @IsString()
+  paymentStatus?: string;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  isPaid?: boolean;
+
   @ApiProperty({ type: [CreateStockVoucherItemDto] })
   @IsArray()
   @ValidateNested({ each: true })

@@ -108,9 +108,71 @@ export class OrderService {
       await this.orderItemService.createManyForOrder(savedOrder.id, items);
     }
 
+    const initialPayment = this.getInitialPaymentDto(createOrderDto, totalAmount);
+    if (initialPayment) {
+      await this.paymentService.createSuccessPayment({
+        ...initialPayment,
+        orderId: savedOrder.id,
+      });
+
+      const paidAmount = Number(initialPayment.amount);
+      const isPaid = paidAmount >= totalAmount;
+      await this.orderRepository.update(savedOrder.id, {
+        paymentStatus: isPaid
+          ? ORDER_PAYMENT_STATUS.PAID
+          : ORDER_PAYMENT_STATUS.PARTIAL,
+        paymentMethod: initialPayment.method,
+        paidAmount,
+        changeAmount: paidAmount - totalAmount,
+        status: isPaid ? ORDER_STATUS.PREPARING : ORDER_STATUS.DRAFT,
+        paidAt: isPaid ? new Date() : undefined,
+      });
+
+      if (isPaid) {
+        const paidOrder = await this.getOrderWithItems(savedOrder.id);
+        await this.stockVoucherService.createExportFromOrder(
+          paidOrder,
+          initialPayment,
+        );
+      }
+    }
+
     const orderWithItems = await this.getOrderWithItems(savedOrder.id);
     this.socketService.emitOrderCreated(orderWithItems);
     return orderWithItems;
+  }
+
+  private getInitialPaymentDto(createOrderDto: any, totalAmount: number) {
+    const payment = createOrderDto.payment || {};
+    const amount = Number(
+      payment.amount ??
+        createOrderDto.paymentAmount ??
+        createOrderDto.paidAmount ??
+        0,
+    );
+
+    if (!Number.isFinite(amount) || amount <= 0) {
+      return null;
+    }
+
+    return {
+      ...payment,
+      method:
+        payment.method ||
+        createOrderDto.paymentMethod ||
+        PAYMENT_METHOD.CASH,
+      amount,
+      fundId: payment.fundId || createOrderDto.fundId,
+      createdBy: payment.createdBy || createOrderDto.createdBy,
+      transactionCode:
+        payment.transactionCode ||
+        createOrderDto.transactionCode ||
+        createOrderDto.transId,
+      debitAccountCode:
+        payment.debitAccountCode || createOrderDto.debitAccountCode,
+      creditAccountCode:
+        payment.creditAccountCode || createOrderDto.creditAccountCode,
+    };
   }
 
   async findOrderByIdOrThrow(orderId: string): Promise<Order> {

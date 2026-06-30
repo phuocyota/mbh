@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
 import { Product, StockReceiptTransfer, StockReceiptDetail, Stock, StockItem } from '../../entities';
 import { CreateStockTransferDto } from './dto/create-stock-transfer.dto';
+import { StockVoucherService } from '../stock-voucher/stock-voucher.service';
 
 @Injectable()
 export class StockTransferService {
@@ -18,6 +19,7 @@ export class StockTransferService {
     @InjectRepository(StockItem)
     private stockItemRepository: Repository<StockItem>,
     private dataSource: DataSource,
+    private stockVoucherService: StockVoucherService,
   ) {}
 
   async findAll(filters: { status?: string; fromBranchId?: string; toBranchId?: string } = {}) {
@@ -104,6 +106,11 @@ export class StockTransferService {
 
       let totalAmount = 0;
       const detailsToSave: StockReceiptDetail[] = [];
+      const voucherItems: Array<{
+        productId: string;
+        quantity: number;
+        unitPrice: number;
+      }> = [];
 
       for (const dtoItem of dto.items) {
         const product = await productRepo.findOne({ where: { id: dtoItem.productId } });
@@ -112,12 +119,18 @@ export class StockTransferService {
         }
 
         const unitCost = Number(product.costPrice || product.price || 0);
-        const itemTotal = Number(dtoItem.quantity) * unitCost;
+        const quantity = Number(dtoItem.quantity);
+        const itemTotal = quantity * unitCost;
         totalAmount += itemTotal;
+        voucherItems.push({
+          productId: product.id,
+          quantity,
+          unitPrice: unitCost,
+        });
 
         const detail = detailRepo.create({
           productId: product.id,
-          quantity: Number(dtoItem.quantity),
+          quantity,
           receiptType: 'TRANSFER',
           fromId: fromStock.id,
           toId: toStock.id,
@@ -134,7 +147,8 @@ export class StockTransferService {
         transferId: '00000000-0000-0000-0000-000000000000', // unused but NOT NULL compatibility placeholder
         fromBranchId: dto.fromBranchId,
         toBranchId: dto.toBranchId,
-        status: 'DRAFT',
+        status: 'COMPLETED',
+        receivedAt: new Date(),
         totalAmount,
         note: dto.note,
       });
@@ -146,7 +160,32 @@ export class StockTransferService {
         await detailRepo.save(detail);
       }
 
-      return this.findOne(savedTransfer.id);
+      await this.stockVoucherService.createVoucher(
+        {
+          branchId: dto.fromBranchId,
+          toBranchId: dto.toBranchId,
+          type: 'EXPORT',
+          note: dto.note || `Xuất kho chuyển đến chi nhánh ${dto.toBranchId}`,
+          items: voucherItems,
+        },
+        trx,
+      );
+
+      await this.stockVoucherService.createVoucher(
+        {
+          branchId: dto.toBranchId,
+          fromBranchId: dto.fromBranchId,
+          type: 'IMPORT',
+          note: dto.note || `Nhập kho chuyển từ chi nhánh ${dto.fromBranchId}`,
+          items: voucherItems,
+        },
+        trx,
+      );
+
+      return transferRepo.findOne({
+        where: { id: savedTransfer.id },
+        relations: ['fromBranch', 'toBranch', 'details', 'details.product'],
+      });
     });
   }
 

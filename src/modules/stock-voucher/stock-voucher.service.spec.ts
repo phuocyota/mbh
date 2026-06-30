@@ -10,6 +10,9 @@ import {
   StockReceiptTransfer,
   Stock,
   StockItem,
+  StockFundReceiptReason,
+  Supplier,
+  Debt,
 } from '../../entities';
 import { FinanceService } from '../finance/finance.service';
 
@@ -50,6 +53,21 @@ describe('StockVoucherService', () => {
     StockItem: {
       findOne: jest.fn().mockResolvedValue(null),
       create: jest.fn((data) => ({ id: 'stock-item-id-1', ...data })),
+      save: jest.fn((entity) => Promise.resolve(entity)),
+    },
+    StockFundReceiptReason: {
+      findOne: jest.fn().mockResolvedValue(null),
+    },
+    Supplier: {
+      findOne: jest.fn().mockImplementation(() => Promise.resolve({
+        id: 'supplier-id-1',
+        debt: 0,
+        totalPurchase: 0,
+      })),
+      save: jest.fn((entity) => Promise.resolve(entity)),
+    },
+    Debt: {
+      create: jest.fn((data) => ({ id: 'debt-id-1', ...data })),
       save: jest.fn((entity) => Promise.resolve(entity)),
     },
   };
@@ -102,6 +120,18 @@ describe('StockVoucherService', () => {
         {
           provide: getRepositoryToken(StockItem),
           useValue: mockRepositories.StockItem,
+        },
+        {
+          provide: getRepositoryToken(StockFundReceiptReason),
+          useValue: mockRepositories.StockFundReceiptReason,
+        },
+        {
+          provide: getRepositoryToken(Supplier),
+          useValue: mockRepositories.Supplier,
+        },
+        {
+          provide: getRepositoryToken(Debt),
+          useValue: mockRepositories.Debt,
         },
         {
           provide: FinanceService,
@@ -167,6 +197,52 @@ describe('StockVoucherService', () => {
       expect(mockRepositories.StockReceiptImport.update).toHaveBeenCalledWith(
         'import-id',
         { moneyVoucherId: 'money-voucher-id' },
+      );
+      expect(mockRepositories.Debt.save).not.toHaveBeenCalled();
+      expect(result).toBeDefined();
+    });
+
+    it('should record supplier debt and not create a payment voucher for unpaid supplier imports', async () => {
+      const dto = {
+        branchId: 'branch-id-1',
+        supplierId: 'supplier-id-1',
+        fundId: 'fund-id-1',
+        paymentStatus: 'DEBT',
+        note: 'Import debt note',
+        items: [
+          {
+            productId: 'product-id-1',
+            quantity: 5,
+            unitPrice: 100,
+          },
+        ],
+      };
+
+      const result = await service.createImportVoucher(dto);
+
+      expect(mockFinanceService.createMoneyVoucher).not.toHaveBeenCalled();
+      expect(mockRepositories.StockReceiptImport.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          fundId: undefined,
+        }),
+      );
+      expect(mockRepositories.Debt.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          supplierId: 'supplier-id-1',
+          type: 'PURCHASE',
+          amount: 500,
+          balanceAfter: 500,
+          refType: 'STOCK_VOUCHER',
+          refId: 'import-id',
+        }),
+      );
+      expect(mockRepositories.Debt.save).toHaveBeenCalled();
+      expect(mockRepositories.Supplier.save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 'supplier-id-1',
+          debt: 500,
+          totalPurchase: 500,
+        }),
       );
       expect(result).toBeDefined();
     });
