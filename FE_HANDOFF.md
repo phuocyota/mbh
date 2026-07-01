@@ -266,7 +266,6 @@ Response:
       {
         "id": "product-id",
         "categoryId": "category-id",
-        "sku": "SKU001",
         "name": "Banh mi",
         "description": null,
         "imageUrl": null,
@@ -279,6 +278,30 @@ Response:
   }
 ]
 ```
+
+### Tao product
+
+```http
+POST /api/products
+```
+
+Body:
+
+```json
+{
+  "categoryId": "category-id",
+  "name": "Com",
+  "description": null,
+  "imageUrl": null,
+  "price": 25000,
+  "costPrice": null,
+  "unit": "phan",
+  "isActive": true,
+  "isCanteenItem": false
+}
+```
+
+Luu y: Khong can gui `sku` khi tao product.
 
 ## 3.1 Meal Items - Menu theo buoi
 
@@ -334,7 +357,6 @@ Response `data`:
     "product": {
       "id": "product-id",
       "categoryId": "category-id",
-      "sku": "SKU001",
       "name": "Banh mi",
       "description": null,
       "imageUrl": null,

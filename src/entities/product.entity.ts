@@ -9,8 +9,8 @@ export class Product extends BaseEntity {
   @Column('uuid', { name: 'category_id' })
   categoryId: string;
 
-  @Column('varchar', { unique: true })
-  sku: string;
+  @Column('varchar', { nullable: true, unique: true })
+  sku: string | null;
 
   @Column('varchar')
   name: string;

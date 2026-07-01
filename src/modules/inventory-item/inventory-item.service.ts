@@ -22,7 +22,7 @@ export class InventoryItemService {
 
     if (search?.trim()) {
       query.andWhere(
-        '(LOWER(product.name) LIKE :search OR LOWER(product.sku) LIKE :search)',
+        '(LOWER(product.name) LIKE :search OR LOWER(COALESCE(product.sku, \'\')) LIKE :search)',
         { search: `%${search.trim().toLowerCase()}%` },
       );
     }

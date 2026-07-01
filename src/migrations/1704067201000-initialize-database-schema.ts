@@ -409,6 +409,7 @@ export class InitializeDatabaseSchema1704067201000 implements MigrationInterface
             name: 'sku',
             type: 'varchar',
             isUnique: true,
+            isNullable: true,
           },
           {
             name: 'name',
