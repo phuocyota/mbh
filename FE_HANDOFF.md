@@ -330,12 +330,16 @@ Luu y: App co response wrapper, FE doc data tai `response.data.data`.
 GET /api/meal-items
 GET /api/meal-items?branchId=branch-id
 GET /api/meal-items?branchId=branch-id&mealPeriod=BREAKFAST&status=ACTIVE
+GET /api/meal-items?branchId=branch-id&dateKey=2026-07-01&level=primary
 ```
 
 Query params:
 
 - `branchId`: optional, filter theo chi nhanh.
 - `mealPeriod`: optional, `BREAKFAST` | `LUNCH` | `AFTERNOON` | `DINNER`.
+- `level`: optional, vi du `primary`.
+- `dayOfWeek`: optional, 0-6 theo JavaScript `Date.getDay()`.
+- `dateKey`: optional, vi du `2026-07-01`.
 - `status`: optional, `ACTIVE` | `INACTIVE` | `DELETED`.
 
 Response `data`:
@@ -347,6 +351,9 @@ Response `data`:
     "branchId": "branch-id",
     "productId": "product-id",
     "mealPeriod": "BREAKFAST",
+    "level": "primary",
+    "dayOfWeek": 1,
+    "dateKey": "2026-07-01",
     "sortOrder": 1,
     "status": "ACTIVE",
     "note": "Available on weekdays",
@@ -395,6 +402,9 @@ Body:
   "branchId": "branch-id",
   "productId": "product-id",
   "mealPeriod": "BREAKFAST",
+  "level": "primary",
+  "dayOfWeek": 1,
+  "dateKey": "2026-07-01",
   "sortOrder": 1,
   "status": "ACTIVE",
   "note": "Available on weekdays"
@@ -411,9 +421,12 @@ Optional:
 
 - `sortOrder`: default `0`
 - `status`: default `ACTIVE`
+- `level`: default `primary`
+- `dayOfWeek`
+- `dateKey`
 - `note`
 
-Rule backend: mot chi nhanh khong duoc gan trung cung mot `productId` trong cung mot `mealPeriod`.
+Rule backend: mot chi nhanh khong duoc gan trung cung mot `productId` trong cung mot `mealPeriod` + `dateKey` + `level`.
 
 Luu y: Neu mon chi nam trong thuc don, vi du "Com", van tao product truoc voi `isCanteenItem: false`, sau do gan product do vao `meal_items`.
 
@@ -428,6 +441,9 @@ Body: partial cua body create.
 ```json
 {
   "mealPeriod": "LUNCH",
+  "level": "primary",
+  "dayOfWeek": 1,
+  "dateKey": "2026-07-01",
   "sortOrder": 2,
   "status": "ACTIVE",
   "note": "Only Monday to Friday"

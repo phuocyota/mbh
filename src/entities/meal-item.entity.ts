@@ -15,6 +15,15 @@ export class MealItem extends BaseEntity {
   @Column('varchar', { name: 'meal_period' })
   mealPeriod: string; // BREAKFAST, LUNCH, AFTERNOON, DINNER
 
+  @Column('varchar', { default: 'primary' })
+  level: string;
+
+  @Column('int', { nullable: true, name: 'day_of_week' })
+  dayOfWeek?: number;
+
+  @Column('varchar', { nullable: true, name: 'date_key' })
+  dateKey?: string;
+
   @Column('int', { default: 0, name: 'sort_order' })
   sortOrder: number;
 

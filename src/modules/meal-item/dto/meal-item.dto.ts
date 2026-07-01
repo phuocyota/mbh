@@ -21,6 +21,24 @@ export class MealItemDto extends BaseDto {
   mealPeriod: string;
 
   @ApiProperty({
+    description: 'Menu level',
+    example: 'primary',
+  })
+  level: string;
+
+  @ApiProperty({
+    description: 'Day of week from JavaScript getDay(): 0 Sunday, 6 Saturday',
+    required: false,
+  })
+  dayOfWeek?: number;
+
+  @ApiProperty({
+    description: 'Menu date key',
+    required: false,
+  })
+  dateKey?: string;
+
+  @ApiProperty({
     description: 'Sort order inside the meal period',
     example: 1,
   })

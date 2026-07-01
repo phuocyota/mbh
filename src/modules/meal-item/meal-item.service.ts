@@ -40,12 +40,30 @@ export class MealItemService extends BaseService<MealItem> {
       });
     }
 
+    if (filter.level) {
+      query.andWhere('mealItem.level = :level', { level: filter.level });
+    }
+
+    if (filter.dayOfWeek !== undefined) {
+      query.andWhere('mealItem.day_of_week = :dayOfWeek', {
+        dayOfWeek: filter.dayOfWeek,
+      });
+    }
+
+    if (filter.dateKey) {
+      query.andWhere('mealItem.date_key = :dateKey', {
+        dateKey: filter.dateKey,
+      });
+    }
+
     if (filter.status) {
       query.andWhere('mealItem.status = :status', { status: filter.status });
     }
 
     return query
-      .orderBy('mealItem.meal_period', 'ASC')
+      .orderBy('mealItem.date_key', 'ASC', 'NULLS LAST')
+      .addOrderBy('mealItem.day_of_week', 'ASC', 'NULLS LAST')
+      .addOrderBy('mealItem.meal_period', 'ASC')
       .addOrderBy('mealItem.sort_order', 'ASC')
       .addOrderBy('product.name', 'ASC')
       .getMany();

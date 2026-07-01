@@ -1,5 +1,13 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsIn, IsOptional, IsUUID } from 'class-validator';
+import {
+  IsIn,
+  IsInt,
+  IsOptional,
+  IsString,
+  IsUUID,
+  Max,
+  Min,
+} from 'class-validator';
 import {
   COMMON_STATUS_VALUES,
   MEAL_PERIOD_VALUES,
@@ -21,6 +29,33 @@ export class MealItemQueryDto {
   @IsOptional()
   @IsIn(MEAL_PERIOD_VALUES)
   mealPeriod?: string;
+
+  @ApiPropertyOptional({
+    description: 'Filter by menu level',
+    example: 'primary',
+  })
+  @IsOptional()
+  @IsString()
+  level?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Filter by day of week from JavaScript getDay(): 0 Sunday, 6 Saturday',
+    example: 1,
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(6)
+  dayOfWeek?: number;
+
+  @ApiPropertyOptional({
+    description: 'Filter by menu date key',
+    example: '2026-07-01',
+  })
+  @IsOptional()
+  @IsString()
+  dateKey?: string;
 
   @ApiPropertyOptional({
     description: 'Filter by status',

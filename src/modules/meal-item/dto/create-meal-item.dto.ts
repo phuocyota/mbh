@@ -1,11 +1,13 @@
 import { ApiProperty } from '@nestjs/swagger';
 import {
   IsIn,
+  IsInt,
   IsNotEmpty,
   IsNumber,
   IsOptional,
   IsString,
   IsUUID,
+  Max,
   Min,
 } from 'class-validator';
 import {
@@ -40,6 +42,35 @@ export class CreateMealItemDto {
   @IsNotEmpty()
   @IsIn(MEAL_PERIOD_VALUES)
   mealPeriod: string;
+
+  @ApiProperty({
+    description: 'Menu level',
+    example: 'primary',
+    required: false,
+  })
+  @IsOptional()
+  @IsString()
+  level?: string;
+
+  @ApiProperty({
+    description: 'Day of week from JavaScript getDay(): 0 Sunday, 6 Saturday',
+    example: 1,
+    required: false,
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(6)
+  dayOfWeek?: number;
+
+  @ApiProperty({
+    description: 'Menu date key',
+    example: '2026-07-01',
+    required: false,
+  })
+  @IsOptional()
+  @IsString()
+  dateKey?: string;
 
   @ApiProperty({
     description: 'Sort order inside the meal period',
