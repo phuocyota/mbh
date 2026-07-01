@@ -129,4 +129,12 @@ export class SupplierController {
   async delete(@Param('id') id: string): Promise<void> {
     await this.supplierService.delete(id, { userId: 'system' } as any);
   }
+
+  @Get(':id/debts')
+  @ApiOperation({ summary: 'Get supplier debt history' })
+  @ApiParam({ name: 'id', description: 'Supplier ID' })
+  @ApiResponse({ status: 200, description: 'Supplier debt history' })
+  async getDebts(@Param('id') id: string) {
+    return this.supplierService.getDebts(id);
+  }
 }

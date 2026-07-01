@@ -1,7 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { EntityManager, Repository, Like } from 'typeorm';
-import { Supplier, Debt } from '../../entities';
+import { EntityManager, Repository, Like, DataSource, In } from 'typeorm';
+import { Supplier, Debt, StockReceiptImport, MoneyVoucher } from '../../entities';
 import { BaseService } from '../../common/sql/base.service';
 
 interface FindAllOptions {
@@ -16,6 +16,7 @@ export class SupplierService extends BaseService<Supplier> {
     private supplierRepository: Repository<Supplier>,
     @InjectRepository(Debt)
     private debtRepository: Repository<Debt>,
+    private dataSource: DataSource,
   ) {
     super(supplierRepository);
   }
@@ -118,6 +119,54 @@ export class SupplierService extends BaseService<Supplier> {
     );
 
     return { supplier, debt: debtRecord };
+  }
+
+  async getDebts(supplierId: string): Promise<any[]> {
+    const debts = await this.debtRepository.find({
+      where: { supplierId },
+      order: { createdAt: 'DESC' },
+    });
+
+    const stockVoucherIds = debts
+      .filter((d) => d.refType === 'STOCK_VOUCHER')
+      .map((d) => d.refId)
+      .filter(Boolean);
+
+    const moneyVoucherIds = debts
+      .filter((d) => d.refType === 'MONEY_VOUCHER')
+      .map((d) => d.refId)
+      .filter(Boolean);
+
+    let stockVouchers: StockReceiptImport[] = [];
+    if (stockVoucherIds.length > 0) {
+      stockVouchers = await this.dataSource.getRepository(StockReceiptImport).find({
+        where: { id: In(stockVoucherIds) },
+        relations: ['details', 'details.product'],
+      });
+    }
+
+    let moneyVouchers: MoneyVoucher[] = [];
+    if (moneyVoucherIds.length > 0) {
+      moneyVouchers = await this.dataSource.getRepository(MoneyVoucher).find({
+        where: { id: In(moneyVoucherIds) },
+      });
+    }
+
+    const stockVoucherMap = new Map(stockVouchers.map((v) => [v.id, v]));
+    const moneyVoucherMap = new Map(moneyVouchers.map((v) => [v.id, v]));
+
+    return debts.map((debt) => {
+      let voucher: any = null;
+      if (debt.refType === 'STOCK_VOUCHER') {
+        voucher = stockVoucherMap.get(debt.refId) || null;
+      } else if (debt.refType === 'MONEY_VOUCHER') {
+        voucher = moneyVoucherMap.get(debt.refId) || null;
+      }
+      return {
+        ...debt,
+        voucher,
+      };
+    });
   }
 }
 
