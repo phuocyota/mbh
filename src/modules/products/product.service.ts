@@ -243,6 +243,10 @@ export class ProductService extends BaseService<Product> {
     return this.productRepository.update(id, { isActive: false });
   }
 
+  async delete(id: string, user: { userId: string }): Promise<Product> {
+    return await this.hardDelete(id);
+  }
+
   async findAllCategories() {
     return this.categoryService.findActive();
   }
