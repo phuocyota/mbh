@@ -1,7 +1,6 @@
 import { Entity, Column, ManyToOne, OneToMany, JoinColumn } from 'typeorm';
 import { BaseEntity } from '../common/sql/base.entity';
 import { Branch } from './branch.entity';
-import { Order } from './order.entity';
 import { StockReceiptDetail } from './stock-receipt-detail.entity';
 import { DEFAULT_BRANCH_ID } from '../common/constant/default-branch.constant';
 
@@ -13,8 +12,17 @@ export class StockReceiptExport extends BaseEntity {
   @Column('uuid', { name: 'branch_id', default: DEFAULT_BRANCH_ID })
   branchId: string;
 
-  @Column('uuid', { name: 'order_id', nullable: true })
-  orderId: string;
+  @Column('uuid', { name: 'to_id', nullable: true })
+  toId: string;
+
+  @Column('varchar', { name: 'to_type', nullable: true })
+  toType: string; // customer, stock, etc.
+
+  @Column('uuid', { name: 'reference_id', nullable: true })
+  referenceId: string;
+
+  @Column('varchar', { name: 'reference_type', nullable: true })
+  referenceType: string; // order, etc.
 
   @Column('varchar', { name: 'reason_code', nullable: true })
   reasonCode: string;
@@ -31,10 +39,6 @@ export class StockReceiptExport extends BaseEntity {
   @ManyToOne(() => Branch)
   @JoinColumn({ name: 'branch_id' })
   branch: Branch;
-
-  @ManyToOne(() => Order)
-  @JoinColumn({ name: 'order_id' })
-  order: Order;
 
   @OneToMany(() => StockReceiptDetail, (detail) => detail.exportReceipt, { cascade: true })
   details: StockReceiptDetail[];

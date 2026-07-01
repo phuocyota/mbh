@@ -12,11 +12,10 @@ import {
   Stock,
   StockItem,
   StockFundReceiptReason,
-  Supplier,
-  Debt,
 } from '../../entities';
 import { CreateStockVoucherDto } from './dto/create-stock-voucher.dto';
 import { FinanceService } from '../finance/finance.service';
+import { SupplierService } from '../supplier/supplier.service';
 import { DEFAULT_BRANCH_ID } from '../../common/constant/default-branch.constant';
 import { PAYMENT_METHOD } from '../../common/constant/constant';
 import {
@@ -45,10 +44,7 @@ export class StockVoucherService {
     private stockItemRepository: Repository<StockItem>,
     @InjectRepository(StockFundReceiptReason)
     private stockFundReceiptReasonRepository: Repository<StockFundReceiptReason>,
-    @InjectRepository(Supplier)
-    private supplierRepository: Repository<Supplier>,
-    @InjectRepository(Debt)
-    private debtRepository: Repository<Debt>,
+    private supplierService: SupplierService,
     private financeService: FinanceService,
     private dataSource: DataSource,
   ) {}
@@ -82,7 +78,7 @@ export class StockVoucherService {
       ? manager.getRepository(StockReceiptExport)
       : this.stockReceiptExportRepository;
     const existingExport = await exportRepo.findOne({
-      where: { orderId: order.id },
+      where: { referenceId: order.id, referenceType: 'order' },
     });
     if (existingExport) {
       return null;
@@ -110,7 +106,10 @@ export class StockVoucherService {
       {
         branchId: order.branchId,
         type: 'EXPORT',
-        orderId: order.id,
+        toId: order.customerId,
+        toType: order.customerId ? 'customer' : undefined,
+        referenceId: order.id,
+        referenceType: 'order',
         fundId: isCustomerAdvanceOffset ? undefined : payment?.fundId,
         reasonCode,
         note: `Xuất kho theo đơn hàng ${order.orderCode}`,
@@ -207,6 +206,10 @@ export class StockVoucherService {
     return { debitAccountCode, creditAccountCode };
   }
 
+  private isSupplierImport(dto: CreateStockVoucherDto) {
+    return dto.toType === 'supplier' && !!dto.toId;
+  }
+
   private isPaidSupplierImport(dto: CreateStockVoucherDto) {
     const paymentStatus = String(dto.paymentStatus || '').toUpperCase();
     if (['DEBT', 'UNPAID', 'CREDIT'].includes(paymentStatus)) {
@@ -277,8 +280,6 @@ export class StockVoucherService {
       const transferRepo = trx.getRepository(StockReceiptTransfer);
       const stockRepo = trx.getRepository(Stock);
       const stockItemRepo = trx.getRepository(StockItem);
-      const supplierRepo = trx.getRepository(Supplier);
-      const debtRepo = trx.getRepository(Debt);
 
       const totalAmount = dto.items.reduce((sum, item) => {
         return sum + Number(item.quantity) * Number(item.unitPrice || 0);
@@ -303,10 +304,8 @@ export class StockVoucherService {
         toStock = await this.getOrCreateBranchStock(stockRepo, toBranchId);
       }
 
-      const isPaidSupplierImport =
-        type === 'IMPORT' &&
-        !!dto.supplierId &&
-        this.isPaidSupplierImport(dto);
+      const isSupplierImport = type === 'IMPORT' && this.isSupplierImport(dto);
+      const isPaidSupplierImport = isSupplierImport && this.isPaidSupplierImport(dto);
       const reasonCode =
         dto.reasonCode ||
         (isPaidSupplierImport ? SUPPLIER_IMPORT_REASON_CODE : undefined);
@@ -314,7 +313,7 @@ export class StockVoucherService {
         ? await this.resolveReceiptReason(reasonCode, trx)
         : null;
       const fundId = dto.fundId || undefined;
-      const paymentStatus = isPaidSupplierImport ? 'PAID' : (dto.supplierId ? 'DEBT' : undefined);
+      const paymentStatus = isPaidSupplierImport ? 'PAID' : (isSupplierImport ? 'DEBT' : undefined);
 
       let headerReceipt: StockReceiptImport | StockReceiptExport | StockReceiptTransfer;
 
@@ -324,8 +323,10 @@ export class StockVoucherService {
           importRepo.create({
             code,
             branchId,
-            supplierId: dto.supplierId,
-            orderId: dto.orderId,
+            toId: dto.toId,
+            toType: dto.toType,
+            referenceId: dto.referenceId,
+            referenceType: dto.referenceType,
             reasonCode: reasonCode || undefined,
             paymentStatus,
             totalAmount,
@@ -339,7 +340,10 @@ export class StockVoucherService {
           exportRepo.create({
             code,
             branchId,
-            orderId: dto.orderId,
+            toId: dto.toId,
+            toType: dto.toType,
+            referenceId: dto.referenceId,
+            referenceType: dto.referenceType,
             reasonCode: reasonCode || undefined,
             totalAmount,
             status: 'COMPLETED',
@@ -382,8 +386,8 @@ export class StockVoucherService {
             fromId = sourceStock.id;
             fromType = 'STOCK';
           } else {
-            fromId = dto.supplierId || null;
-            fromType = 'VENDOR';
+            fromId = dto.toId || null;
+            fromType = dto.toType?.toUpperCase() || 'VENDOR';
           }
           toId = branchStock!.id;
           toType = 'STOCK';
@@ -398,8 +402,8 @@ export class StockVoucherService {
             toId = destinationStock.id;
             toType = 'STOCK';
           } else {
-            toId = dto.orderId || dto.supplierId || null;
-            toType = 'VENDOR';
+            toId = dto.toId || dto.referenceId || null;
+            toType = dto.toType?.toUpperCase() || 'VENDOR';
           }
         } else if (type === 'TRANSFER') {
           fromId = fromStock!.id;
@@ -436,34 +440,21 @@ export class StockVoucherService {
         }
       }
 
-      if (type === 'IMPORT' && dto.supplierId && totalAmount > 0) {
-        const supplier = await supplierRepo.findOne({
-          where: { id: dto.supplierId },
-        });
-        if (!supplier) {
-          throw new BadRequestException('Supplier not found');
-        }
-
-        supplier.totalPurchase = Number(supplier.totalPurchase || 0) + totalAmount;
-
-        if (!isPaidSupplierImport) {
-          const nextDebt = Number(supplier.debt || 0) + totalAmount;
-          supplier.debt = nextDebt;
-
-          await debtRepo.save(
-            debtRepo.create({
-              supplierId: supplier.id,
-              type: 'PURCHASE',
+      if (isSupplierImport && totalAmount > 0) {
+        if (isPaidSupplierImport) {
+          await this.supplierService.recordPurchase(dto.toId!, totalAmount, trx);
+        } else {
+          await this.supplierService.recordPurchaseDebt(
+            {
+              supplierId: dto.toId!,
               amount: totalAmount,
-              balanceAfter: nextDebt,
               refType: ACCOUNTING_SOURCE_TYPE.STOCK_VOUCHER,
               refId: headerReceipt.id,
               note: dto.note,
-            }),
+            },
+            trx,
           );
         }
-
-        await supplierRepo.save(supplier);
       }
 
       if (
@@ -481,16 +472,16 @@ export class StockVoucherService {
                 : MONEY_VOUCHER_TYPE.RECEIPT,
             fundId,
             amount: totalAmount,
-            orderId: dto.orderId,
-            supplierId: dto.supplierId,
+            orderId: dto.referenceType === 'order' ? dto.referenceId : undefined,
+            supplierId: dto.toType === 'supplier' ? dto.toId : undefined,
             purpose:
               type === 'IMPORT'
                 ? ACCOUNTING_PURPOSE.STOCK_IMPORT
                 : ACCOUNTING_PURPOSE.STOCK_EXPORT,
-            refType: dto.orderId
+            refType: dto.referenceType === 'order'
               ? ACCOUNTING_SOURCE_TYPE.ORDER
               : ACCOUNTING_SOURCE_TYPE.STOCK_RECEIPT_DETAIL,
-            refId: dto.orderId || headerReceipt.id,
+            refId: dto.referenceId || headerReceipt.id,
             note: dto.note,
             debitAccountCode: posting.debitAccountCode,
             creditAccountCode: posting.creditAccountCode,

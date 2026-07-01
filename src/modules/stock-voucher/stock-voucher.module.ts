@@ -8,10 +8,9 @@ import {
   Stock,
   StockItem,
   StockFundReceiptReason,
-  Supplier,
-  Debt,
 } from '../../entities';
 import { FinanceModule } from '../finance/finance.module';
+import { SupplierModule } from '../supplier/supplier.module';
 import { StockVoucherController } from './stock-voucher.controller';
 import { StockVoucherService } from './stock-voucher.service';
 
@@ -25,10 +24,9 @@ import { StockVoucherService } from './stock-voucher.service';
       Stock,
       StockItem,
       StockFundReceiptReason,
-      Supplier,
-      Debt,
     ]),
     FinanceModule,
+    SupplierModule,
   ],
   controllers: [StockVoucherController],
   providers: [StockVoucherService],
