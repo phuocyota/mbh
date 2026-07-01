@@ -59,7 +59,7 @@ const imageUploadInterceptor = FileInterceptor('file', {
 
 @ApiTags('Uploads')
 @ApiBearerAuth()
-@Controller('uploads')
+@Controller('upload')
 @UseGuards(JwtAuthGuard)
 export class UploadController {
   @ApiOperation({ summary: 'Upload image' })

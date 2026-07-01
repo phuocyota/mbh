@@ -285,7 +285,7 @@ Response:
 ### Upload anh chung
 
 ```http
-POST /api/uploads/images
+POST /api/upload/images
 Content-Type: multipart/form-data
 ```
 
