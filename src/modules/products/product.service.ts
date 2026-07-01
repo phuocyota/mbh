@@ -96,7 +96,7 @@ export class ProductService extends BaseService<Product> {
     this.applyPriceFilter(query, 'p', filter);
 
     const [products, total] = await query
-      .orderBy('category.sort_order', 'ASC')
+      .orderBy('category.sortOrder', 'ASC')
       .addOrderBy('p.name', 'ASC')
       .skip(skip)
       .take(limit)
