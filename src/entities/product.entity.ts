@@ -32,7 +32,7 @@ export class Product extends BaseEntity {
   })
   costPrice: number;
 
-  @Column('varchar')
+  @Column('varchar', { nullable: true })
   unit: string; // phần, ly, cái, hộp
 
   @Column('boolean', { default: true, name: 'is_active' })

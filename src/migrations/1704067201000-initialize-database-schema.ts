@@ -441,6 +441,7 @@ export class InitializeDatabaseSchema1704067201000 implements MigrationInterface
           {
             name: 'unit',
             type: 'varchar',
+            isNullable: true,
           },
           {
             name: 'is_active',

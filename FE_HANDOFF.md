@@ -301,7 +301,7 @@ Body:
 }
 ```
 
-Luu y: Khong can gui `sku` khi tao product.
+Luu y: Khong can gui `sku`. `unit` optional, FE co the bo qua neu mon khong can don vi.
 
 ## 3.1 Meal Items - Menu theo buoi
 
