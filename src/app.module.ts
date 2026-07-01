@@ -40,6 +40,7 @@ import { StockTakeModule } from './modules/stock-take/stock-take.module';
 import { StockTransferModule } from './modules/stock-transfer/stock-transfer.module';
 import { MomoModule } from './modules/momo/momo.module';
 import { MealItemModule } from './modules/meal-item/meal-item.module';
+import { UploadModule } from './modules/upload/upload.module';
 
 @Module({
   imports: [
@@ -82,6 +83,7 @@ import { MealItemModule } from './modules/meal-item/meal-item.module';
     StockTransferModule,
     MomoModule,
     MealItemModule,
+    UploadModule,
   ],
   controllers: [AppController],
   providers: [

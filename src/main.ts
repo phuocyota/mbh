@@ -1,6 +1,8 @@
 import { NestFactory } from '@nestjs/core';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { ValidationPipe } from '@nestjs/common';
+import * as express from 'express';
+import { join } from 'path';
 import { AppModule } from './app.module';
 import { ResponseInterceptor } from './common/interceptors/response.interceptor';
 import { ResponseLoggerInterceptor } from './common/interceptors/response-logger.interceptor';
@@ -9,6 +11,8 @@ import { RequestLoggerMiddleware } from './common/middleware/request-logger-midd
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   const PORT = 3002;
+
+  app.use('/uploads', express.static(join(process.cwd(), 'uploads')));
 
   // Enable CORS for frontend
   app.enableCors({

@@ -282,6 +282,29 @@ Response:
 
 ### Tao product
 
+### Upload anh chung
+
+```http
+POST /api/uploads/images
+Content-Type: multipart/form-data
+```
+
+Form data:
+
+- `file`: file anh, toi da 5MB.
+
+Response `data`:
+
+```json
+{
+  "filename": "image-178...jpg",
+  "path": "/uploads/image-178...jpg",
+  "imageUrl": "http://localhost:3002/uploads/image-178...jpg"
+}
+```
+
+FE dung `imageUrl` tra ve de gui vao cac body can luu anh, vi du `products.imageUrl`.
+
 ```http
 POST /api/products
 ```
