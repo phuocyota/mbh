@@ -15,6 +15,9 @@ export class StockFundReceiptReason extends BaseEntity {
   @Column('text', { nullable: true })
   note: string;
 
+  @Column('boolean', { name: 'is_debt', default: false })
+  isDebt: boolean;
+
   @Column('varchar', { default: 'active' })
   status: string;
 }
