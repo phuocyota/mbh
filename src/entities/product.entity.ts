@@ -38,6 +38,9 @@ export class Product extends BaseEntity {
   @Column('boolean', { default: true, name: 'is_active' })
   isActive: boolean;
 
+  @Column('boolean', { default: true, name: 'is_canteen_item' })
+  isCanteenItem: boolean;
+
   // Relations
   @ManyToOne(() => Category, (category) => category.products)
   @JoinColumn({ name: 'category_id' })

@@ -11,6 +11,7 @@ type ProductPriceFilter = {
   minPrice?: number;
   maxPrice?: number;
   branchId?: string;
+  isCanteenItem?: boolean;
 };
 
 @Injectable()
@@ -48,6 +49,12 @@ export class ProductService extends BaseService<Product> {
       `,
         { branchId: filter.branchId },
       );
+    }
+
+    if (filter.isCanteenItem !== undefined) {
+      query.andWhere('p.is_canteen_item = :isCanteenItem', {
+        isCanteenItem: filter.isCanteenItem,
+      });
     }
 
     this.applyPriceFilter(query, 'p', filter);

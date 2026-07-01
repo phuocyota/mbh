@@ -242,6 +242,7 @@ Lấy toàn bộ category đang active kèm products đang active.
 ```http
 GET /api/products/full
 GET /api/products/full?minPrice=10000&maxPrice=20000
+GET /api/products/full?isCanteenItem=true
 ```
 
 Auth: cần JWT.
@@ -250,6 +251,7 @@ Query filter:
 
 - `minPrice`: gia nho nhat, optional.
 - `maxPrice`: gia lon nhat, optional.
+- `isCanteenItem`: optional, `true` lay mon ban canteen, `false` lay mon chi dung cho thuc don/khong ban canteen.
 
 Response:
 
@@ -270,7 +272,8 @@ Response:
         "imageUrl": null,
         "price": "15000.00",
         "unit": "cai",
-        "isActive": true
+        "isActive": true,
+        "isCanteenItem": true
       }
     ]
   }
@@ -339,6 +342,7 @@ Response `data`:
       "costPrice": null,
       "unit": "cai",
       "isActive": true,
+      "isCanteenItem": true,
       "category": {
         "id": "category-id",
         "name": "Do an"
@@ -388,6 +392,8 @@ Optional:
 - `note`
 
 Rule backend: mot chi nhanh khong duoc gan trung cung mot `productId` trong cung mot `mealPeriod`.
+
+Luu y: Neu mon chi nam trong thuc don, vi du "Com", van tao product truoc voi `isCanteenItem: false`, sau do gan product do vao `meal_items`.
 
 ### Cap nhat mon theo buoi
 

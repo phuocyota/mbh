@@ -32,6 +32,7 @@ export class ProductController {
   @ApiQuery({ name: 'branchId', required: false })
   @ApiQuery({ name: 'minPrice', required: false, type: Number })
   @ApiQuery({ name: 'maxPrice', required: false, type: Number })
+  @ApiQuery({ name: 'isCanteenItem', required: false, type: Boolean })
   @ApiResponse({ status: 200, description: 'List of products' })
   @Get()
   async findAll(
@@ -39,11 +40,13 @@ export class ProductController {
     @Query('branchId') branchId?: string,
     @Query('minPrice') minPrice?: number,
     @Query('maxPrice') maxPrice?: number,
+    @Query('isCanteenItem') isCanteenItem?: string,
   ) {
     return this.productService.findAll(categoryId, {
       minPrice,
       maxPrice,
       branchId,
+      isCanteenItem: parseOptionalBoolean(isCanteenItem),
     });
   }
 
@@ -58,17 +61,20 @@ export class ProductController {
   @ApiQuery({ name: 'branchId', required: false })
   @ApiQuery({ name: 'minPrice', required: false, type: Number })
   @ApiQuery({ name: 'maxPrice', required: false, type: Number })
+  @ApiQuery({ name: 'isCanteenItem', required: false, type: Boolean })
   @ApiResponse({ status: 200, description: 'List of categories with products' })
   @Get('full')
   async findAllCategoriesWithProducts(
     @Query('branchId') branchId?: string,
     @Query('minPrice') minPrice?: number,
     @Query('maxPrice') maxPrice?: number,
+    @Query('isCanteenItem') isCanteenItem?: string,
   ) {
     return this.productService.findAllCategoriesWithProducts({
       branchId,
       minPrice,
       maxPrice,
+      isCanteenItem: parseOptionalBoolean(isCanteenItem),
     });
   }
 
@@ -110,4 +116,12 @@ export class ProductController {
   async delete(@Param('id') id: string) {
     return this.productService.delete(id, { userId: 'system' } as any);
   }
+}
+
+function parseOptionalBoolean(value?: string): boolean | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  return value === 'true';
 }

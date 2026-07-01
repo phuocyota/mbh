@@ -35,7 +35,12 @@ export class CategoryService extends BaseService<Category> {
   }
 
   async findActiveWithProducts(
-    filter: { minPrice?: number; maxPrice?: number; branchId?: string } = {},
+    filter: {
+      minPrice?: number;
+      maxPrice?: number;
+      branchId?: string;
+      isCanteenItem?: boolean;
+    } = {},
   ) {
     const productConditions = ['product.is_active = :isActive'];
     const params: Record<string, number | boolean | string> = {
@@ -50,6 +55,11 @@ export class CategoryService extends BaseService<Category> {
     if (filter.maxPrice !== undefined) {
       productConditions.push('product.price <= :maxPrice');
       params.maxPrice = filter.maxPrice;
+    }
+
+    if (filter.isCanteenItem !== undefined) {
+      productConditions.push('product.is_canteen_item = :isCanteenItem');
+      params.isCanteenItem = filter.isCanteenItem;
     }
 
     if (filter.branchId) {
