@@ -18,10 +18,13 @@ export class Product extends BaseEntity {
   @Column('text', { nullable: true })
   description: string;
 
+  @Column('text', { nullable: true })
+  ingredients: string | null;
+
   @Column('text', { nullable: true, name: 'image_url' })
   imageUrl: string;
 
-  @Column('numeric', { precision: 12, scale: 2 })
+  @Column('numeric', { precision: 12, scale: 2, default: 0 })
   price: number;
 
   @Column('numeric', {

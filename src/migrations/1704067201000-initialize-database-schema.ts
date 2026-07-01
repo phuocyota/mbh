@@ -421,6 +421,11 @@ export class InitializeDatabaseSchema1704067201000 implements MigrationInterface
             isNullable: true,
           },
           {
+            name: 'ingredients',
+            type: 'text',
+            isNullable: true,
+          },
+          {
             name: 'image_url',
             type: 'text',
             isNullable: true,
@@ -430,6 +435,7 @@ export class InitializeDatabaseSchema1704067201000 implements MigrationInterface
             type: 'numeric',
             precision: 12,
             scale: 2,
+            default: 0,
           },
           {
             name: 'cost_price',

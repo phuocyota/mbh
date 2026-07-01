@@ -109,6 +109,7 @@ export class ProductService extends BaseService<Product> {
 
   async createProduct(createProductDto: any) {
     const productDto = this.withoutQuantity(createProductDto);
+    productDto.price = productDto.price ?? 0;
 
     return this.productRepository.manager.transaction(async (manager) => {
       const productRepository = manager.getRepository(Product);

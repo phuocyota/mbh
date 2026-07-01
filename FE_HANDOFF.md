@@ -268,6 +268,7 @@ Response:
         "categoryId": "category-id",
         "name": "Banh mi",
         "description": null,
+        "ingredients": null,
         "imageUrl": null,
         "price": "15000.00",
         "unit": "cai",
@@ -292,8 +293,9 @@ Body:
   "categoryId": "category-id",
   "name": "Com",
   "description": null,
+  "ingredients": "Com trang, Thit heo, Trung cut, Rau luoc",
   "imageUrl": null,
-  "price": 25000,
+  "price": 0,
   "costPrice": null,
   "unit": "phan",
   "isActive": true,
@@ -301,7 +303,7 @@ Body:
 }
 ```
 
-Luu y: Khong can gui `sku`. `unit` optional, FE co the bo qua neu mon khong can don vi.
+Luu y: Khong can gui `sku`. `unit` optional, FE co the bo qua neu mon khong can don vi. Neu mon chi dung cho thuc don, gui `isCanteenItem: false`. `price` optional, backend default `0`.
 
 ## 3.1 Meal Items - Menu theo buoi
 
@@ -366,6 +368,7 @@ Response `data`:
       "categoryId": "category-id",
       "name": "Banh mi",
       "description": null,
+      "ingredients": null,
       "imageUrl": null,
       "price": "15000.00",
       "costPrice": null,
