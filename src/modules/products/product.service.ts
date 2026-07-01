@@ -244,7 +244,31 @@ export class ProductService extends BaseService<Product> {
   }
 
   async delete(id: string, user: { userId: string }): Promise<Product> {
-    return await this.hardDelete(id);
+    const product = await this.findOne(id);
+    const queryRunner = this.productRepository.manager.connection.createQueryRunner();
+
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+
+    try {
+      await queryRunner.query(`DELETE FROM meal_items WHERE product_id = $1`, [id]);
+      await queryRunner.query(`DELETE FROM order_items WHERE product_id = $1`, [id]);
+      await queryRunner.query(`DELETE FROM stock_receipt_detail WHERE product_id = $1`, [id]);
+      await queryRunner.query(`DELETE FROM stock_items WHERE product_id = $1`, [id]);
+      await queryRunner.query(`DELETE FROM stock_take_items WHERE product_id = $1`, [id]);
+      await queryRunner.query(`DELETE FROM product_price_history WHERE product_id = $1`, [id]);
+      await queryRunner.query(`DELETE FROM cart_items WHERE product_id = $1`, [id]);
+
+      await queryRunner.query(`DELETE FROM products WHERE id = $1`, [id]);
+
+      await queryRunner.commitTransaction();
+      return product;
+    } catch (error) {
+      await queryRunner.rollbackTransaction();
+      throw error;
+    } finally {
+      await queryRunner.release();
+    }
   }
 
   async findAllCategories() {
