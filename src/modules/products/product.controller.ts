@@ -47,7 +47,7 @@ export class ProductController {
     @Query('page') page?: string,
     @Query('limit') limit?: string,
   ) {
-    return this.productService.findAll(categoryId, {
+    return this.productService.findProducts(categoryId, {
       minPrice,
       maxPrice,
       branchId,

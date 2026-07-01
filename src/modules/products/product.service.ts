@@ -31,7 +31,7 @@ export class ProductService extends BaseService<Product> {
     super(productRepository);
   }
 
-  async findAll(categoryId?: string, filter: ProductPriceFilter = {}) {
+  async findProducts(categoryId?: string, filter: ProductPriceFilter = {}) {
     const page = filter.page || 1;
     const limit = filter.limit || 22;
     const skip = (page - 1) * limit;
