@@ -313,11 +313,8 @@ export class StockVoucherService {
       const reason = reasonCode
         ? await this.resolveReceiptReason(reasonCode, trx)
         : null;
-      let fundId = dto.fundId || undefined;
-
-      if (type === 'IMPORT' && dto.supplierId && !isPaidSupplierImport) {
-        fundId = undefined;
-      }
+      const fundId = dto.fundId || undefined;
+      const paymentStatus = isPaidSupplierImport ? 'PAID' : (dto.supplierId ? 'DEBT' : undefined);
 
       let headerReceipt: StockReceiptImport | StockReceiptExport | StockReceiptTransfer;
 
@@ -329,7 +326,8 @@ export class StockVoucherService {
             branchId,
             supplierId: dto.supplierId,
             orderId: dto.orderId,
-            fundId,
+            reasonCode: reasonCode || undefined,
+            paymentStatus,
             totalAmount,
             status: 'COMPLETED',
             note: dto.note,
@@ -472,7 +470,7 @@ export class StockVoucherService {
         fundId &&
         totalAmount > 0 &&
         (type === 'EXPORT' ||
-          (type === 'IMPORT' && (!dto.supplierId || isPaidSupplierImport)))
+          (type === 'IMPORT' && isPaidSupplierImport))
       ) {
         const posting = this.getReasonPosting(reason, `${type} voucher`);
         const moneyVoucher = await this.financeService.createMoneyVoucher(
@@ -501,10 +499,8 @@ export class StockVoucherService {
         );
 
         if (moneyVoucher) {
-          // Link money voucher to header
-          if (type === 'IMPORT') {
-            await importRepo.update(headerReceipt.id, { moneyVoucherId: moneyVoucher.id });
-          } else if (type === 'EXPORT') {
+          // Link money voucher to header (export only, import no longer stores moneyVoucherId)
+          if (type === 'EXPORT') {
             await exportRepo.update(headerReceipt.id, { moneyVoucherId: moneyVoucher.id });
           }
         }
