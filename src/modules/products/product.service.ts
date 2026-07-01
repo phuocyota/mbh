@@ -12,6 +12,11 @@ type ProductPriceFilter = {
   maxPrice?: number;
   branchId?: string;
   isCanteenItem?: boolean;
+  search?: string;
+  displayStatus?: string;
+  stockStatus?: string;
+  page?: number;
+  limit?: number;
 };
 
 @Injectable()
@@ -27,10 +32,26 @@ export class ProductService extends BaseService<Product> {
   }
 
   async findAll(categoryId?: string, filter: ProductPriceFilter = {}) {
+    const page = filter.page || 1;
+    const limit = filter.limit || 22;
+    const skip = (page - 1) * limit;
+
     const query = this.productRepository
       .createQueryBuilder('p')
-      .leftJoinAndSelect('p.category', 'category')
-      .where('p.is_active = :isActive', { isActive: true });
+      .leftJoinAndSelect('p.category', 'category');
+
+    if (filter.displayStatus === 'active') {
+      query.andWhere('p.is_active = :isActive', { isActive: true });
+    } else if (filter.displayStatus === 'inactive') {
+      query.andWhere('p.is_active = :isActive', { isActive: false });
+    }
+
+    if (filter.search) {
+      query.andWhere(
+        '(LOWER(p.name) LIKE LOWER(:search) OR LOWER(p.sku) LIKE LOWER(:search))',
+        { search: `%${filter.search}%` }
+      );
+    }
 
     if (categoryId) {
       query.andWhere('p.category_id = :categoryId', { categoryId });
@@ -51,6 +72,21 @@ export class ProductService extends BaseService<Product> {
       );
     }
 
+    if (filter.stockStatus && filter.stockStatus !== 'all') {
+      const branchIdCondition = filter.branchId ? `AND stock.branch_id = :branchId` : '';
+      const stockSubquery = `
+        (SELECT COALESCE(SUM(si.quantity), 0)
+         FROM stock_items si
+         INNER JOIN stocks stock ON stock.id = si.stock_id
+         WHERE si.product_id = p.id ${branchIdCondition}
+        )
+      `;
+      if (filter.stockStatus === 'inStock') query.andWhere(`${stockSubquery} > 0`);
+      if (filter.stockStatus === 'outOfStock') query.andWhere(`${stockSubquery} <= 0`);
+      if (filter.stockStatus === 'under') query.andWhere(`${stockSubquery} < 5`);
+      if (filter.stockStatus === 'over') query.andWhere(`${stockSubquery} >= 5`);
+    }
+
     if (filter.isCanteenItem !== undefined) {
       query.andWhere('p.is_canteen_item = :isCanteenItem', {
         isCanteenItem: filter.isCanteenItem,
@@ -59,13 +95,21 @@ export class ProductService extends BaseService<Product> {
 
     this.applyPriceFilter(query, 'p', filter);
 
-    const products = await query
+    const [products, total] = await query
       .orderBy('category.sort_order', 'ASC')
       .addOrderBy('p.name', 'ASC')
-      .getMany();
+      .skip(skip)
+      .take(limit)
+      .getManyAndCount();
 
     if (!filter.branchId || !products.length) {
-      return products;
+      return {
+        items: products,
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit),
+      };
     }
 
     const stockRows = await this.productRepository.manager
@@ -89,7 +133,13 @@ export class ProductService extends BaseService<Product> {
       (product as any).remain = stockByProductId.get(product.id) || 0;
     });
 
-    return products;
+    return {
+      items: products,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    };
   }
 
   async findOne(id: string) {

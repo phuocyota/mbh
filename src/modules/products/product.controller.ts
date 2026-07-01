@@ -41,12 +41,22 @@ export class ProductController {
     @Query('minPrice') minPrice?: number,
     @Query('maxPrice') maxPrice?: number,
     @Query('isCanteenItem') isCanteenItem?: string,
+    @Query('search') search?: string,
+    @Query('displayStatus') displayStatus?: string,
+    @Query('stockStatus') stockStatus?: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
   ) {
     return this.productService.findAll(categoryId, {
       minPrice,
       maxPrice,
       branchId,
       isCanteenItem: parseOptionalBoolean(isCanteenItem),
+      search,
+      displayStatus,
+      stockStatus,
+      page: page ? parseInt(page, 10) : undefined,
+      limit: limit ? parseInt(limit, 10) : undefined,
     });
   }
 
