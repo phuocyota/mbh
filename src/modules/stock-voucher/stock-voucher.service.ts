@@ -340,7 +340,7 @@ export class StockVoucherService {
             code,
             branchId,
             orderId: dto.orderId,
-            fundId,
+            reasonCode: reasonCode || undefined,
             totalAmount,
             status: 'COMPLETED',
             note: dto.note,
@@ -498,12 +498,6 @@ export class StockVoucherService {
           trx,
         );
 
-        if (moneyVoucher) {
-          // Link money voucher to header (export only, import no longer stores moneyVoucherId)
-          if (type === 'EXPORT') {
-            await exportRepo.update(headerReceipt.id, { moneyVoucherId: moneyVoucher.id });
-          }
-        }
       }
 
       return detailRepo.find({
