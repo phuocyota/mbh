@@ -19,7 +19,6 @@ export class SeedDeferredSaleReason1704067251000
         "code",
         "reason",
         "note",
-        "fund_id",
         "status",
         "debit_account_code",
         "credit_account_code",
@@ -30,7 +29,6 @@ export class SeedDeferredSaleReason1704067251000
         'BH_TRA_CHAM',
         U&'B\\00E1n h\\00E0ng tr\\1EA3 ch\\1EADm',
         'Default reason for deferred sales and customer advance offsets',
-        NULL,
         'active',
         '131',
         '5111',
@@ -48,7 +46,6 @@ export class SeedDeferredSaleReason1704067251000
       SET
         "reason" = U&'B\\00E1n h\\00E0ng tr\\1EA3 ch\\1EADm',
         "note" = 'Default reason for deferred sales and customer advance offsets',
-        "fund_id" = NULL,
         "debit_account_code" = '131',
         "credit_account_code" = '5111',
         "tax_account_code" = '33311',
@@ -63,7 +60,6 @@ export class SeedDeferredSaleReason1704067251000
         "code",
         "reason",
         "note",
-        "fund_id",
         "status",
         "accounting_formula"
       )
@@ -71,7 +67,6 @@ export class SeedDeferredSaleReason1704067251000
         'TT_TRA_CHAM',
         U&'Thanh to\\00E1n tr\\1EA3 ch\\1EADm',
         'Default reason for deferred payment settlement during wallet topup',
-        NULL,
         'active',
         '{3387:-}'
       WHERE NOT EXISTS (
@@ -86,7 +81,6 @@ export class SeedDeferredSaleReason1704067251000
       SET
         "reason" = U&'Thanh to\\00E1n tr\\1EA3 ch\\1EADm',
         "note" = 'Default reason for deferred payment settlement during wallet topup',
-        "fund_id" = NULL,
         "accounting_formula" = '{3387:-}',
         "status" = 'active',
         "updated_at" = CURRENT_TIMESTAMP
@@ -119,9 +113,27 @@ export class SeedDeferredSaleReason1704067251000
         DROP COLUMN IF EXISTS "credit_account_code",
         DROP COLUMN IF EXISTS "debit_account_code"
     `);
+
+    await queryRunner.query(`
+      ALTER TABLE "stock_fund_receipt_reason"
+        DROP CONSTRAINT IF EXISTS "FK_stock_fund_receipt_reason_stock",
+        DROP CONSTRAINT IF EXISTS "FK_stock_fund_receipt_reason_fund"
+    `);
+
+    await queryRunner.query(`
+      ALTER TABLE "stock_fund_receipt_reason"
+        DROP COLUMN IF EXISTS "stock_id",
+        DROP COLUMN IF EXISTS "fund_id"
+    `);
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
+    await queryRunner.query(`
+      ALTER TABLE "stock_fund_receipt_reason"
+        ADD COLUMN IF NOT EXISTS "stock_id" uuid,
+        ADD COLUMN IF NOT EXISTS "fund_id" uuid
+    `);
+
     await queryRunner.query(`
       ALTER TABLE "stock_fund_receipt_reason"
         ADD COLUMN IF NOT EXISTS "debit_account_code" character varying,

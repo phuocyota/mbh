@@ -151,7 +151,6 @@ export class StockVoucherService {
 
   private async resolveReceiptReason(
     code: string | undefined,
-    branchId?: string,
     manager?: EntityManager,
   ) {
     if (!code) {
@@ -161,19 +160,6 @@ export class StockVoucherService {
     const reasonRepo = manager
       ? manager.getRepository(StockFundReceiptReason)
       : this.stockFundReceiptReasonRepository;
-
-    if (branchId) {
-      const branchReason = await reasonRepo.findOne({
-        where: {
-          code,
-          stock: { branchId },
-        },
-      });
-
-      if (branchReason) {
-        return branchReason;
-      }
-    }
 
     return reasonRepo.findOne({
       where: { code },
@@ -325,9 +311,9 @@ export class StockVoucherService {
         dto.reasonCode ||
         (isPaidSupplierImport ? SUPPLIER_IMPORT_REASON_CODE : undefined);
       const reason = reasonCode
-        ? await this.resolveReceiptReason(reasonCode, branchId, trx)
+        ? await this.resolveReceiptReason(reasonCode, trx)
         : null;
-      let fundId = dto.fundId || reason?.fundId || undefined;
+      let fundId = dto.fundId || undefined;
 
       if (type === 'IMPORT' && dto.supplierId && !isPaidSupplierImport) {
         fundId = undefined;

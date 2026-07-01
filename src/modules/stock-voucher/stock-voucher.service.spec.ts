@@ -156,7 +156,6 @@ describe('StockVoucherService', () => {
     it('should create a StockReceiptImport header and corresponding details', async () => {
       mockRepositories.StockFundReceiptReason.findOne.mockResolvedValueOnce({
         code: 'NHNCC',
-        fundId: 'fund-id-1',
         accountingFormula: '{1561:-,1111:+,1331:-}',
       });
 
@@ -259,7 +258,6 @@ describe('StockVoucherService', () => {
     it('should create a StockReceiptExport header and corresponding details', async () => {
       mockRepositories.StockFundReceiptReason.findOne.mockResolvedValueOnce({
         code: 'BH_CASH',
-        fundId: 'fund-id-2',
         accountingFormula: '{1111:-,5111:+,33311:+}',
       });
 
@@ -315,7 +313,6 @@ describe('StockVoucherService', () => {
     it('should clear a customer advance wallet payment without creating another fund receipt', async () => {
       mockRepositories.StockFundReceiptReason.findOne.mockResolvedValueOnce({
         code: 'BH_TRA_CHAM',
-        fundId: null,
         accountingFormula: '{131:-,5111:+,33311:+,3387:+}',
       });
 
@@ -353,7 +350,6 @@ describe('StockVoucherService', () => {
       expect(mockRepositories.StockFundReceiptReason.findOne).toHaveBeenCalledWith({
         where: {
           code: 'BH_TRA_CHAM',
-          stock: { branchId: 'branch-id-1' },
         },
       });
       expect(mockFinanceService.createMoneyVoucher).not.toHaveBeenCalled();
