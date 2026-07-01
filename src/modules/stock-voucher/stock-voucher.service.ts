@@ -18,11 +18,15 @@ import {
 import { CreateStockVoucherDto } from './dto/create-stock-voucher.dto';
 import { FinanceService } from '../finance/finance.service';
 import { DEFAULT_BRANCH_ID } from '../../common/constant/default-branch.constant';
+import { PAYMENT_METHOD } from '../../common/constant/constant';
 import {
   ACCOUNTING_PURPOSE,
   ACCOUNTING_SOURCE_TYPE,
   MONEY_VOUCHER_TYPE,
 } from '../../../packages/accounting/src/index.js';
+
+const DEFERRED_SALE_REASON_CODE = 'BH_TRA_CHAM';
+const SUPPLIER_IMPORT_REASON_CODE = 'NHNCC';
 
 @Injectable()
 export class StockVoucherService {
@@ -97,27 +101,38 @@ export class StockVoucherService {
       return null;
     }
 
-    const reason = await this.resolveReceiptReason(
-      this.getSalesReasonCode(payment?.method),
-      order.branchId,
-      manager,
-    );
-    const fundId = payment?.fundId || reason?.fundId;
-    const debitAccountCode = payment?.debitAccountCode || reason?.debitAccountCode;
-    const creditAccountCode = payment?.creditAccountCode || reason?.creditAccountCode;
+    const isCustomerAdvanceOffset = this.isCustomerAdvanceOffset(order, payment);
+    const reasonCode = isCustomerAdvanceOffset
+      ? DEFERRED_SALE_REASON_CODE
+      : this.getSalesReasonCode(payment?.method);
 
     return this.createVoucher(
       {
         branchId: order.branchId,
         type: 'EXPORT',
         orderId: order.id,
-        fundId,
-        debitAccountCode,
-        creditAccountCode,
+        fundId: isCustomerAdvanceOffset ? undefined : payment?.fundId,
+        reasonCode,
         note: `Xuất kho theo đơn hàng ${order.orderCode}`,
         items,
       },
       manager,
+    );
+  }
+
+  private isCustomerAdvanceOffset(order: any, payment: any) {
+    if (payment?.method !== PAYMENT_METHOD.WALLET) {
+      return false;
+    }
+
+    const paidAmount = Number(payment?.amount || 0);
+    const totalAmount = Number(order?.totalAmount || 0);
+
+    return (
+      Number.isFinite(paidAmount) &&
+      Number.isFinite(totalAmount) &&
+      totalAmount > 0 &&
+      paidAmount === totalAmount
     );
   }
 
@@ -163,6 +178,47 @@ export class StockVoucherService {
     return reasonRepo.findOne({
       where: { code },
     });
+  }
+
+  private getFormulaAccount(
+    formula: string | undefined | null,
+    sign: '+' | '-',
+  ) {
+    if (!formula) {
+      return undefined;
+    }
+
+    const entries = formula.replace(/[{}]/g, '').split(',');
+    for (const entry of entries) {
+      const [accountCode, entrySign] = entry.split(':').map((part) => part.trim());
+      if (accountCode && entrySign === sign) {
+        return accountCode;
+      }
+    }
+
+    return undefined;
+  }
+
+  private getReasonPosting(
+    reason: StockFundReceiptReason | null,
+    context: string,
+  ) {
+    const debitAccountCode = this.getFormulaAccount(
+      reason?.accountingFormula,
+      '-',
+    );
+    const creditAccountCode = this.getFormulaAccount(
+      reason?.accountingFormula,
+      '+',
+    );
+
+    if (!reason || !debitAccountCode || !creditAccountCode) {
+      throw new BadRequestException(
+        `Accounting formula is required for ${context}`,
+      );
+    }
+
+    return { debitAccountCode, creditAccountCode };
   }
 
   private isPaidSupplierImport(dto: CreateStockVoucherDto) {
@@ -261,21 +317,17 @@ export class StockVoucherService {
         toStock = await this.getOrCreateBranchStock(stockRepo, toBranchId);
       }
 
-      let fundId = dto.fundId;
-      let debitAccountCode = dto.debitAccountCode;
-      let creditAccountCode = dto.creditAccountCode;
-
       const isPaidSupplierImport =
         type === 'IMPORT' &&
         !!dto.supplierId &&
         this.isPaidSupplierImport(dto);
-
-      if (isPaidSupplierImport && !fundId) {
-        const reason = await this.resolveReceiptReason('NHNCC', branchId, trx);
-        fundId = reason?.fundId;
-        debitAccountCode = debitAccountCode || reason?.debitAccountCode;
-        creditAccountCode = creditAccountCode || reason?.creditAccountCode;
-      }
+      const reasonCode =
+        dto.reasonCode ||
+        (isPaidSupplierImport ? SUPPLIER_IMPORT_REASON_CODE : undefined);
+      const reason = reasonCode
+        ? await this.resolveReceiptReason(reasonCode, branchId, trx)
+        : null;
+      let fundId = dto.fundId || reason?.fundId || undefined;
 
       if (type === 'IMPORT' && dto.supplierId && !isPaidSupplierImport) {
         fundId = undefined;
@@ -436,6 +488,7 @@ export class StockVoucherService {
         (type === 'EXPORT' ||
           (type === 'IMPORT' && (!dto.supplierId || isPaidSupplierImport)))
       ) {
+        const posting = this.getReasonPosting(reason, `${type} voucher`);
         const moneyVoucher = await this.financeService.createMoneyVoucher(
           {
             type:
@@ -455,8 +508,8 @@ export class StockVoucherService {
               : ACCOUNTING_SOURCE_TYPE.STOCK_RECEIPT_DETAIL,
             refId: dto.orderId || headerReceipt.id,
             note: dto.note,
-            debitAccountCode,
-            creditAccountCode,
+            debitAccountCode: posting.debitAccountCode,
+            creditAccountCode: posting.creditAccountCode,
           },
           trx,
         );

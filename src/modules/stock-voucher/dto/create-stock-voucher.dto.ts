@@ -63,20 +63,18 @@ export class CreateStockVoucherDto {
   @IsUUID()
   fundId?: string;
 
+  @ApiProperty({
+    required: false,
+    description: 'Accounting reason code from stock_fund_receipt_reason.',
+  })
+  @IsOptional()
+  @IsString()
+  reasonCode?: string;
+
   @ApiProperty({ required: false })
   @IsOptional()
   @IsString()
   note?: string;
-
-  @ApiProperty({ required: false })
-  @IsOptional()
-  @IsString()
-  debitAccountCode?: string;
-
-  @ApiProperty({ required: false })
-  @IsOptional()
-  @IsString()
-  creditAccountCode?: string;
 
   @ApiProperty({
     required: false,

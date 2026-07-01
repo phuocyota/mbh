@@ -358,6 +358,8 @@ GET /api/meal-items
 GET /api/meal-items?branchId=branch-id
 GET /api/meal-items?branchId=branch-id&mealPeriod=BREAKFAST&status=ACTIVE
 GET /api/meal-items?branchId=branch-id&dateKey=2026-07-01&level=primary
+GET /api/meal-items?branchId=branch-id&from=2026-06-29&to=2026-07-05&level=preschool&status=ACTIVE
+GET /api/meal-items/week-plan?branchId=branch-id&from=2026-06-29&to=2026-07-05&level=preschool&status=ACTIVE
 ```
 
 Query params:
@@ -367,7 +369,60 @@ Query params:
 - `level`: optional, vi du `primary`.
 - `dayOfWeek`: optional, 0-6 theo JavaScript `Date.getDay()`.
 - `dateKey`: optional, vi du `2026-07-01`.
+- `from`: optional, ngay bat dau tuan/khoang ngay dang `YYYY-MM-DD`. Neu co `dateKey` thi backend uu tien `dateKey`.
+- `to`: optional, ngay ket thuc tuan/khoang ngay dang `YYYY-MM-DD`. Neu co `dateKey` thi backend uu tien `dateKey`.
 - `status`: optional, `ACTIVE` | `INACTIVE` | `DELETED`.
+
+Man lich thuc don theo tuan dung endpoint `week-plan` lam contract chinh de lay danh sach cac mon da chon:
+
+```http
+GET /api/meal-items/week-plan?branchId=branch-id&from=2026-06-29&to=2026-07-05&level=preschool&status=ACTIVE
+```
+
+Response `week-plan` da group san theo ngay + bua. `items` trong moi bua la cac lua chon mon da them, da duoc sap xep theo `sortOrder`. Mac dinh `mealPeriods` la 3 bua `BREAKFAST`, `LUNCH`, `AFTERNOON`; neu co `mealPeriod` khac trong data thi backend append them vao response. Neu khong truyen du `from`/`to`, backend tu quy ve tuan Thu 2-Chu nhat cua `dateKey`/`from`/ngay hien tai.
+
+```json
+{
+  "from": "2026-06-29",
+  "to": "2026-07-05",
+  "branchId": "branch-id",
+  "level": "preschool",
+  "status": "ACTIVE",
+  "mealPeriods": ["BREAKFAST", "LUNCH", "AFTERNOON"],
+  "totalSlots": 21,
+  "addedSlots": 21,
+  "days": [
+    {
+      "dateKey": "2026-06-29",
+      "dayOfWeek": 1,
+      "meals": [
+        {
+          "mealPeriod": "BREAKFAST",
+          "items": [
+            {
+              "id": "meal-item-id",
+              "branchId": "branch-id",
+              "productId": "product-id",
+              "mealPeriod": "BREAKFAST",
+              "level": "preschool",
+              "dayOfWeek": 1,
+              "dateKey": "2026-06-29",
+              "sortOrder": 1,
+              "status": "ACTIVE",
+              "product": {
+                "id": "product-id",
+                "name": "Com tam",
+                "imageUrl": null,
+                "price": "15000.00"
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
+```
 
 Response `data`:
 
@@ -754,6 +809,58 @@ Order response có field `paymentMethod`:
 }
 ```
 
+### Thu tiền theo đơn hàng
+
+Màn `Thu chi` không tạo phiếu thu rời cho đơn bán hàng. Với đơn chọn `paymentMethod = CASH`, FE gọi API thu tiền trên chính order:
+
+```http
+POST /api/orders/:orderId/receive-cash
+```
+
+Body:
+
+```json
+{
+  "amount": 15000,
+  "createdBy": "cashier-user-id"
+}
+```
+
+Sau khi thu tiền thành công, BE:
+
+1. Tạo `payment` cho order.
+2. Cập nhật order sang `paymentStatus = PAID`, `status = 4` (`READY_TO_PICKUP`).
+3. Tạo phiếu xuất kho theo đơn hàng.
+4. Tạo phiếu thu quỹ gắn `orderId`.
+
+Màn `Quản lý tiền` / tab `Thu chi` lấy dữ liệu phiếu thu/chi từ finance:
+
+```http
+GET /api/finance/receipts/received
+GET /api/finance/receipts/paid
+GET /api/finance/transfers
+```
+
+Phiếu thu phát sinh từ đơn hàng sẽ có `orderId` và relation `order`; FE dùng các field này làm tham chiếu đơn hàng thay vì parse chuỗi `note`.
+
+Ví dụ item phiếu thu order:
+
+```json
+{
+  "id": "receipt-id",
+  "code": "PT1782893498119",
+  "amount": 15000,
+  "fundId": "fund-id",
+  "orderId": "order-id",
+  "order": {
+    "id": "order-id",
+    "orderCode": "ORD1782893498031"
+  },
+  "note": "Xuất kho theo đơn hàng ORD1782893498031",
+  "status": "COMPLETED"
+}
+```
+
 ## 6. Confirm Customer Received Order
 
 Có 2 hướng xác nhận.
@@ -1104,13 +1211,13 @@ Response:
 
 Field mapping:
 
-| FE mock/component | Response field |
-| ----------------- | -------------- |
-| `employeeReportData.js` / employee select | `employees` |
-| `employeeChartData.js` / chart top seller | `chart` |
-| `employeeReportTableTimeData.js` / sales report | `sales` |
-| `employeeCashierReportData.js` / cashier report | `cashier` |
-| `employeeProfitReportData.js` / profit report | `profit` |
+| FE mock/component                               | Response field |
+| ----------------------------------------------- | -------------- |
+| `employeeReportData.js` / employee select       | `employees`    |
+| `employeeChartData.js` / chart top seller       | `chart`        |
+| `employeeReportTableTimeData.js` / sales report | `sales`        |
+| `employeeCashierReportData.js` / cashier report | `cashier`      |
+| `employeeProfitReportData.js` / profit report   | `profit`       |
 
 Notes:
 
@@ -1393,21 +1500,21 @@ Response:
 
 Field mapping:
 
-| UI column | Response field |
-| --------- | -------------- |
-| `STT` | `data[].stt` |
-| `NHOM` | `data[].group` |
-| `CODE` | `data[].code` |
-| `TEN HANG` | `data[].name` |
-| `DVT` | `data[].unit` |
-| `So xuat dung cua thang theo doanh thu` | `data[].monthlyUsage` |
-| `Ton Kiem Ke` | `data[].stockOnHand` |
-| `Usage per Mil` | `data[].usagePerMil` |
-| `Min 120%` | `data[].planSales.min` |
-| `Max 150%` | `data[].planSales.max` |
-| `Bao dong` | `data[].warningQuantity` |
-| `So can dat them` | `data[].suggestedOrderQuantity` |
-| `So can dat sau dieu chinh` | FE local editable value |
+| UI column                               | Response field                  |
+| --------------------------------------- | ------------------------------- |
+| `STT`                                   | `data[].stt`                    |
+| `NHOM`                                  | `data[].group`                  |
+| `CODE`                                  | `data[].code`                   |
+| `TEN HANG`                              | `data[].name`                   |
+| `DVT`                                   | `data[].unit`                   |
+| `So xuat dung cua thang theo doanh thu` | `data[].monthlyUsage`           |
+| `Ton Kiem Ke`                           | `data[].stockOnHand`            |
+| `Usage per Mil`                         | `data[].usagePerMil`            |
+| `Min 120%`                              | `data[].planSales.min`          |
+| `Max 150%`                              | `data[].planSales.max`          |
+| `Bao dong`                              | `data[].warningQuantity`        |
+| `So can dat them`                       | `data[].suggestedOrderQuantity` |
+| `So can dat sau dieu chinh`             | FE local editable value         |
 
 Notes:
 

@@ -2,6 +2,7 @@ import { ApiPropertyOptional } from '@nestjs/swagger';
 import {
   IsIn,
   IsInt,
+  Matches,
   IsOptional,
   IsString,
   IsUUID,
@@ -56,6 +57,24 @@ export class MealItemQueryDto {
   @IsOptional()
   @IsString()
   dateKey?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Filter by menu date key from YYYY-MM-DD. Ignored when dateKey is provided.',
+    example: '2026-06-29',
+  })
+  @IsOptional()
+  @Matches(/^\d{4}-\d{2}-\d{2}$/)
+  from?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Filter by menu date key to YYYY-MM-DD. Ignored when dateKey is provided.',
+    example: '2026-07-05',
+  })
+  @IsOptional()
+  @Matches(/^\d{4}-\d{2}-\d{2}$/)
+  to?: string;
 
   @ApiPropertyOptional({
     description: 'Filter by status',

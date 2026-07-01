@@ -44,6 +44,12 @@ export class MealItemController {
     return this.mealItemService.findAllForUser(query, req.user?.userId);
   }
 
+  @Get('week-plan')
+  @ApiOperation({ summary: 'Get meal items grouped as a weekly plan' })
+  async weekPlan(@Query() query: MealItemQueryDto, @Req() req: any) {
+    return this.mealItemService.getWeekPlan(query, req.user?.userId);
+  }
+
   @Get(':id')
   @ApiOperation({ summary: 'Get meal item by ID' })
   @ApiParam({ name: 'id', description: 'Meal item ID' })

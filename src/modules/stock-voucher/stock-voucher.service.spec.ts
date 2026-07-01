@@ -38,6 +38,7 @@ describe('StockVoucherService', () => {
     StockReceiptExport: {
       create: jest.fn((data) => ({ id: 'export-id', ...data })),
       save: jest.fn((entity) => Promise.resolve(entity)),
+      findOne: jest.fn().mockResolvedValue(null),
       update: jest.fn().mockResolvedValue(true),
     },
     StockReceiptTransfer: {
@@ -153,6 +154,12 @@ describe('StockVoucherService', () => {
 
   describe('createImportVoucher', () => {
     it('should create a StockReceiptImport header and corresponding details', async () => {
+      mockRepositories.StockFundReceiptReason.findOne.mockResolvedValueOnce({
+        code: 'NHNCC',
+        fundId: 'fund-id-1',
+        accountingFormula: '{1561:-,1111:+,1331:-}',
+      });
+
       const dto = {
         branchId: 'branch-id-1',
         supplierId: 'supplier-id-1',
@@ -250,10 +257,17 @@ describe('StockVoucherService', () => {
 
   describe('createExportVoucher', () => {
     it('should create a StockReceiptExport header and corresponding details', async () => {
+      mockRepositories.StockFundReceiptReason.findOne.mockResolvedValueOnce({
+        code: 'BH_CASH',
+        fundId: 'fund-id-2',
+        accountingFormula: '{1111:-,5111:+,33311:+}',
+      });
+
       const dto = {
         branchId: 'branch-id-2',
         orderId: 'order-id-1',
         fundId: 'fund-id-2',
+        reasonCode: 'BH_CASH',
         note: 'Export note',
         items: [
           {
@@ -295,6 +309,54 @@ describe('StockVoucherService', () => {
         'export-id',
         { moneyVoucherId: 'money-voucher-id' },
       );
+      expect(result).toBeDefined();
+    });
+
+    it('should clear a customer advance wallet payment without creating another fund receipt', async () => {
+      mockRepositories.StockFundReceiptReason.findOne.mockResolvedValueOnce({
+        code: 'BH_TRA_CHAM',
+        fundId: null,
+        accountingFormula: '{131:-,5111:+,33311:+,3387:+}',
+      });
+
+      const order = {
+        id: 'order-id-advance',
+        branchId: 'branch-id-1',
+        orderCode: 'ORD-ADVANCE',
+        totalAmount: 300,
+        items: [
+          {
+            productId: 'product-id-2',
+            quantity: 2,
+            unitPrice: 150,
+            productName: 'Meal',
+          },
+        ],
+      };
+
+      const payment = {
+        method: 'WALLET',
+        amount: 300,
+      };
+
+      const result = await service.createExportFromOrder(order, payment);
+
+      expect(mockRepositories.StockReceiptExport.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          branchId: 'branch-id-1',
+          orderId: 'order-id-advance',
+          fundId: undefined,
+          totalAmount: 300,
+          status: 'COMPLETED',
+        }),
+      );
+      expect(mockRepositories.StockFundReceiptReason.findOne).toHaveBeenCalledWith({
+        where: {
+          code: 'BH_TRA_CHAM',
+          stock: { branchId: 'branch-id-1' },
+        },
+      });
+      expect(mockFinanceService.createMoneyVoucher).not.toHaveBeenCalled();
       expect(result).toBeDefined();
     });
   });

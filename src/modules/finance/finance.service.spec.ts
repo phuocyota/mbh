@@ -140,6 +140,7 @@ describe('FinanceService', () => {
         type: 'RECEIPT',
         fundId: 'fund-id-1',
         amount: 200,
+        orderId: 'order-id-1',
         purpose: 'ORDER_PAYMENT',
         note: 'Customer paid',
       };
@@ -167,6 +168,7 @@ describe('FinanceService', () => {
           branchId: 'branch-id-1',
           amount: 200,
           fundId: 'fund-id-1',
+          orderId: 'order-id-1',
           status: 'COMPLETED',
           note: 'Customer paid',
         }),
@@ -193,6 +195,7 @@ describe('FinanceService', () => {
         type: 'PAYMENT',
         fundId: 'fund-id-1',
         amount: 300,
+        orderId: 'order-id-1',
         purpose: 'STOCK_IMPORT',
         note: 'Import payment',
       };
@@ -220,6 +223,7 @@ describe('FinanceService', () => {
           branchId: 'branch-id-1',
           amount: 300,
           fundId: 'fund-id-1',
+          orderId: 'order-id-1',
           status: 'COMPLETED',
           note: 'Import payment',
         }),

@@ -162,6 +162,7 @@ export class FinanceService {
             branchId: fund.branchId,
             amount,
             fundId: fund.id,
+            orderId: dto.orderId,
             note: dto.note || dto.purpose,
             status: 'COMPLETED',
           }),
@@ -184,6 +185,7 @@ export class FinanceService {
             branchId: fund.branchId,
             amount,
             fundId: fund.id,
+            orderId: dto.orderId,
             note: dto.note || dto.purpose,
             status: 'COMPLETED',
           }),
@@ -342,14 +344,14 @@ export class FinanceService {
 
   findReceiptsReceived() {
     return this.fundReceiptReceivedRepository.find({
-      relations: ['fund', 'details'],
+      relations: ['fund', 'order', 'details'],
       order: { createdAt: 'DESC' },
     });
   }
 
   findReceiptsPaid() {
     return this.fundReceiptPaidRepository.find({
-      relations: ['fund', 'details'],
+      relations: ['fund', 'order', 'details'],
       order: { createdAt: 'DESC' },
     });
   }

@@ -9,6 +9,7 @@ import { JwtPayload } from '../../common/interface/jwt-payload.interface';
 import { CreateMealItemDto } from './dto/create-meal-item.dto';
 import { UpdateMealItemDto } from './dto/update-meal-item.dto';
 import { MealItemQueryDto } from './dto/meal-item-query.dto';
+import { MEAL_PERIOD } from '../../common/constant/constant';
 
 @Injectable()
 export class MealItemService extends BaseService<MealItem> {
@@ -94,6 +95,45 @@ export class MealItemService extends BaseService<MealItem> {
     );
   }
 
+  async getWeekPlan(filter: MealItemQueryDto = {}, userId?: string) {
+    const range = this.resolveWeekRange(filter);
+    const mealItems = await this.findAllForUser(
+      {
+        ...filter,
+        dateKey: undefined,
+        from: range.from,
+        to: range.to,
+      },
+      userId,
+    );
+    const mealPeriods = this.resolveWeekMealPeriods(filter, mealItems);
+    const days = this.buildWeekDays(range.from, range.to).map((dateKey) => ({
+      dateKey,
+      dayOfWeek: this.getDayOfWeek(dateKey),
+      meals: mealPeriods.map((mealPeriod) => ({
+        mealPeriod,
+        items: mealItems.filter(
+          (item) => item.dateKey === dateKey && item.mealPeriod === mealPeriod,
+        ),
+      })),
+    }));
+    const addedSlots = days.reduce((total, day) => {
+      return total + day.meals.filter((meal) => meal.items.length > 0).length;
+    }, 0);
+
+    return {
+      from: range.from,
+      to: range.to,
+      branchId: filter.branchId || null,
+      level: filter.level || null,
+      status: filter.status || null,
+      mealPeriods,
+      totalSlots: days.length * mealPeriods.length,
+      addedSlots,
+      days,
+    };
+  }
+
   private async findCustomerMealItems(
     customerId: string,
     filter: MealItemQueryDto,
@@ -144,6 +184,14 @@ export class MealItemService extends BaseService<MealItem> {
       query.andWhere('mealItem.date_key = :dateKey', {
         dateKey: filter.dateKey,
       });
+    } else {
+      if (filter.from) {
+        query.andWhere('mealItem.date_key >= :from', { from: filter.from });
+      }
+
+      if (filter.to) {
+        query.andWhere('mealItem.date_key <= :to', { to: filter.to });
+      }
     }
 
     if (filter.status) {
@@ -173,6 +221,89 @@ export class MealItemService extends BaseService<MealItem> {
     if (left === undefined) return 1;
     if (right === undefined) return -1;
     return left - right;
+  }
+
+  private resolveWeekMealPeriods(
+    filter: MealItemQueryDto,
+    mealItems: MealItem[],
+  ) {
+    if (filter.mealPeriod) {
+      return [filter.mealPeriod];
+    }
+
+    const defaultMealPeriods = [
+      MEAL_PERIOD.BREAKFAST,
+      MEAL_PERIOD.LUNCH,
+      MEAL_PERIOD.AFTERNOON,
+    ];
+    const mealPeriodOrder = [
+      MEAL_PERIOD.BREAKFAST,
+      MEAL_PERIOD.LUNCH,
+      MEAL_PERIOD.AFTERNOON,
+      MEAL_PERIOD.DINNER,
+    ];
+    const extraMealPeriods = Array.from(
+      new Set(mealItems.map((mealItem) => mealItem.mealPeriod)),
+    )
+      .filter((mealPeriod) => !defaultMealPeriods.includes(mealPeriod as any))
+      .sort(
+        (left, right) =>
+          mealPeriodOrder.indexOf(left as any) -
+          mealPeriodOrder.indexOf(right as any),
+      );
+
+    return [...defaultMealPeriods, ...extraMealPeriods];
+  }
+
+  private resolveWeekRange(filter: MealItemQueryDto) {
+    if (filter.from && filter.to) {
+      return { from: filter.from, to: filter.to };
+    }
+
+    const baseDateKey =
+      filter.dateKey || filter.from || this.toDateKey(new Date());
+    const baseDate = this.parseDateKey(baseDateKey);
+    const day = baseDate.getUTCDay();
+    const mondayOffset = day === 0 ? -6 : 1 - day;
+    const monday = this.addDays(baseDate, mondayOffset);
+    const sunday = this.addDays(monday, 6);
+
+    return {
+      from: this.toDateKey(monday),
+      to: this.toDateKey(sunday),
+    };
+  }
+
+  private buildWeekDays(from: string, to: string) {
+    const days: string[] = [];
+    let current = this.parseDateKey(from);
+    const end = this.parseDateKey(to);
+
+    while (current.getTime() <= end.getTime()) {
+      days.push(this.toDateKey(current));
+      current = this.addDays(current, 1);
+    }
+
+    return days;
+  }
+
+  private parseDateKey(dateKey: string) {
+    const [year, month, day] = dateKey.split('-').map(Number);
+    return new Date(Date.UTC(year, month - 1, day));
+  }
+
+  private addDays(date: Date, days: number) {
+    const nextDate = new Date(date);
+    nextDate.setUTCDate(nextDate.getUTCDate() + days);
+    return nextDate;
+  }
+
+  private toDateKey(date: Date) {
+    return date.toISOString().slice(0, 10);
+  }
+
+  private getDayOfWeek(dateKey: string) {
+    return this.parseDateKey(dateKey).getUTCDay();
   }
 
   async findOne(id: string) {
