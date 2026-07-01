@@ -8,6 +8,7 @@ import { EntityManager, Repository } from 'typeorm';
 import { Wallet } from '../../entities/wallet.entity';
 import { WalletTransaction } from '../../entities/wallet-transaction.entity';
 import { Customer } from '../../entities/customer.entity';
+import { StockFundReceiptReason } from '../../entities/stock-fund-receipt-reason.entity';
 import { BaseService } from '../../common/sql/base.service';
 import { ERROR_MESSAGES } from '../../common/constant/error-messages.constant';
 import { CustomerService } from '../customer/customer.service';
@@ -16,6 +17,8 @@ import {
   WALLET_TRANSACTION_REF_TYPE,
   WALLET_TRANSACTION_TYPE,
 } from '../../common/constant/constant';
+
+const DEFERRED_PAYMENT_REASON_CODE = 'TT_TRA_CHAM';
 
 export interface TopupResult {
   walletId: string;
@@ -93,6 +96,7 @@ export class WalletService extends BaseService<Wallet> {
       const walletRepository = manager.getRepository(Wallet);
       const walletTransactionRepository =
         manager.getRepository(WalletTransaction);
+      const reasonRepository = manager.getRepository(StockFundReceiptReason);
 
       const customer = await customerRepository.findOne({
         where: { id: customerId },
@@ -125,7 +129,18 @@ export class WalletService extends BaseService<Wallet> {
       }
 
       const balanceBefore = Number(wallet.balance);
-      const balanceAfter = balanceBefore + Number(amount);
+      const topupAmount = Number(amount);
+      const outstandingAdvance = Math.max(0, -balanceBefore);
+      if (outstandingAdvance <= 0) {
+        throw new BadRequestException('Customer has no advance amount to repay');
+      }
+      if (topupAmount > outstandingAdvance) {
+        throw new BadRequestException(
+          'Topup amount cannot exceed the outstanding advance amount',
+        );
+      }
+
+      const balanceAfter = balanceBefore + topupAmount;
 
       wallet.balance = balanceAfter;
       wallet.updatedBy = createdBy;
@@ -137,14 +152,24 @@ export class WalletService extends BaseService<Wallet> {
         balanceAfter,
       );
 
+      const deferredReason = await reasonRepository.findOne({
+        where: { code: DEFERRED_PAYMENT_REASON_CODE },
+      });
+      if (!deferredReason?.accountingFormula) {
+        throw new BadRequestException(
+          'Deferred payment accounting reason is not configured',
+        );
+      }
+
       const tx = walletTransactionRepository.create({
         walletId: wallet.id,
         customerId,
         type: WALLET_TRANSACTION_TYPE.TOPUP,
-        amount,
+        amount: topupAmount,
         balanceBefore,
         balanceAfter,
         refType: WALLET_TRANSACTION_REF_TYPE.MANUAL,
+        reasonCode: DEFERRED_PAYMENT_REASON_CODE,
         note,
         createdBy,
       });

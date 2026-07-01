@@ -30,6 +30,9 @@ export class WalletTransaction extends BaseEntity {
   @Column('uuid', { nullable: true, name: 'ref_id' })
   refId: string;
 
+  @Column('varchar', { nullable: true, name: 'reason_code' })
+  reasonCode: string;
+
   @Column('text', { nullable: true })
   note: string;
 

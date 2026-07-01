@@ -10,6 +10,11 @@ export class SeedDeferredSaleReason1704067251000
     `);
 
     await queryRunner.query(`
+      ALTER TABLE "wallet_transactions"
+        ADD COLUMN IF NOT EXISTS "reason_code" character varying
+    `);
+
+    await queryRunner.query(`
       INSERT INTO "stock_fund_receipt_reason" (
         "code",
         "reason",
@@ -51,6 +56,41 @@ export class SeedDeferredSaleReason1704067251000
         "status" = 'active',
         "updated_at" = CURRENT_TIMESTAMP
       WHERE "code" = 'BH_TRA_CHAM'
+    `);
+
+    await queryRunner.query(`
+      INSERT INTO "stock_fund_receipt_reason" (
+        "code",
+        "reason",
+        "note",
+        "fund_id",
+        "status",
+        "accounting_formula"
+      )
+      SELECT
+        'TT_TRA_CHAM',
+        U&'Thanh to\\00E1n tr\\1EA3 ch\\1EADm',
+        'Default reason for deferred payment settlement during wallet topup',
+        NULL,
+        'active',
+        '{3387:-}'
+      WHERE NOT EXISTS (
+        SELECT 1
+        FROM "stock_fund_receipt_reason"
+        WHERE "code" = 'TT_TRA_CHAM'
+      )
+    `);
+
+    await queryRunner.query(`
+      UPDATE "stock_fund_receipt_reason"
+      SET
+        "reason" = U&'Thanh to\\00E1n tr\\1EA3 ch\\1EADm',
+        "note" = 'Default reason for deferred payment settlement during wallet topup',
+        "fund_id" = NULL,
+        "accounting_formula" = '{3387:-}',
+        "status" = 'active',
+        "updated_at" = CURRENT_TIMESTAMP
+      WHERE "code" = 'TT_TRA_CHAM'
     `);
 
     await queryRunner.query(`
@@ -100,7 +140,12 @@ export class SeedDeferredSaleReason1704067251000
 
     await queryRunner.query(`
       DELETE FROM "stock_fund_receipt_reason"
-      WHERE "code" = 'BH_TRA_CHAM'
+      WHERE "code" IN ('BH_TRA_CHAM', 'TT_TRA_CHAM')
+    `);
+
+    await queryRunner.query(`
+      ALTER TABLE "wallet_transactions"
+        DROP COLUMN IF EXISTS "reason_code"
     `);
 
     await queryRunner.query(`

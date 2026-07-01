@@ -42,6 +42,15 @@ export class CreateWalletTransactionDto {
   referenceId?: string;
 
   @ApiProperty({
+    description: 'Accounting reason code',
+    example: 'TT_TRA_CHAM',
+    required: false,
+  })
+  @IsOptional()
+  @IsString()
+  reasonCode?: string;
+
+  @ApiProperty({
     description: 'Notes',
     example: 'Top up wallet',
     required: false,

@@ -27,6 +27,13 @@ export class WalletTransactionDto extends BaseDto {
   referenceId?: string;
 
   @ApiProperty({
+    description: 'Accounting reason code',
+    example: 'TT_TRA_CHAM',
+    required: false,
+  })
+  reasonCode?: string;
+
+  @ApiProperty({
     description: 'Notes',
     example: 'Top up wallet',
   })
