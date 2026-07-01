@@ -9,6 +9,8 @@ import {
   Post,
   Put,
   Query,
+  Req,
+  UseGuards,
 } from '@nestjs/common';
 import {
   ApiBearerAuth,
@@ -22,10 +24,12 @@ import { CreateMealItemDto } from './dto/create-meal-item.dto';
 import { UpdateMealItemDto } from './dto/update-meal-item.dto';
 import { MealItemQueryDto } from './dto/meal-item-query.dto';
 import { MealItemDto } from './dto/meal-item.dto';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
 @ApiTags('Meal Items')
 @ApiBearerAuth()
 @Controller('meal-items')
+@UseGuards(JwtAuthGuard)
 export class MealItemController {
   constructor(private mealItemService: MealItemService) {}
 
@@ -36,8 +40,8 @@ export class MealItemController {
     description: 'List of meal items',
     type: [MealItemDto],
   })
-  async findAll(@Query() query: MealItemQueryDto) {
-    return this.mealItemService.findAll(query);
+  async findAll(@Query() query: MealItemQueryDto, @Req() req: any) {
+    return this.mealItemService.findAllForUser(query, req.user?.userId);
   }
 
   @Get(':id')

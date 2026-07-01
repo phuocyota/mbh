@@ -349,6 +349,8 @@ Status values:
 
 Luu y: App co response wrapper, FE doc data tai `response.data.data`.
 
+Luu y cho app phu huynh/hoc sinh: `GET /api/meal-items` se doc JWT token, tim `customer` theo `userId`, uu tien cac mon trong `customer_meal_items` cua khach hang do. Nhung mon khong co cau hinh rieng se fallback ve danh sach mac dinh trong `meal_items`.
+
 ### Lay danh sach mon theo buoi
 
 ```http
@@ -382,6 +384,14 @@ Response `data`:
     "sortOrder": 1,
     "status": "ACTIVE",
     "note": "Available on weekdays",
+    "customerMealItem": {
+      "id": "customer-meal-item-id",
+      "customerId": "customer-id",
+      "mealItemId": "meal-item-id",
+      "quantity": 1,
+      "status": "ACTIVE",
+      "note": "Khong cay, it sot"
+    },
     "branch": {
       "id": "branch-id",
       "name": "Kido"
@@ -480,6 +490,111 @@ Body: partial cua body create.
 
 ```http
 DELETE /api/meal-items/:id
+```
+
+Response: HTTP `204 No Content`.
+
+## 3.2 Customer Meal Items - Mon theo nhu cau khach hang
+
+API luu mon an theo nhu cau tung khach hang. Moi record tro den mot `mealItem` da co trong thuc don, kem so luong va ghi chu rieng cua khach.
+
+Auth: can JWT.
+
+### Lay danh sach mon theo khach
+
+```http
+GET /api/customer-meal-items
+GET /api/customer-meal-items?customerId=customer-id
+GET /api/customer-meal-items?customerId=customer-id&dateKey=2026-07-01&mealPeriod=LUNCH&status=ACTIVE
+GET /api/customer-meal-items?branchId=branch-id&dateKey=2026-07-01
+```
+
+Query params:
+
+- `customerId`: optional.
+- `mealItemId`: optional.
+- `branchId`: optional, filter theo `mealItem.branchId`.
+- `mealPeriod`: optional, filter theo `mealItem.mealPeriod`.
+- `level`: optional, filter theo `mealItem.level`.
+- `dayOfWeek`: optional, filter theo `mealItem.dayOfWeek`.
+- `dateKey`: optional, filter theo `mealItem.dateKey`.
+- `status`: optional, `ACTIVE` | `INACTIVE` | `DELETED`.
+
+Response `data`:
+
+```json
+[
+  {
+    "id": "customer-meal-item-id",
+    "customerId": "customer-id",
+    "mealItemId": "meal-item-id",
+    "quantity": 1,
+    "status": "ACTIVE",
+    "note": "Khong cay, it sot",
+    "customer": {
+      "id": "customer-id",
+      "fullName": "Nguyen Van A"
+    },
+    "mealItem": {
+      "id": "meal-item-id",
+      "branchId": "branch-id",
+      "productId": "product-id",
+      "mealPeriod": "LUNCH",
+      "level": "primary",
+      "dayOfWeek": 1,
+      "dateKey": "2026-07-01",
+      "product": {
+        "id": "product-id",
+        "name": "Com thit kho trung"
+      }
+    }
+  }
+]
+```
+
+### Tao mon theo nhu cau khach
+
+```http
+POST /api/customer-meal-items
+```
+
+Body:
+
+```json
+{
+  "customerId": "customer-id",
+  "mealItemId": "meal-item-id",
+  "quantity": 1,
+  "status": "ACTIVE",
+  "note": "Khong cay, it sot"
+}
+```
+
+Required:
+
+- `customerId`
+- `mealItemId`
+
+Optional:
+
+- `quantity`: default `1`
+- `status`: default `ACTIVE`
+- `note`
+
+Rule backend: mot khach hang khong duoc gan trung cung mot `mealItemId`.
+
+### Cap nhat mon theo nhu cau khach
+
+```http
+PUT /api/customer-meal-items/:id
+```
+
+Body: partial cua body create.
+
+### Xoa mon theo nhu cau khach
+
+```http
+DELETE /api/customer-meal-items/:id
 ```
 
 Response: HTTP `204 No Content`.

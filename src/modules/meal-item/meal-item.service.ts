@@ -2,6 +2,8 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { MealItem } from '../../entities/meal-item.entity';
+import { Customer } from '../../entities/customer.entity';
+import { CustomerMealItem } from '../../entities/customer-meal-item.entity';
 import { BaseService } from '../../common/sql/base.service';
 import { JwtPayload } from '../../common/interface/jwt-payload.interface';
 import { CreateMealItemDto } from './dto/create-meal-item.dto';
@@ -13,6 +15,10 @@ export class MealItemService extends BaseService<MealItem> {
   constructor(
     @InjectRepository(MealItem)
     private mealItemRepository: Repository<MealItem>,
+    @InjectRepository(Customer)
+    private customerRepository: Repository<Customer>,
+    @InjectRepository(CustomerMealItem)
+    private customerMealItemRepository: Repository<CustomerMealItem>,
   ) {
     super(mealItemRepository);
   }
@@ -28,6 +34,90 @@ export class MealItemService extends BaseService<MealItem> {
       .leftJoinAndSelect('mealItem.product', 'product')
       .leftJoinAndSelect('product.category', 'category');
 
+    this.applyMealItemFilter(query, filter);
+
+    return query
+      .orderBy('mealItem.date_key', 'ASC', 'NULLS LAST')
+      .addOrderBy('mealItem.day_of_week', 'ASC', 'NULLS LAST')
+      .addOrderBy('mealItem.meal_period', 'ASC')
+      .addOrderBy('mealItem.sort_order', 'ASC')
+      .addOrderBy('product.name', 'ASC')
+      .getMany();
+  }
+
+  async findAllForUser(filter: MealItemQueryDto = {}, userId?: string) {
+    if (!userId) {
+      return this.findAll(filter);
+    }
+
+    const customer = await this.customerRepository.findOne({
+      where: { userId },
+    });
+
+    if (!customer) {
+      return this.findAll(filter);
+    }
+
+    const [defaultMealItems, customerMealItems] = await Promise.all([
+      this.findAll(filter),
+      this.findCustomerMealItems(customer.id, filter),
+    ]);
+
+    const mergedMealItems = new Map<string, MealItem>();
+
+    customerMealItems.forEach((customerMealItem) => {
+      const mealItem = customerMealItem.mealItem;
+      if (!mealItem) {
+        return;
+      }
+
+      (mealItem as any).customerMealItem = {
+        id: customerMealItem.id,
+        customerId: customerMealItem.customerId,
+        mealItemId: customerMealItem.mealItemId,
+        quantity: customerMealItem.quantity,
+        status: customerMealItem.status,
+        note: customerMealItem.note,
+      };
+
+      mergedMealItems.set(mealItem.id, mealItem);
+    });
+
+    defaultMealItems.forEach((mealItem) => {
+      if (!mergedMealItems.has(mealItem.id)) {
+        mergedMealItems.set(mealItem.id, mealItem);
+      }
+    });
+
+    return Array.from(mergedMealItems.values()).sort((left, right) =>
+      this.compareMealItems(left, right),
+    );
+  }
+
+  private async findCustomerMealItems(
+    customerId: string,
+    filter: MealItemQueryDto,
+  ) {
+    const query = this.customerMealItemRepository
+      .createQueryBuilder('customerMealItem')
+      .leftJoinAndSelect('customerMealItem.mealItem', 'mealItem')
+      .leftJoinAndSelect('mealItem.branch', 'branch')
+      .leftJoinAndSelect('mealItem.product', 'product')
+      .leftJoinAndSelect('product.category', 'category')
+      .where('customerMealItem.customer_id = :customerId', { customerId });
+
+    this.applyMealItemFilter(query, filter);
+
+    if (filter.status) {
+      query.andWhere('customerMealItem.status = :status', {
+        status: filter.status,
+      });
+    }
+
+    return query.getMany();
+  }
+
+  private applyMealItemFilter(query: any, filter: MealItemQueryDto) {
     if (filter.branchId) {
       query.andWhere('mealItem.branch_id = :branchId', {
         branchId: filter.branchId,
@@ -59,14 +149,30 @@ export class MealItemService extends BaseService<MealItem> {
     if (filter.status) {
       query.andWhere('mealItem.status = :status', { status: filter.status });
     }
+  }
 
-    return query
-      .orderBy('mealItem.date_key', 'ASC', 'NULLS LAST')
-      .addOrderBy('mealItem.day_of_week', 'ASC', 'NULLS LAST')
-      .addOrderBy('mealItem.meal_period', 'ASC')
-      .addOrderBy('mealItem.sort_order', 'ASC')
-      .addOrderBy('product.name', 'ASC')
-      .getMany();
+  private compareMealItems(left: MealItem, right: MealItem) {
+    return (
+      this.compareNullableString(left.dateKey, right.dateKey) ||
+      this.compareNullableNumber(left.dayOfWeek, right.dayOfWeek) ||
+      left.mealPeriod.localeCompare(right.mealPeriod) ||
+      left.sortOrder - right.sortOrder ||
+      (left.product?.name || '').localeCompare(right.product?.name || '')
+    );
+  }
+
+  private compareNullableString(left?: string, right?: string) {
+    if (!left && !right) return 0;
+    if (!left) return 1;
+    if (!right) return -1;
+    return left.localeCompare(right);
+  }
+
+  private compareNullableNumber(left?: number, right?: number) {
+    if (left === undefined && right === undefined) return 0;
+    if (left === undefined) return 1;
+    if (right === undefined) return -1;
+    return left - right;
   }
 
   async findOne(id: string) {

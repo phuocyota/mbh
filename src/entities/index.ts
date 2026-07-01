@@ -7,6 +7,7 @@ export { WalletTransaction } from './wallet-transaction.entity';
 export { Category } from './category.entity';
 export { Product } from './product.entity';
 export { MealItem } from './meal-item.entity';
+export { CustomerMealItem } from './customer-meal-item.entity';
 export { ProductPriceHistory } from './product-price-history.entity';
 export { Order } from './order.entity';
 export { OrderItem } from './order-item.entity';
