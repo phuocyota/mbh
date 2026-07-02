@@ -5,6 +5,7 @@ import { Customer } from '../../entities/customer.entity';
 import { Class } from '../../entities/class.entity';
 import { StudentCard } from '../../entities/student-card.entity';
 import { StudentProfile } from '../../entities/student-profile.entity';
+import { Branch } from '../../entities/branch.entity';
 import { BaseService } from '../../common/sql/base.service';
 import { ERROR_MESSAGES } from '../../common/constant/error-messages.constant';
 import { COMMON_STATUS } from '../../common/constant/constant';
@@ -21,6 +22,8 @@ export class CustomerService extends BaseService<Customer> {
     private studentProfileRepository: Repository<StudentProfile>,
     @InjectRepository(Class)
     private classRepository: Repository<Class>,
+    @InjectRepository(Branch)
+    private branchRepository: Repository<Branch>,
   ) {
     super(customerRepository);
   }
@@ -84,6 +87,8 @@ export class CustomerService extends BaseService<Customer> {
 
     let schoolName: string | null = null;
     let className: string | null = null;
+    let branchId: string | null = null;
+    let branchName: string | null = null;
 
     if (classId) {
       const classEntity = await this.classRepository.findOne({
@@ -92,11 +97,23 @@ export class CustomerService extends BaseService<Customer> {
       });
       className = classEntity?.name || null;
       schoolName = classEntity?.school?.name || null;
+
+      if (schoolName) {
+        const branch = await this.branchRepository
+          .createQueryBuilder('branch')
+          .where('LOWER(branch.name) = LOWER(:schoolName)', { schoolName })
+          .getOne();
+
+        branchId = branch?.id || null;
+        branchName = branch?.name || null;
+      }
     }
 
     return {
       school: schoolName,
       class: className,
+      branchId,
+      branchName,
       studentCode: customer.studentProfile?.studentCode || null,
       studentFullName: customer.studentProfile?.fullName || customer.fullName,
       walletBalance: customer.wallet?.balance || 0,

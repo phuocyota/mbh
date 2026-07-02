@@ -11,11 +11,12 @@ async function run() {
   await client.connect();
   
   const cols = await client.query(`
-    SELECT column_name, data_type 
-    FROM information_schema.columns 
-    WHERE table_name = 'meal_items'
+    SELECT u.email, c.full_name, c.type 
+    FROM users u
+    JOIN customers c ON u.id = c.user_id
+    LIMIT 10
   `);
-  console.log('Columns:', cols.rows);
+  console.log('Users and Customers:', cols.rows);
   
   await client.end();
 }

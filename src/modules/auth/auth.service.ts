@@ -32,10 +32,17 @@ export class AuthService {
   }
 
   async login(user: any, deviceId?: string) {
-    const branchInfo = user.branchId
+    const studentInfo =
+      user.role === USER_ROLE.STUDENT
+        ? await this.getStudentInfo(user.id)
+        : {};
+    const resolvedBranchId = user.branchId || (studentInfo as any).branchId;
+    const resolvedBranchName =
+      user.branch?.name || (studentInfo as any).branchName;
+    const branchInfo = resolvedBranchId
       ? {
-          branchId: user.branchId,
-          branchName: user.branch?.name || null,
+          branchId: resolvedBranchId,
+          branchName: resolvedBranchName || null,
         }
       : {};
 
@@ -57,9 +64,7 @@ export class AuthService {
       ...branchInfo,
     };
 
-    // Add student-specific info if role is STUDENT
     if (user.role === USER_ROLE.STUDENT) {
-      const studentInfo = await this.getStudentInfo(user.id);
       Object.assign(result, studentInfo);
     }
 
