@@ -8,6 +8,7 @@ import { Repository } from 'typeorm';
 import { Coupon } from 'src/entities';
 import { ERROR_MESSAGES } from '../../common/constant/error-messages.constant';
 import { COUPON_STATUS } from '../../common/constant/constant';
+import { normalizePagination, toPaginationResponse } from '../../common/dto/pagination.dto';
 
 @Injectable()
 export class CouponService {
@@ -45,11 +46,16 @@ export class CouponService {
     return coupon;
   }
 
-  async getCustomerCoupons(customerId: string) {
-    return await this.couponRepository.find({
+  async getCustomerCoupons(customerId: string, page?: number | string, size?: number | string) {
+    const pagination = normalizePagination(page, size);
+    const [data, total] = await this.couponRepository.findAndCount({
       where: { customerId, status: COUPON_STATUS.ACTIVE },
       order: { createdAt: 'DESC' },
+      skip: pagination.skip,
+      take: pagination.size,
     });
+
+    return toPaginationResponse(data, total, pagination.page, pagination.size);
   }
 
   async getBestAvailableCoupon(customerId: string) {
@@ -122,20 +128,15 @@ export class CouponService {
     return coupon;
   }
 
-  async getAllCoupons(page: number = 1, limit: number = 10) {
+  async getAllCoupons(page?: number | string, size?: number | string) {
+    const pagination = normalizePagination(page, size);
     const [coupons, total] = await this.couponRepository.findAndCount({
-      skip: (page - 1) * limit,
-      take: limit,
+      skip: pagination.skip,
+      take: pagination.size,
       order: { createdAt: 'DESC' },
     });
 
-    return {
-      data: coupons,
-      total,
-      page,
-      limit,
-      pages: Math.ceil(total / limit),
-    };
+    return toPaginationResponse(coupons, total, pagination.page, pagination.size);
   }
 
   async updateCoupon(

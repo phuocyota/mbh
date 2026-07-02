@@ -3,10 +3,17 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { EntityManager, Repository, Like, DataSource, In } from 'typeorm';
 import { Supplier, Debt, StockReceiptImport, MoneyVoucher } from '../../entities';
 import { BaseService } from '../../common/sql/base.service';
+import {
+  normalizePagination,
+  PaginationResponseDto,
+  toPaginationResponse,
+} from '../../common/dto/pagination.dto';
 
 interface FindAllOptions {
   status?: string;
   search?: string;
+  page?: number | string;
+  size?: number | string;
 }
 
 @Injectable()
@@ -25,7 +32,8 @@ export class SupplierService extends BaseService<Supplier> {
     return 'Supplier';
   }
 
-  async findAll(options?: FindAllOptions): Promise<Supplier[]> {
+  async findAll(options?: FindAllOptions): Promise<PaginationResponseDto<Supplier>> {
+    const pagination = normalizePagination(options?.page, options?.size);
     const where: any = {};
     
     if (options?.status && options.status !== 'all') {
@@ -34,16 +42,26 @@ export class SupplierService extends BaseService<Supplier> {
     
     if (options?.search) {
       const searchTerm = `%${options.search}%`;
-      return this.supplierRepository.find({
+      const [data, total] = await this.supplierRepository.findAndCount({
         where: [
           { ...where, code: Like(searchTerm) },
           { ...where, name: Like(searchTerm) },
           { ...where, phone: Like(searchTerm) },
         ],
+        skip: pagination.skip,
+        take: pagination.size,
       });
+
+      return toPaginationResponse(data, total, pagination.page, pagination.size);
     }
     
-    return this.supplierRepository.find({ where });
+    const [data, total] = await this.supplierRepository.findAndCount({
+      where,
+      skip: pagination.skip,
+      take: pagination.size,
+    });
+
+    return toPaginationResponse(data, total, pagination.page, pagination.size);
   }
 
   async generateCode(): Promise<string> {

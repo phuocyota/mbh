@@ -6,6 +6,7 @@ import { StockItem } from '../../entities/stock-item.entity';
 import { BaseService } from '../../common/sql/base.service';
 import { ERROR_MESSAGES } from '../../common/constant/error-messages.constant';
 import { CategoryService } from '../category/category.service';
+import { normalizePagination, toPaginationResponse } from '../../common/dto/pagination.dto';
 
 type ProductPriceFilter = {
   minPrice?: number;
@@ -15,8 +16,8 @@ type ProductPriceFilter = {
   search?: string;
   displayStatus?: string;
   stockStatus?: string;
-  page?: number;
-  limit?: number;
+  page?: number | string;
+  size?: number | string;
 };
 
 @Injectable()
@@ -32,9 +33,7 @@ export class ProductService extends BaseService<Product> {
   }
 
   async findProducts(categoryId?: string, filter: ProductPriceFilter = {}) {
-    const page = filter.page || 1;
-    const limit = filter.limit || 22;
-    const skip = (page - 1) * limit;
+    const pagination = normalizePagination(filter.page, filter.size);
 
     const query = this.productRepository
       .createQueryBuilder('p')
@@ -95,21 +94,15 @@ export class ProductService extends BaseService<Product> {
 
     this.applyPriceFilter(query, 'p', filter);
 
+    query.orderBy('category.sortOrder', 'ASC').addOrderBy('p.name', 'ASC');
+
     const [products, total] = await query
-      .orderBy('category.sortOrder', 'ASC')
-      .addOrderBy('p.name', 'ASC')
-      .skip(skip)
-      .take(limit)
+      .skip(pagination.skip)
+      .take(pagination.size)
       .getManyAndCount();
 
     if (!filter.branchId || !products.length) {
-      return {
-        items: products,
-        total,
-        page,
-        limit,
-        totalPages: Math.ceil(total / limit),
-      };
+      return toPaginationResponse(products, total, pagination.page, pagination.size);
     }
 
     const stockRows = await this.productRepository.manager
@@ -133,13 +126,7 @@ export class ProductService extends BaseService<Product> {
       (product as any).remain = stockByProductId.get(product.id) || 0;
     });
 
-    return {
-      items: products,
-      total,
-      page,
-      limit,
-      totalPages: Math.ceil(total / limit),
-    };
+    return toPaginationResponse(products, total, pagination.page, pagination.size);
   }
 
   async findOne(id: string) {
@@ -321,8 +308,8 @@ export class ProductService extends BaseService<Product> {
     }
   }
 
-  async findAllCategories() {
-    return this.categoryService.findActive();
+  async findAllCategories(page?: number | string, size?: number | string) {
+    return this.categoryService.findActive(page, size);
   }
 
   async findAllCategoriesWithProducts(filter: ProductPriceFilter = {}) {

@@ -9,6 +9,11 @@ import {
 import { JwtPayload } from '../interface/jwt-payload.interface';
 import { BaseEntity } from './base.entity';
 import { ERROR_MESSAGES } from '../constant/error-messages.constant';
+import {
+  normalizePagination,
+  PaginationResponseDto,
+  toPaginationResponse,
+} from '../dto/pagination.dto';
 
 export abstract class BaseService<T extends BaseEntity> {
   constructor(protected readonly repo: Repository<T>) {}
@@ -47,8 +52,17 @@ export abstract class BaseService<T extends BaseEntity> {
     }
   }
 
-  async findAll(): Promise<T[]> {
-    return this.repo.find();
+  async findAll(
+    page?: any,
+    size?: any,
+  ): Promise<PaginationResponseDto<T>> {
+    const pagination = normalizePagination(page, size);
+    const [data, total] = await this.repo.findAndCount({
+      skip: pagination.skip,
+      take: pagination.size,
+    });
+
+    return toPaginationResponse(data, total, pagination.page, pagination.size);
   }
 
   async findById(id: string): Promise<T | null> {

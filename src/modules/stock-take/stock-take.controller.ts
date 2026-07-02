@@ -15,11 +15,15 @@ export class StockTakeController {
   @ApiOperation({ summary: 'Get all stock takes' })
   @ApiQuery({ name: 'status', required: false })
   @ApiQuery({ name: 'branchId', required: false })
+  @ApiQuery({ name: 'page', required: false, type: Number })
+  @ApiQuery({ name: 'size', required: false, type: Number })
   findAll(
     @Query('status') status?: string,
     @Query('branchId') branchId?: string,
+    @Query('page') page?: string,
+    @Query('size') size?: string,
   ) {
-    return this.stockTakeService.findAll({ status, branchId });
+    return this.stockTakeService.findAll({ status, branchId, page, size });
   }
 
   @Get(':id')

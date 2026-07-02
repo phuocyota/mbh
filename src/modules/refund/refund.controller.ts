@@ -10,6 +10,7 @@ import {
   HttpStatus,
   UseGuards,
   Req,
+  Query,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -40,15 +41,22 @@ export class RefundController {
     description: 'List of refunds',
     type: [RefundDto],
   })
-  async findAll() {
-    return this.refundService.findAll();
+  async findAll(
+    @Query('page') page?: string,
+    @Query('size') size?: string,
+  ) {
+    return this.refundService.findAll(page, size);
   }
 
   @Get('by-order/:orderId')
   @ApiOperation({ summary: 'Lấy danh sách refund theo order' })
   @ApiParam({ name: 'orderId', description: 'Order ID' })
-  async findByOrder(@Param('orderId') orderId: string) {
-    return this.refundService.findByOrder(orderId);
+  async findByOrder(
+    @Param('orderId') orderId: string,
+    @Query('page') page?: string,
+    @Query('size') size?: string,
+  ) {
+    return this.refundService.findByOrder(orderId, page, size);
   }
 
   @Get(':id')

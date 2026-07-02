@@ -34,8 +34,12 @@ export class EmployeeController {
   @ApiOperation({ summary: 'Lấy danh sách nhân viên, lọc theo trạng thái' })
   @ApiQuery({ name: 'status', required: false, enum: ['working', 'quit'], description: 'Lọc theo trạng thái' })
   @ApiResponse({ status: 200, description: 'Danh sách nhân viên' })
-  async findAll(@Query('status') status?: string) {
-    return this.employeeService.findAll(status);
+  async findAll(
+    @Query('status') status?: string,
+    @Query('page') page?: string,
+    @Query('size') size?: string,
+  ) {
+    return this.employeeService.findAll(status, page, size);
   }
 
   @Get(':id')

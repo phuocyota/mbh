@@ -7,6 +7,7 @@ import { JwtPayload } from '../../common/interface/jwt-payload.interface';
 import { CreateCustomerMealItemDto } from './dto/create-customer-meal-item.dto';
 import { UpdateCustomerMealItemDto } from './dto/update-customer-meal-item.dto';
 import { CustomerMealItemQueryDto } from './dto/customer-meal-item-query.dto';
+import { normalizePagination, toPaginationResponse } from '../../common/dto/pagination.dto';
 
 @Injectable()
 export class CustomerMealItemService extends BaseService<CustomerMealItem> {
@@ -22,6 +23,7 @@ export class CustomerMealItemService extends BaseService<CustomerMealItem> {
   }
 
   async findAll(filter: CustomerMealItemQueryDto = {}) {
+    const pagination = normalizePagination(filter.page, filter.size);
     const query = this.customerMealItemRepository
       .createQueryBuilder('customerMealItem')
       .leftJoinAndSelect('customerMealItem.customer', 'customer')
@@ -76,13 +78,17 @@ export class CustomerMealItemService extends BaseService<CustomerMealItem> {
       });
     }
 
-    return query
+    const [data, total] = await query
       .orderBy('mealItem.date_key', 'ASC', 'NULLS LAST')
       .addOrderBy('mealItem.day_of_week', 'ASC', 'NULLS LAST')
       .addOrderBy('mealItem.meal_period', 'ASC')
       .addOrderBy('product.name', 'ASC')
       .addOrderBy('customer.full_name', 'ASC')
-      .getMany();
+      .skip(pagination.skip)
+      .take(pagination.size)
+      .getManyAndCount();
+
+    return toPaginationResponse(data, total, pagination.page, pagination.size);
   }
 
   async findOne(id: string) {

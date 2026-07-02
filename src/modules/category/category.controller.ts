@@ -8,6 +8,7 @@ import {
   Delete,
   HttpCode,
   HttpStatus,
+  Query,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -33,8 +34,11 @@ export class CategoryController {
     description: 'List of categories',
     type: [CategoryDto],
   })
-  async findAll() {
-    return this.categoryService.findAll();
+  async findAll(
+    @Query('page') page?: string,
+    @Query('size') size?: string,
+  ) {
+    return this.categoryService.findAll(page, size);
   }
 
   @Get(':id')

@@ -14,6 +14,14 @@ import {
 } from '../../../common/constant/constant';
 
 export class CustomerMealItemQueryDto {
+  @ApiPropertyOptional({ type: 'number', example: 1 })
+  @IsOptional()
+  page?: number;
+
+  @ApiPropertyOptional({ type: 'number', example: 10 })
+  @IsOptional()
+  size?: number;
+
   @ApiPropertyOptional({ description: 'Filter by customer ID' })
   @IsOptional()
   @IsUUID()

@@ -8,6 +8,7 @@ import {
   Delete,
   HttpCode,
   HttpStatus,
+  Query,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -33,8 +34,11 @@ export class ShiftController {
     description: 'List of shifts',
     type: [ShiftDto],
   })
-  async findAll() {
-    return this.shiftService.findAll();
+  async findAll(
+    @Query('page') page?: string,
+    @Query('size') size?: string,
+  ) {
+    return this.shiftService.findAll(page, size);
   }
 
   @Get(':id')

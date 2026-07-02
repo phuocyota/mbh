@@ -20,6 +20,7 @@ import {
   REFUND_STATUS,
   REFUNDABLE_ORDER_STATUSES,
 } from '../../common/constant/constant';
+import { normalizePagination, toPaginationResponse } from '../../common/dto/pagination.dto';
 
 @Injectable()
 export class RefundService extends BaseService<Refund> {
@@ -219,10 +220,19 @@ export class RefundService extends BaseService<Refund> {
     return { ...refund, items };
   }
 
-  async findByOrder(orderId: string) {
-    return this.refundRepository.find({
+  async findByOrder(
+    orderId: string,
+    page?: number | string,
+    size?: number | string,
+  ) {
+    const pagination = normalizePagination(page, size);
+    const [data, total] = await this.refundRepository.findAndCount({
       where: { orderId },
       order: { createdAt: 'DESC' },
+      skip: pagination.skip,
+      take: pagination.size,
     });
+
+    return toPaginationResponse(data, total, pagination.page, pagination.size);
   }
 }

@@ -39,8 +39,11 @@ export class WalletController {
     description: 'List of wallets',
     type: [WalletDto],
   })
-  async findAll() {
-    return this.walletService.findAll();
+  async findAll(
+    @Query('page') page?: string,
+    @Query('size') size?: string,
+  ) {
+    return this.walletService.findAll(page, size);
   }
 
   @Post('topup')

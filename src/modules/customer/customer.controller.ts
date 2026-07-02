@@ -35,8 +35,11 @@ export class CustomerController {
     description: 'List of customers',
     type: [CustomerDto],
   })
-  async findAll() {
-    return this.customerService.findAll();
+  async findAll(
+    @Query('page') page?: string,
+    @Query('size') size?: string,
+  ) {
+    return this.customerService.findAll(page, size);
   }
 
   @Get('search')
@@ -44,12 +47,16 @@ export class CustomerController {
     summary: 'Tìm khách hàng theo tên / mã / số điện thoại',
   })
   @ApiQuery({ name: 'keyword', required: false, type: String })
+  @ApiQuery({ name: 'page', required: false, type: Number })
+  @ApiQuery({ name: 'size', required: false, type: Number })
   @ApiQuery({ name: 'limit', required: false, type: Number })
   async search(
     @Query('keyword') keyword: string,
-    @Query('limit') limit?: number,
+    @Query('page') page?: string,
+    @Query('size') size?: string,
+    @Query('limit') limit?: string,
   ) {
-    return this.customerService.searchCustomers(keyword, limit);
+    return this.customerService.searchCustomers(keyword, page, size ?? limit);
   }
 
   @Get('by-card/:cardUid')

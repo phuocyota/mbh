@@ -23,6 +23,7 @@ import {
   ACCOUNTING_SOURCE_TYPE,
   MONEY_VOUCHER_TYPE,
 } from '../../../packages/accounting/src/index.js';
+import { normalizePagination, toPaginationResponse } from '../../common/dto/pagination.dto';
 
 const DEFERRED_SALE_REASON_CODE = 'BH_TRA_CHAM';
 const SUPPLIER_IMPORT_REASON_CODE = 'NHNCC';
@@ -49,8 +50,9 @@ export class StockVoucherService {
     private dataSource: DataSource,
   ) {}
 
-  findAll() {
-    return this.stockReceiptDetailRepository.find({
+  async findAll(page?: number | string, size?: number | string) {
+    const pagination = normalizePagination(page, size);
+    const [data, total] = await this.stockReceiptDetailRepository.findAndCount({
       relations: [
         'product',
         'importReceipt',
@@ -58,7 +60,11 @@ export class StockVoucherService {
         'transferReceipt',
       ],
       order: { createdAt: 'DESC' },
+      skip: pagination.skip,
+      take: pagination.size,
     });
+
+    return toPaginationResponse(data, total, pagination.page, pagination.size);
   }
 
   createImportVoucher(dto: Omit<CreateStockVoucherDto, 'type'>) {

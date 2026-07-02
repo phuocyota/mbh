@@ -9,6 +9,7 @@ import {
   Delete,
   HttpCode,
   HttpStatus,
+  Query,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -40,8 +41,11 @@ export class BranchController {
     description: 'List of branches',
     type: [BranchDto],
   })
-  async findAll() {
-    return this.branchService.findAll();
+  async findAll(
+    @Query('page') page?: string,
+    @Query('size') size?: string,
+  ) {
+    return this.branchService.findAll(page, size);
   }
 
   @Get(':id')

@@ -62,3 +62,28 @@ export class PaginationResponseDto<T> {
   })
   data: T[];
 }
+
+export function normalizePagination(page?: number | string, size?: number | string) {
+  const normalizedPage = Math.max(Number(page) || 1, 1);
+  const normalizedSize = Math.max(Number(size) || 10, 1);
+
+  return {
+    page: normalizedPage,
+    size: normalizedSize,
+    skip: (normalizedPage - 1) * normalizedSize,
+  };
+}
+
+export function toPaginationResponse<T>(
+  data: T[],
+  total: number,
+  page: number,
+  size: number,
+): PaginationResponseDto<T> {
+  return {
+    data,
+    page,
+    size,
+    total,
+  };
+}

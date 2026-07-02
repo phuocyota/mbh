@@ -8,6 +8,7 @@ import {
   Delete,
   HttpCode,
   HttpStatus,
+  Query,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -33,8 +34,11 @@ export class POSDeviceController {
     description: 'List of POS devices',
     type: [POSDeviceDto],
   })
-  async findAll() {
-    return this.posDeviceService.findAll();
+  async findAll(
+    @Query('page') page?: string,
+    @Query('size') size?: string,
+  ) {
+    return this.posDeviceService.findAll(page, size);
   }
 
   @Get(':id')

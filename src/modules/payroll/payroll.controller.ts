@@ -41,13 +41,19 @@ export class PayrollController {
     description: 'Filter by status',
     enum: [...PAYROLL_STATUS_VALUES, PAYROLL_STATUS_FILTER_ALL],
   })
+  @ApiQuery({ name: 'page', required: false, type: Number })
+  @ApiQuery({ name: 'size', required: false, type: Number })
   @ApiResponse({
     status: 200,
     description: 'List of payrolls',
     type: [PayrollDto],
   })
-  async findAll(@Query('status') status?: string) {
-    return this.payrollService.findAll({ status });
+  async findAll(
+    @Query('status') status?: string,
+    @Query('page') page?: string,
+    @Query('size') size?: string,
+  ) {
+    return this.payrollService.findAll({ status, page, size });
   }
 
   @Get(':id')

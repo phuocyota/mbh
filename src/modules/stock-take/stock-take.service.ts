@@ -4,6 +4,7 @@ import { DataSource, EntityManager, Repository } from 'typeorm';
 import { Product, StockTake, StockTakeItem, Stock, StockItem } from '../../entities';
 import { CreateStockTakeDto } from './dto/create-stock-take.dto';
 import { DEFAULT_BRANCH_ID } from '../../common/constant/default-branch.constant';
+import { normalizePagination, toPaginationResponse } from '../../common/dto/pagination.dto';
 
 @Injectable()
 export class StockTakeService {
@@ -21,7 +22,10 @@ export class StockTakeService {
     private dataSource: DataSource,
   ) {}
 
-  async findAll(filters: { status?: string; branchId?: string } = {}) {
+  async findAll(
+    filters: { status?: string; branchId?: string; page?: number | string; size?: number | string } = {},
+  ) {
+    const pagination = normalizePagination(filters.page, filters.size);
     const query = this.stockTakeRepository
       .createQueryBuilder('stockTake')
       .leftJoinAndSelect('stockTake.branch', 'branch')
@@ -35,7 +39,13 @@ export class StockTakeService {
       query.andWhere('stockTake.branchId = :branchId', { branchId: filters.branchId });
     }
 
-    return query.orderBy('stockTake.createdAt', 'DESC').getMany();
+    const [data, total] = await query
+      .orderBy('stockTake.createdAt', 'DESC')
+      .skip(pagination.skip)
+      .take(pagination.size)
+      .getManyAndCount();
+
+    return toPaginationResponse(data, total, pagination.page, pagination.size);
   }
 
   async findOne(id: string) {

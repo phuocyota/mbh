@@ -33,8 +33,14 @@ export class InventoryItemController {
     summary: 'Compatibility inventory item list backed by products stock',
   })
   @ApiQuery({ name: 'search', required: false })
-  async findAll(@Query('search') search?: string) {
-    return this.inventoryItemService.findAll(search);
+  @ApiQuery({ name: 'page', required: false, type: Number })
+  @ApiQuery({ name: 'size', required: false, type: Number })
+  async findAll(
+    @Query('search') search?: string,
+    @Query('page') page?: string,
+    @Query('size') size?: string,
+  ) {
+    return this.inventoryItemService.findAll(search, page, size);
   }
 
   @Get(':id')

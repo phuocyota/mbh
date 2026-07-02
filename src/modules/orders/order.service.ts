@@ -22,6 +22,7 @@ import {
   REVENUE_ORDER_STATUSES,
   resolveOrderStatus,
 } from '../../common/constant/constant';
+import { normalizePagination, toPaginationResponse } from '../../common/dto/pagination.dto';
 
 @Injectable()
 export class OrderService {
@@ -373,7 +374,13 @@ export class OrderService {
     });
   }
 
-  async findAll(branchId?: string, status?: string | number) {
+  async findAll(
+    branchId?: string,
+    status?: string | number,
+    page?: number | string,
+    size?: number | string,
+  ) {
+    const pagination = normalizePagination(page, size);
     const query = this.orderRepository
       .createQueryBuilder('o')
       .leftJoinAndSelect('o.items', 'items')
@@ -389,7 +396,12 @@ export class OrderService {
       query.andWhere('o.status = :status', { status: resolvedStatus });
     }
 
-    return query.getMany();
+    const [data, total] = await query
+      .skip(pagination.skip)
+      .take(pagination.size)
+      .getManyAndCount();
+
+    return toPaginationResponse(data, total, pagination.page, pagination.size);
   }
 
   async getRevenueSummaryRows(query: {
@@ -633,16 +645,28 @@ export class OrderService {
       .getRawOne<{ orderCount: string; totalRevenue: string }>();
   }
 
-  async findPendingCashOrders(branchId?: string) {
-    return this.findAll(branchId, ORDER_STATUS.PENDING_PAYMENT);
+  async findPendingCashOrders(
+    branchId?: string,
+    page?: number | string,
+    size?: number | string,
+  ) {
+    return this.findAll(branchId, ORDER_STATUS.PENDING_PAYMENT, page, size);
   }
 
-  async findPreparingOrders(branchId?: string) {
-    return this.findAll(branchId, ORDER_STATUS.PREPARING);
+  async findPreparingOrders(
+    branchId?: string,
+    page?: number | string,
+    size?: number | string,
+  ) {
+    return this.findAll(branchId, ORDER_STATUS.PREPARING, page, size);
   }
 
-  async findReadyToPickupOrders(branchId?: string) {
-    return this.findAll(branchId, ORDER_STATUS.READY_TO_PICKUP);
+  async findReadyToPickupOrders(
+    branchId?: string,
+    page?: number | string,
+    size?: number | string,
+  ) {
+    return this.findAll(branchId, ORDER_STATUS.READY_TO_PICKUP, page, size);
   }
 
   async receiveCashPayment(

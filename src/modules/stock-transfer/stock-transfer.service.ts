@@ -4,6 +4,7 @@ import { DataSource, Repository } from 'typeorm';
 import { Product, StockReceiptTransfer, StockReceiptDetail, Stock, StockItem } from '../../entities';
 import { CreateStockTransferDto } from './dto/create-stock-transfer.dto';
 import { StockVoucherService } from '../stock-voucher/stock-voucher.service';
+import { normalizePagination, toPaginationResponse } from '../../common/dto/pagination.dto';
 
 @Injectable()
 export class StockTransferService {
@@ -22,7 +23,16 @@ export class StockTransferService {
     private stockVoucherService: StockVoucherService,
   ) {}
 
-  async findAll(filters: { status?: string; fromBranchId?: string; toBranchId?: string } = {}) {
+  async findAll(
+    filters: {
+      status?: string;
+      fromBranchId?: string;
+      toBranchId?: string;
+      page?: number | string;
+      size?: number | string;
+    } = {},
+  ) {
+    const pagination = normalizePagination(filters.page, filters.size);
     const query = this.transferRepository
       .createQueryBuilder('transfer')
       .leftJoinAndSelect('transfer.fromBranch', 'fromBranch')
@@ -40,7 +50,13 @@ export class StockTransferService {
       query.andWhere('transfer.toBranchId = :toBranchId', { toBranchId: filters.toBranchId });
     }
 
-    return query.orderBy('transfer.createdAt', 'DESC').getMany();
+    const [data, total] = await query
+      .orderBy('transfer.createdAt', 'DESC')
+      .skip(pagination.skip)
+      .take(pagination.size)
+      .getManyAndCount();
+
+    return toPaginationResponse(data, total, pagination.page, pagination.size);
   }
 
   async findOne(id: string) {

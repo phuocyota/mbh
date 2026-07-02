@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post } from '@nestjs/common';
+import { Body, Controller, Get, Post, Query } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { FinanceService } from './finance.service';
 import { CreateFundDto } from './dto/create-fund.dto';
@@ -13,8 +13,8 @@ export class FinanceController {
 
   @Get('funds')
   @ApiOperation({ summary: 'Get all funds' })
-  findFunds() {
-    return this.financeService.findFunds();
+  findFunds(@Query('page') page?: string, @Query('size') size?: string) {
+    return this.financeService.findFunds(page, size);
   }
 
   @Post('funds')
@@ -25,8 +25,11 @@ export class FinanceController {
 
   @Get('money-vouchers')
   @ApiOperation({ summary: 'Get all money vouchers' })
-  findMoneyVouchers() {
-    return this.financeService.findMoneyVouchers();
+  findMoneyVouchers(
+    @Query('page') page?: string,
+    @Query('size') size?: string,
+  ) {
+    return this.financeService.findMoneyVouchers(page, size);
   }
 
   @Post('receipts')
@@ -43,26 +46,32 @@ export class FinanceController {
 
   @Get('receipts/received')
   @ApiOperation({ summary: 'Get all received receipts (PT)' })
-  findReceiptsReceived() {
-    return this.financeService.findReceiptsReceived();
+  findReceiptsReceived(
+    @Query('page') page?: string,
+    @Query('size') size?: string,
+  ) {
+    return this.financeService.findReceiptsReceived(page, size);
   }
 
   @Get('receipts/paid')
   @ApiOperation({ summary: 'Get all paid receipts (PC)' })
-  findReceiptsPaid() {
-    return this.financeService.findReceiptsPaid();
+  findReceiptsPaid(
+    @Query('page') page?: string,
+    @Query('size') size?: string,
+  ) {
+    return this.financeService.findReceiptsPaid(page, size);
   }
 
   @Get('transfers')
   @ApiOperation({ summary: 'Get all fund transfers (CQ)' })
-  findTransfers() {
-    return this.financeService.findTransfers();
+  findTransfers(@Query('page') page?: string, @Query('size') size?: string) {
+    return this.financeService.findTransfers(page, size);
   }
 
   @Get('details')
   @ApiOperation({ summary: 'Get all fund details' })
-  findDetails() {
-    return this.financeService.findDetails();
+  findDetails(@Query('page') page?: string, @Query('size') size?: string) {
+    return this.financeService.findDetails(page, size);
   }
 
   @Post('transfers')

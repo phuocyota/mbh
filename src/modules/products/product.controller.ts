@@ -33,6 +33,8 @@ export class ProductController {
   @ApiQuery({ name: 'minPrice', required: false, type: Number })
   @ApiQuery({ name: 'maxPrice', required: false, type: Number })
   @ApiQuery({ name: 'isCanteenItem', required: false, type: Boolean })
+  @ApiQuery({ name: 'page', required: false, type: Number })
+  @ApiQuery({ name: 'size', required: false, type: Number })
   @ApiResponse({ status: 200, description: 'List of products' })
   @Get()
   async findAll(
@@ -45,6 +47,7 @@ export class ProductController {
     @Query('displayStatus') displayStatus?: string,
     @Query('stockStatus') stockStatus?: string,
     @Query('page') page?: string,
+    @Query('size') size?: string,
     @Query('limit') limit?: string,
   ) {
     return this.productService.findProducts(categoryId, {
@@ -56,15 +59,18 @@ export class ProductController {
       displayStatus,
       stockStatus,
       page: page ? parseInt(page, 10) : undefined,
-      limit: limit ? parseInt(limit, 10) : undefined,
+      size: size ? parseInt(size, 10) : limit ? parseInt(limit, 10) : undefined,
     });
   }
 
   @ApiOperation({ summary: 'Get all product categories' })
   @ApiResponse({ status: 200, description: 'List of categories' })
   @Get('categories')
-  async findAllCategories() {
-    return this.productService.findAllCategories();
+  async findAllCategories(
+    @Query('page') page?: string,
+    @Query('size') size?: string,
+  ) {
+    return this.productService.findAllCategories(page, size);
   }
 
   @ApiOperation({ summary: 'Get active categories with active products' })
@@ -72,6 +78,8 @@ export class ProductController {
   @ApiQuery({ name: 'minPrice', required: false, type: Number })
   @ApiQuery({ name: 'maxPrice', required: false, type: Number })
   @ApiQuery({ name: 'isCanteenItem', required: false, type: Boolean })
+  @ApiQuery({ name: 'page', required: false, type: Number })
+  @ApiQuery({ name: 'size', required: false, type: Number })
   @ApiResponse({ status: 200, description: 'List of categories with products' })
   @Get('full')
   async findAllCategoriesWithProducts(
@@ -79,12 +87,16 @@ export class ProductController {
     @Query('minPrice') minPrice?: number,
     @Query('maxPrice') maxPrice?: number,
     @Query('isCanteenItem') isCanteenItem?: string,
+    @Query('page') page?: string,
+    @Query('size') size?: string,
   ) {
     return this.productService.findAllCategoriesWithProducts({
       branchId,
       minPrice,
       maxPrice,
       isCanteenItem: parseOptionalBoolean(isCanteenItem),
+      page,
+      size,
     });
   }
 

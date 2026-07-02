@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, EntityManager, In, Repository } from 'typeorm';
 import { Product, Stock, StockItem } from '../../entities';
 import { DEFAULT_BRANCH_ID } from '../../common/constant/default-branch.constant';
+import { normalizePagination, toPaginationResponse } from '../../common/dto/pagination.dto';
 
 @Injectable()
 export class InventoryItemService {
@@ -14,7 +15,8 @@ export class InventoryItemService {
     private readonly dataSource: DataSource,
   ) {}
 
-  async findAll(search?: string) {
+  async findAll(search?: string, page?: number | string, size?: number | string) {
+    const pagination = normalizePagination(page, size);
     const query = this.productRepository
       .createQueryBuilder('product')
       .leftJoinAndSelect('product.category', 'category')
@@ -27,13 +29,22 @@ export class InventoryItemService {
       );
     }
 
-    const products = await query.orderBy('product.name', 'ASC').getMany();
+    const [products, total] = await query
+      .orderBy('product.name', 'ASC')
+      .skip(pagination.skip)
+      .take(pagination.size)
+      .getManyAndCount();
     const quantityByProductId = await this.getQuantityByProductIds(
       products.map((product) => product.id),
     );
 
-    return products.map((product) =>
-      this.toInventoryItem(product, quantityByProductId.get(product.id) || 0),
+    return toPaginationResponse(
+      products.map((product) =>
+        this.toInventoryItem(product, quantityByProductId.get(product.id) || 0),
+      ),
+      total,
+      pagination.page,
+      pagination.size,
     );
   }
 

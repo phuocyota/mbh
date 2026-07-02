@@ -3,6 +3,11 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Employee } from '../../entities/employee.entity';
 import { BaseService } from '../../common/sql/base.service';
+import {
+  normalizePagination,
+  PaginationResponseDto,
+  toPaginationResponse,
+} from '../../common/dto/pagination.dto';
 
 @Injectable()
 export class EmployeeService extends BaseService<Employee> {
@@ -17,9 +22,21 @@ export class EmployeeService extends BaseService<Employee> {
     return 'Employee';
   }
 
-  async findAll(status?: string): Promise<Employee[]> {
+  async findAll(
+    status?: string,
+    page?: number | string,
+    size?: number | string,
+  ): Promise<PaginationResponseDto<Employee>> {
+    const pagination = normalizePagination(page, size);
     const where: any = {};
     if (status) where.status = status;
-    return this.employeeRepository.find({ where, order: { code: 'ASC' } });
+    const [data, total] = await this.employeeRepository.findAndCount({
+      where,
+      order: { code: 'ASC' },
+      skip: pagination.skip,
+      take: pagination.size,
+    });
+
+    return toPaginationResponse(data, total, pagination.page, pagination.size);
   }
 }

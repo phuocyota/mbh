@@ -8,6 +8,7 @@ import {
   Delete,
   HttpCode,
   HttpStatus,
+  Query,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -33,8 +34,11 @@ export class PaymentController {
     description: 'List of payments',
     type: [PaymentDto],
   })
-  async findAll() {
-    return this.paymentService.findAll();
+  async findAll(
+    @Query('page') page?: string,
+    @Query('size') size?: string,
+  ) {
+    return this.paymentService.findAll(page, size);
   }
 
   @Get(':id')

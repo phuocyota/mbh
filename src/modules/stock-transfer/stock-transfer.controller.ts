@@ -16,12 +16,22 @@ export class StockTransferController {
   @ApiQuery({ name: 'status', required: false })
   @ApiQuery({ name: 'fromBranchId', required: false })
   @ApiQuery({ name: 'toBranchId', required: false })
+  @ApiQuery({ name: 'page', required: false, type: Number })
+  @ApiQuery({ name: 'size', required: false, type: Number })
   findAll(
     @Query('status') status?: string,
     @Query('fromBranchId') fromBranchId?: string,
     @Query('toBranchId') toBranchId?: string,
+    @Query('page') page?: string,
+    @Query('size') size?: string,
   ) {
-    return this.stockTransferService.findAll({ status, fromBranchId, toBranchId });
+    return this.stockTransferService.findAll({
+      status,
+      fromBranchId,
+      toBranchId,
+      page,
+      size,
+    });
   }
 
   @Get(':id')

@@ -8,6 +8,7 @@ import { StudentProfile } from '../../entities/student-profile.entity';
 import { BaseService } from '../../common/sql/base.service';
 import { ERROR_MESSAGES } from '../../common/constant/error-messages.constant';
 import { COMMON_STATUS } from '../../common/constant/constant';
+import { normalizePagination, toPaginationResponse } from '../../common/dto/pagination.dto';
 
 @Injectable()
 export class CustomerService extends BaseService<Customer> {
@@ -207,10 +208,19 @@ export class CustomerService extends BaseService<Customer> {
     };
   }
 
-  async searchCustomers(keyword: string, limit = 20) {
-    const safeLimit = Math.min(Math.max(Number(limit) || 20, 1), 100);
+  async searchCustomers(
+    keyword: string,
+    page?: number | string,
+    size?: number | string,
+  ) {
+    const pagination = normalizePagination(page, size);
     if (!keyword || !keyword.trim()) {
-      return this.customerRepository.find({ take: safeLimit });
+      const [data, total] = await this.customerRepository.findAndCount({
+        skip: pagination.skip,
+        take: pagination.size,
+      });
+
+      return toPaginationResponse(data, total, pagination.page, pagination.size);
     }
 
     const qb = this.customerRepository.createQueryBuilder('c');
@@ -218,8 +228,10 @@ export class CustomerService extends BaseService<Customer> {
       .orWhere('c.customer_code ILIKE :kw', { kw: `%${keyword}%` })
       .orWhere('c.phone ILIKE :kw', { kw: `%${keyword}%` })
       .orderBy('c.created_at', 'DESC')
-      .take(safeLimit);
+      .skip(pagination.skip)
+      .take(pagination.size);
 
-    return qb.getMany();
+    const [data, total] = await qb.getManyAndCount();
+    return toPaginationResponse(data, total, pagination.page, pagination.size);
   }
 }

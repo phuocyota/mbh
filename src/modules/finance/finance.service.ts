@@ -31,6 +31,7 @@ import {
   normalizeMoneyVoucherType,
   resolveMoneyVoucherPosting,
 } from '../../../packages/accounting/src/index.js';
+import { normalizePagination, toPaginationResponse } from '../../common/dto/pagination.dto';
 
 @Injectable()
 export class FinanceService {
@@ -56,18 +57,29 @@ export class FinanceService {
     private dataSource: DataSource,
   ) {}
 
-  findFunds() {
-    return this.fundRepository.find();
+  async findFunds(page?: number | string, size?: number | string) {
+    const pagination = normalizePagination(page, size);
+    const [data, total] = await this.fundRepository.findAndCount({
+      skip: pagination.skip,
+      take: pagination.size,
+    });
+
+    return toPaginationResponse(data, total, pagination.page, pagination.size);
   }
 
   createFund(dto: CreateFundDto) {
     return this.fundRepository.save(this.fundRepository.create(dto));
   }
 
-  findMoneyVouchers() {
-    return this.moneyVoucherRepository.find({
+  async findMoneyVouchers(page?: number | string, size?: number | string) {
+    const pagination = normalizePagination(page, size);
+    const [data, total] = await this.moneyVoucherRepository.findAndCount({
       relations: ['fund', 'order', 'supplier'],
+      skip: pagination.skip,
+      take: pagination.size,
     });
+
+    return toPaginationResponse(data, total, pagination.page, pagination.size);
   }
 
   createReceipt(dto: Omit<CreateMoneyVoucherDto, 'type'>) {
@@ -342,32 +354,52 @@ export class FinanceService {
     return this.dataSource.transaction(executor);
   }
 
-  findReceiptsReceived() {
-    return this.fundReceiptReceivedRepository.find({
+  async findReceiptsReceived(page?: number | string, size?: number | string) {
+    const pagination = normalizePagination(page, size);
+    const [data, total] = await this.fundReceiptReceivedRepository.findAndCount({
       relations: ['fund', 'order', 'details'],
       order: { createdAt: 'DESC' },
+      skip: pagination.skip,
+      take: pagination.size,
     });
+
+    return toPaginationResponse(data, total, pagination.page, pagination.size);
   }
 
-  findReceiptsPaid() {
-    return this.fundReceiptPaidRepository.find({
+  async findReceiptsPaid(page?: number | string, size?: number | string) {
+    const pagination = normalizePagination(page, size);
+    const [data, total] = await this.fundReceiptPaidRepository.findAndCount({
       relations: ['fund', 'order', 'details'],
       order: { createdAt: 'DESC' },
+      skip: pagination.skip,
+      take: pagination.size,
     });
+
+    return toPaginationResponse(data, total, pagination.page, pagination.size);
   }
 
-  findTransfers() {
-    return this.fundReceiptTransferRepository.find({
+  async findTransfers(page?: number | string, size?: number | string) {
+    const pagination = normalizePagination(page, size);
+    const [data, total] = await this.fundReceiptTransferRepository.findAndCount({
       relations: ['fromFund', 'toFund', 'details'],
       order: { createdAt: 'DESC' },
+      skip: pagination.skip,
+      take: pagination.size,
     });
+
+    return toPaginationResponse(data, total, pagination.page, pagination.size);
   }
 
-  findDetails() {
-    return this.fundDetailRepository.find({
+  async findDetails(page?: number | string, size?: number | string) {
+    const pagination = normalizePagination(page, size);
+    const [data, total] = await this.fundDetailRepository.findAndCount({
       relations: ['fund'],
       order: { createdAt: 'DESC' },
+      skip: pagination.skip,
+      take: pagination.size,
     });
+
+    return toPaginationResponse(data, total, pagination.page, pagination.size);
   }
 
   private mapAccountingRule<T>(callback: () => T): T {

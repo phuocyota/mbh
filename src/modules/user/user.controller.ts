@@ -11,6 +11,7 @@ import {
   Req,
   UseGuards,
   Patch,
+  Query,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -59,8 +60,11 @@ export class UserController {
   @Get()
   @ApiOperation({ summary: 'Get all users' })
   @ApiResponse({ status: 200, description: 'List of users', type: [UserDto] })
-  async findAll() {
-    return this.userService.findAll();
+  async findAll(
+    @Query('page') page?: string,
+    @Query('size') size?: string,
+  ) {
+    return this.userService.findAll(page, size);
   }
 
   @Get(':id')

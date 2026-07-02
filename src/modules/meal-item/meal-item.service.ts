@@ -10,6 +10,7 @@ import { CreateMealItemDto } from './dto/create-meal-item.dto';
 import { UpdateMealItemDto } from './dto/update-meal-item.dto';
 import { MealItemQueryDto } from './dto/meal-item-query.dto';
 import { MEAL_PERIOD } from '../../common/constant/constant';
+import { normalizePagination, toPaginationResponse } from '../../common/dto/pagination.dto';
 
 @Injectable()
 export class MealItemService extends BaseService<MealItem> {
@@ -29,6 +30,22 @@ export class MealItemService extends BaseService<MealItem> {
   }
 
   async findAll(filter: MealItemQueryDto = {}) {
+    const pagination = normalizePagination(filter.page, filter.size);
+    const query = this.buildMealItemQuery(filter);
+
+    const [data, total] = await query
+      .skip(pagination.skip)
+      .take(pagination.size)
+      .getManyAndCount();
+
+    return toPaginationResponse(data, total, pagination.page, pagination.size);
+  }
+
+  private async findAllRows(filter: MealItemQueryDto = {}) {
+    return this.buildMealItemQuery(filter).getMany();
+  }
+
+  private buildMealItemQuery(filter: MealItemQueryDto = {}) {
     const query = this.mealItemRepository
       .createQueryBuilder('mealItem')
       .leftJoinAndSelect('mealItem.branch', 'branch')
@@ -42,11 +59,11 @@ export class MealItemService extends BaseService<MealItem> {
       .addOrderBy('mealItem.day_of_week', 'ASC', 'NULLS LAST')
       .addOrderBy('mealItem.meal_period', 'ASC')
       .addOrderBy('mealItem.sort_order', 'ASC')
-      .addOrderBy('product.name', 'ASC')
-      .getMany();
+      .addOrderBy('product.name', 'ASC');
   }
 
   async findAllForUser(filter: MealItemQueryDto = {}, userId?: string) {
+    const pagination = normalizePagination(filter.page, filter.size);
     if (!userId) {
       return this.findAll(filter);
     }
@@ -60,7 +77,7 @@ export class MealItemService extends BaseService<MealItem> {
     }
 
     const [defaultMealItems, customerMealItems] = await Promise.all([
-      this.findAll(filter),
+      this.findAllRows(filter),
       this.findCustomerMealItems(customer.id, filter),
     ]);
 
@@ -90,16 +107,25 @@ export class MealItemService extends BaseService<MealItem> {
       }
     });
 
-    return Array.from(mergedMealItems.values()).sort((left, right) =>
+    const data = Array.from(mergedMealItems.values()).sort((left, right) =>
       this.compareMealItems(left, right),
+    );
+
+    return toPaginationResponse(
+      data.slice(pagination.skip, pagination.skip + pagination.size),
+      data.length,
+      pagination.page,
+      pagination.size,
     );
   }
 
   async getWeekPlan(filter: MealItemQueryDto = {}, userId?: string) {
     const range = this.resolveWeekRange(filter);
-    const mealItems = await this.findAllForUser(
+    const mealItems = await this.findAllRowsForUser(
       {
         ...filter,
+        page: undefined,
+        size: undefined,
         dateKey: undefined,
         from: range.from,
         to: range.to,
@@ -132,6 +158,55 @@ export class MealItemService extends BaseService<MealItem> {
       addedSlots,
       days,
     };
+  }
+
+  private async findAllRowsForUser(filter: MealItemQueryDto = {}, userId?: string) {
+    if (!userId) {
+      return this.findAllRows(filter);
+    }
+
+    const customer = await this.customerRepository.findOne({
+      where: { userId },
+    });
+
+    if (!customer) {
+      return this.findAllRows(filter);
+    }
+
+    const [defaultMealItems, customerMealItems] = await Promise.all([
+      this.findAllRows(filter),
+      this.findCustomerMealItems(customer.id, filter),
+    ]);
+
+    const mergedMealItems = new Map<string, MealItem>();
+
+    customerMealItems.forEach((customerMealItem) => {
+      const mealItem = customerMealItem.mealItem;
+      if (!mealItem) {
+        return;
+      }
+
+      (mealItem as any).customerMealItem = {
+        id: customerMealItem.id,
+        customerId: customerMealItem.customerId,
+        mealItemId: customerMealItem.mealItemId,
+        quantity: customerMealItem.quantity,
+        status: customerMealItem.status,
+        note: customerMealItem.note,
+      };
+
+      mergedMealItems.set(mealItem.id, mealItem);
+    });
+
+    defaultMealItems.forEach((mealItem) => {
+      if (!mergedMealItems.has(mealItem.id)) {
+        mergedMealItems.set(mealItem.id, mealItem);
+      }
+    });
+
+    return Array.from(mergedMealItems.values()).sort((left, right) =>
+      this.compareMealItems(left, right),
+    );
   }
 
   private async findCustomerMealItems(

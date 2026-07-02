@@ -1,5 +1,5 @@
-import { Body, Controller, Get, Post } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { Body, Controller, Get, Post, Query } from '@nestjs/common';
+import { ApiBearerAuth, ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
 import { CreateStockVoucherDto } from './dto/create-stock-voucher.dto';
 import { StockVoucherService } from './stock-voucher.service';
 
@@ -11,8 +11,10 @@ export class StockVoucherController {
 
   @Get()
   @ApiOperation({ summary: 'Get all stock import/export vouchers' })
-  findAll() {
-    return this.stockVoucherService.findAll();
+  @ApiQuery({ name: 'page', required: false, type: Number })
+  @ApiQuery({ name: 'size', required: false, type: Number })
+  findAll(@Query('page') page?: string, @Query('size') size?: string) {
+    return this.stockVoucherService.findAll(page, size);
   }
 
   @Post('imports')

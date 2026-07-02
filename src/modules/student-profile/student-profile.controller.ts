@@ -8,6 +8,7 @@ import {
   Delete,
   HttpCode,
   HttpStatus,
+  Query,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -33,8 +34,11 @@ export class StudentProfileController {
     description: 'List of student profiles',
     type: [StudentProfileDto],
   })
-  async findAll() {
-    return this.studentProfileService.findAll();
+  async findAll(
+    @Query('page') page?: string,
+    @Query('size') size?: string,
+  ) {
+    return this.studentProfileService.findAll(page, size);
   }
 
   @Get(':id')

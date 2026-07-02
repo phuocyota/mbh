@@ -6,6 +6,7 @@ import { StockItem } from '../../entities/stock-item.entity';
 import { BaseService } from '../../common/sql/base.service';
 import { JwtPayload } from '../../common/interface/jwt-payload.interface';
 import { COMMON_STATUS } from '../../common/constant/constant';
+import { normalizePagination, toPaginationResponse } from '../../common/dto/pagination.dto';
 
 @Injectable()
 export class CategoryService extends BaseService<Category> {
@@ -27,11 +28,16 @@ export class CategoryService extends BaseService<Category> {
     return item;
   }
 
-  async findActive() {
-    return this.categoryRepository.find({
+  async findActive(page?: number | string, size?: number | string) {
+    const pagination = normalizePagination(page, size);
+    const [data, total] = await this.categoryRepository.findAndCount({
       where: { status: COMMON_STATUS.ACTIVE },
       order: { sortOrder: 'ASC' },
+      skip: pagination.skip,
+      take: pagination.size,
     });
+
+    return toPaginationResponse(data, total, pagination.page, pagination.size);
   }
 
   async findActiveWithProducts(
@@ -40,8 +46,11 @@ export class CategoryService extends BaseService<Category> {
       maxPrice?: number;
       branchId?: string;
       isCanteenItem?: boolean;
+      page?: number | string;
+      size?: number | string;
     } = {},
   ) {
+    const pagination = normalizePagination(filter.page, filter.size);
     const productConditions = ['product.is_active = :isActive'];
     const params: Record<string, number | boolean | string> = {
       isActive: true,
@@ -91,17 +100,31 @@ export class CategoryService extends BaseService<Category> {
     const categoriesWithProducts = categories.filter(
       (category) => (category.products || []).length > 0,
     );
+    const paginatedCategories = categoriesWithProducts.slice(
+      pagination.skip,
+      pagination.skip + pagination.size,
+    );
 
     if (!filter.branchId) {
-      return categoriesWithProducts;
+      return toPaginationResponse(
+        paginatedCategories,
+        categoriesWithProducts.length,
+        pagination.page,
+        pagination.size,
+      );
     }
 
-    const productIds = categoriesWithProducts.flatMap((category) =>
+    const productIds = paginatedCategories.flatMap((category) =>
       (category.products || []).map((product) => product.id),
     );
 
     if (!productIds.length) {
-      return categoriesWithProducts;
+      return toPaginationResponse(
+        paginatedCategories,
+        categoriesWithProducts.length,
+        pagination.page,
+        pagination.size,
+      );
     }
 
     const stockRows = await this.categoryRepository.manager
@@ -119,12 +142,17 @@ export class CategoryService extends BaseService<Category> {
       stockRows.map((row) => [row.productId, Number(row.quantity || 0)]),
     );
 
-    categoriesWithProducts.forEach((category) => {
+    paginatedCategories.forEach((category) => {
       (category.products || []).forEach((product) => {
         (product as any).remain = stockByProductId.get(product.id) || 0;
       });
     });
 
-    return categoriesWithProducts;
+    return toPaginationResponse(
+      paginatedCategories,
+      categoriesWithProducts.length,
+      pagination.page,
+      pagination.size,
+    );
   }
 }

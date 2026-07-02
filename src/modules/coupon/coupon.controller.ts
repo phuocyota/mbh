@@ -34,15 +34,20 @@ export class CouponController {
 
   @Get()
   async getAllCoupons(
-    @Query('page') page: number = 1,
-    @Query('limit') limit: number = 10,
+    @Query('page') page?: string,
+    @Query('size') size?: string,
+    @Query('limit') limit?: string,
   ) {
-    return await this.couponService.getAllCoupons(page, limit);
+    return await this.couponService.getAllCoupons(page, size ?? limit);
   }
 
   @Get('customer/:customerId')
-  async getCustomerCoupons(@Param('customerId') customerId: string) {
-    return await this.couponService.getCustomerCoupons(customerId);
+  async getCustomerCoupons(
+    @Param('customerId') customerId: string,
+    @Query('page') page?: string,
+    @Query('size') size?: string,
+  ) {
+    return await this.couponService.getCustomerCoupons(customerId, page, size);
   }
 
   @Get(':id')

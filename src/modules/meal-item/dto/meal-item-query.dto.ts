@@ -15,6 +15,14 @@ import {
 } from '../../../common/constant/constant';
 
 export class MealItemQueryDto {
+  @ApiPropertyOptional({ type: 'number', example: 1 })
+  @IsOptional()
+  page?: number;
+
+  @ApiPropertyOptional({ type: 'number', example: 10 })
+  @IsOptional()
+  size?: number;
+
   @ApiPropertyOptional({
     description: 'Filter by branch ID',
     example: '00000000-0000-0000-0000-000000000000',

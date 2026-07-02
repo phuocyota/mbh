@@ -34,13 +34,17 @@ export class OrderController {
   @ApiOperation({ summary: 'Get all orders with optional filtering' })
   @ApiQuery({ name: 'branchId', required: false })
   @ApiQuery({ name: 'status', required: false })
+  @ApiQuery({ name: 'page', required: false, type: Number })
+  @ApiQuery({ name: 'size', required: false, type: Number })
   @ApiResponse({ status: 200, description: 'List of orders' })
   @Get()
   async findAll(
     @Query('branchId') branchId?: string,
     @Query('status') status?: string,
+    @Query('page') page?: string,
+    @Query('size') size?: string,
   ) {
-    return this.orderService.findAll(branchId, status);
+    return this.orderService.findAll(branchId, status, page, size);
   }
 
   @ApiOperation({ summary: 'Get orders waiting for cash payment' })
@@ -50,24 +54,36 @@ export class OrderController {
     description: 'List of cash payment pending orders',
   })
   @Get('pending-cash')
-  async findPendingCash(@Query('branchId') branchId?: string) {
-    return this.orderService.findPendingCashOrders(branchId);
+  async findPendingCash(
+    @Query('branchId') branchId?: string,
+    @Query('page') page?: string,
+    @Query('size') size?: string,
+  ) {
+    return this.orderService.findPendingCashOrders(branchId, page, size);
   }
 
   @ApiOperation({ summary: 'Get orders currently preparing' })
   @ApiQuery({ name: 'branchId', required: false })
   @ApiResponse({ status: 200, description: 'List of preparing orders' })
   @Get('preparing')
-  async findPreparing(@Query('branchId') branchId?: string) {
-    return this.orderService.findPreparingOrders(branchId);
+  async findPreparing(
+    @Query('branchId') branchId?: string,
+    @Query('page') page?: string,
+    @Query('size') size?: string,
+  ) {
+    return this.orderService.findPreparingOrders(branchId, page, size);
   }
 
   @ApiOperation({ summary: 'Get orders ready for pickup' })
   @ApiQuery({ name: 'branchId', required: false })
   @ApiResponse({ status: 200, description: 'List of ready-to-pickup orders' })
   @Get('ready-to-pickup')
-  async findReadyToPickup(@Query('branchId') branchId?: string) {
-    return this.orderService.findReadyToPickupOrders(branchId);
+  async findReadyToPickup(
+    @Query('branchId') branchId?: string,
+    @Query('page') page?: string,
+    @Query('size') size?: string,
+  ) {
+    return this.orderService.findReadyToPickupOrders(branchId, page, size);
   }
 
   @ApiOperation({ summary: 'Get order with items and payments' })

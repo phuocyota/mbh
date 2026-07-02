@@ -33,6 +33,8 @@ export class SupplierController {
   @ApiOperation({ summary: 'Get all suppliers with optional filters' })
   @ApiQuery({ name: 'status', required: false, description: 'Filter by status (active, inactive, all)' })
   @ApiQuery({ name: 'search', required: false, description: 'Search by code, name, or phone' })
+  @ApiQuery({ name: 'page', required: false, type: Number })
+  @ApiQuery({ name: 'size', required: false, type: Number })
   @ApiResponse({
     status: 200,
     description: 'List of suppliers',
@@ -41,8 +43,10 @@ export class SupplierController {
   async findAll(
     @Query('status') status?: string,
     @Query('search') search?: string,
+    @Query('page') page?: string,
+    @Query('size') size?: string,
   ) {
-    return this.supplierService.findAll({ status, search });
+    return this.supplierService.findAll({ status, search, page, size });
   }
 
   @Get(':id')
