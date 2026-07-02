@@ -37,8 +37,10 @@ export class WalletTransactionController {
   async findAll(
     @Query('page') page?: string,
     @Query('size') size?: string,
+    @Query('search') search?: string,
+    @Query('type') type?: string,
   ) {
-    return this.walletTransactionService.findAll(page, size);
+    return this.walletTransactionService.findAll(page, size, search, type);
   }
 
   @Get(':id')
