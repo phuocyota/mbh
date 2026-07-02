@@ -56,21 +56,6 @@ export class ProductService extends BaseService<Product> {
       query.andWhere('p.category_id = :categoryId', { categoryId });
     }
 
-    if (filter.branchId) {
-      query.andWhere(
-        `
-        EXISTS (
-          SELECT 1
-          FROM stock_items stock_item
-          INNER JOIN stocks stock ON stock.id = stock_item.stock_id
-          WHERE stock_item.product_id = p.id
-            AND stock.branch_id = :branchId
-        )
-      `,
-        { branchId: filter.branchId },
-      );
-    }
-
     if (filter.stockStatus && filter.stockStatus !== 'all') {
       const branchIdCondition = filter.branchId ? `AND stock.branch_id = :branchId` : '';
       const stockSubquery = `
@@ -80,6 +65,9 @@ export class ProductService extends BaseService<Product> {
          WHERE si.product_id = p.id ${branchIdCondition}
         )
       `;
+      if (filter.branchId) {
+        query.setParameter('branchId', filter.branchId);
+      }
       if (filter.stockStatus === 'inStock') query.andWhere(`${stockSubquery} > 0`);
       if (filter.stockStatus === 'outOfStock') query.andWhere(`${stockSubquery} <= 0`);
       if (filter.stockStatus === 'under') query.andWhere(`${stockSubquery} < 5`);

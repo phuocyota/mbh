@@ -71,19 +71,6 @@ export class CategoryService extends BaseService<Category> {
       params.isCanteenItem = filter.isCanteenItem;
     }
 
-    if (filter.branchId) {
-      productConditions.push(`
-        EXISTS (
-          SELECT 1
-          FROM stock_items stock_item
-          INNER JOIN stocks stock ON stock.id = stock_item.stock_id
-          WHERE stock_item.product_id = product.id
-            AND stock.branch_id = :branchId
-        )
-      `);
-      params.branchId = filter.branchId;
-    }
-
     const categories = await this.categoryRepository
       .createQueryBuilder('category')
       .leftJoinAndSelect(
