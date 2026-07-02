@@ -13,13 +13,16 @@ import { MealItem } from './meal-item.entity';
 import { Branch } from './branch.entity';
 
 @Entity('products')
-@Unique('UQ_products_id_branch_id', ['id', 'branchId'])
+@Unique('UQ_products_code_branch_id', ['code', 'branchId'])
 export class Product extends BaseEntity {
   @Column('uuid', { name: 'branch_id', nullable: true })
   branchId: string | null;
 
   @Column('uuid', { name: 'category_id' })
   categoryId: string;
+
+  @Column('varchar', { nullable: true })
+  code: string | null;
 
   @Column('varchar')
   name: string;

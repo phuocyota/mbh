@@ -50,7 +50,7 @@ export class ProductService extends BaseService<Product> {
 
     if (filter.search) {
       query.andWhere(
-        '(LOWER(p.name) LIKE LOWER(:search) OR CAST(p.id AS text) ILIKE :search)',
+        "(LOWER(p.name) LIKE LOWER(:search) OR LOWER(COALESCE(p.code, '')) LIKE LOWER(:search))",
         { search: `%${filter.search}%` },
       );
     }

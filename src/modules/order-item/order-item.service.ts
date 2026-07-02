@@ -174,7 +174,7 @@ export class OrderItemService extends BaseService<OrderItem> {
       .createQueryBuilder('oi')
       .innerJoin('orders', 'o', 'o.id = oi.order_id')
       .select('DATE(o.created_at)', 'date')
-      .addSelect('oi.product_id', 'code')
+      .addSelect('p.code', 'code')
       .addSelect('oi.product_name', 'name')
       .addSelect('oi.unit_price', 'price')
       .addSelect('SUM(oi.quantity)', 'qty')
@@ -197,6 +197,7 @@ export class OrderItemService extends BaseService<OrderItem> {
       .addGroupBy('oi.product_id')
       .addGroupBy('oi.product_name')
       .addGroupBy('oi.unit_price')
+      .addGroupBy('p.code')
       .orderBy('DATE(o.created_at)', 'ASC')
       .addOrderBy('oi.product_name', 'ASC');
 
@@ -231,7 +232,7 @@ export class OrderItemService extends BaseService<OrderItem> {
       .leftJoin('categories', 'c', 'c.id = p.category_id')
       .leftJoin('branches', 'b', 'b.id = o.branch_id')
       .select("COALESCE(c.name, 'Chua phan loai')", 'groupName')
-      .addSelect('oi.product_id', 'code')
+      .addSelect('p.code', 'code')
       .addSelect('oi.product_id', 'productId')
       .addSelect('oi.product_name', 'name')
       .addSelect('p.unit', 'unit')
@@ -250,6 +251,7 @@ export class OrderItemService extends BaseService<OrderItem> {
         itemStatus: ORDER_ITEM_STATUS.NORMAL,
       })
       .groupBy('c.name')
+      .addGroupBy('p.code')
       .addGroupBy('oi.product_id')
       .addGroupBy('oi.product_name')
       .addGroupBy('p.unit')

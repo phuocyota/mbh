@@ -40,7 +40,7 @@ export class InventoryItemService {
 
     if (search?.trim()) {
       query.andWhere(
-        '(LOWER(product.name) LIKE :search OR CAST(product.id AS text) LIKE :search)',
+        "(LOWER(product.name) LIKE :search OR LOWER(COALESCE(product.code, '')) LIKE :search)",
         { search: `%${search.trim().toLowerCase()}%` },
       );
     }
@@ -121,6 +121,7 @@ export class InventoryItemService {
       const savedProduct = await productRepo.save(
         productRepo.create({
           categoryId: dto.categoryId,
+          code: dto.code,
           name: dto.name,
           branchId,
           description: dto.notes,
@@ -156,6 +157,7 @@ export class InventoryItemService {
       throw new NotFoundException(`Inventory item not found: ${id}`);
     }
 
+    if (dto.code !== undefined) product.code = dto.code;
     if (dto.name !== undefined) product.name = dto.name;
     if (dto.notes !== undefined) product.description = dto.notes;
     if (dto.unit !== undefined) product.unit = dto.unit;
@@ -196,6 +198,7 @@ export class InventoryItemService {
     return {
       id: product.id,
       productId: product.id,
+      code: product.code,
       name: product.name,
       quantity,
       unit: product.unit,

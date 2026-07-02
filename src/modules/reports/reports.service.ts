@@ -587,6 +587,7 @@ export class ReportsService {
       .leftJoin('stock_items', 'stockItem', 'stockItem.product_id = product.id')
       .leftJoin('stocks', 'stock', 'stock.id = stockItem.stock_id')
       .select('product.id', 'productId')
+      .addSelect('product.code', 'code')
       .addSelect('product.name', 'name')
       .addSelect('product.unit', 'unit')
       .addSelect(
@@ -595,6 +596,7 @@ export class ReportsService {
       )
       .where('product.is_active = :isActive', { isActive: true })
       .groupBy('product.id')
+      .addGroupBy('product.code')
       .addGroupBy('product.name')
       .addGroupBy('product.unit')
       .orderBy('product.name', 'ASC');
@@ -614,6 +616,7 @@ export class ReportsService {
 
     return rows.map((row) => ({
       productId: row.productId,
+      code: row.code,
       name: row.name,
       unit: row.unit,
       quantity: Number(row.quantity || 0),

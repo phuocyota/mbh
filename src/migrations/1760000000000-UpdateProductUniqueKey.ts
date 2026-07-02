@@ -10,16 +10,26 @@ export class UpdateProductUniqueKey1760000000000 implements MigrationInterface {
     `);
 
     await queryRunner.query(`
+      ALTER TABLE "products"
+      ADD COLUMN IF NOT EXISTS "code" character varying
+    `);
+
+    await queryRunner.query(`
+      ALTER TABLE "products"
+      DROP CONSTRAINT IF EXISTS "UQ_products_id_branch_id"
+    `);
+
+    await queryRunner.query(`
       DO $$
       BEGIN
         IF NOT EXISTS (
           SELECT 1
           FROM pg_constraint
-          WHERE conname = 'UQ_products_id_branch_id'
+          WHERE conname = 'UQ_products_code_branch_id'
             AND conrelid = '"products"'::regclass
         ) THEN
           ALTER TABLE "products"
-          ADD CONSTRAINT "UQ_products_id_branch_id" UNIQUE ("id", "branch_id");
+          ADD CONSTRAINT "UQ_products_code_branch_id" UNIQUE ("code", "branch_id");
         END IF;
       END
       $$;
@@ -29,7 +39,12 @@ export class UpdateProductUniqueKey1760000000000 implements MigrationInterface {
   public async down(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(`
       ALTER TABLE "products"
-      DROP CONSTRAINT IF EXISTS "UQ_products_id_branch_id"
+      DROP CONSTRAINT IF EXISTS "UQ_products_code_branch_id"
+    `);
+
+    await queryRunner.query(`
+      ALTER TABLE "products"
+      DROP COLUMN IF EXISTS "code"
     `);
 
     await queryRunner.query(`
