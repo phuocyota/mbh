@@ -1,10 +1,11 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { FindOptionsWhere, Repository } from 'typeorm';
 import { User } from '../../entities';
 import { BaseService } from '../../common/sql/base.service';
 import { CustomerService } from '../customer/customer.service';
 import { COMMON_STATUS, USER_ROLE } from '../../common/constant/constant';
+import { normalizePagination, toPaginationResponse } from '../../common/dto/pagination.dto';
 
 @Injectable()
 export class UserService extends BaseService<User> {
@@ -18,6 +19,25 @@ export class UserService extends BaseService<User> {
 
   protected getEntityName(): string {
     return 'User';
+  }
+
+  async findAll(page?: any, size?: any, branchId?: string) {
+    const pagination = normalizePagination(page, size);
+    const where: FindOptionsWhere<User> = {};
+
+    if (branchId) {
+      where.branchId = branchId;
+    }
+
+    const [data, total] = await this.userRepository.findAndCount({
+      where,
+      relations: ['branch'],
+      order: { createdAt: 'DESC' },
+      skip: pagination.skip,
+      take: pagination.size,
+    });
+
+    return toPaginationResponse(data, total, pagination.page, pagination.size);
   }
 
   async findByEmail(email: string): Promise<User | null> {

@@ -4,6 +4,7 @@ import { In, Repository } from 'typeorm';
 import { Payment } from '../../entities/payment.entity';
 import { BaseService } from '../../common/sql/base.service';
 import { PAYMENT_METHOD, PAYMENT_STATUS } from '../../common/constant/constant';
+import { normalizePagination, toPaginationResponse } from '../../common/dto/pagination.dto';
 
 @Injectable()
 export class PaymentService extends BaseService<Payment> {
@@ -16,6 +17,23 @@ export class PaymentService extends BaseService<Payment> {
 
   protected getEntityName(): string {
     return 'Payment';
+  }
+
+  async findAll(page?: any, size?: any, branchId?: string) {
+    const pagination = normalizePagination(page, size);
+    const query = this.paymentRepository
+      .createQueryBuilder('payment')
+      .leftJoinAndSelect('payment.order', 'order')
+      .orderBy('payment.createdAt', 'DESC')
+      .skip(pagination.skip)
+      .take(pagination.size);
+
+    if (branchId) {
+      query.andWhere('order.branchId = :branchId', { branchId });
+    }
+
+    const [data, total] = await query.getManyAndCount();
+    return toPaginationResponse(data, total, pagination.page, pagination.size);
   }
 
   async createSuccessPayment(paymentDto: any): Promise<Payment> {

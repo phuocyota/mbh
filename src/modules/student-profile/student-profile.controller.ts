@@ -16,6 +16,7 @@ import {
   ApiResponse,
   ApiBearerAuth,
   ApiParam,
+  ApiQuery,
 } from '@nestjs/swagger';
 import { StudentProfileService } from './student-profile.service';
 import { CreateStudentProfileDto } from './dto/create-student-profile.dto';
@@ -29,16 +30,18 @@ export class StudentProfileController {
 
   @Get()
   @ApiOperation({ summary: 'Get all student profiles' })
+  @ApiQuery({ name: 'branchId', required: false })
   @ApiResponse({
     status: 200,
     description: 'List of student profiles',
     type: [StudentProfileDto],
   })
   async findAll(
+    @Query('branchId') branchId?: string,
     @Query('page') page?: string,
     @Query('size') size?: string,
   ) {
-    return this.studentProfileService.findAll(page, size);
+    return this.studentProfileService.findAll(page, size, branchId);
   }
 
   @Get(':id')

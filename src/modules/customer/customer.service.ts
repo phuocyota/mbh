@@ -32,6 +32,23 @@ export class CustomerService extends BaseService<Customer> {
     return 'Customer';
   }
 
+  async findAll(page?: any, size?: any, branchId?: string) {
+    const pagination = normalizePagination(page, size);
+    const qb = this.customerRepository
+      .createQueryBuilder('customer')
+      .leftJoin('users', 'user', 'user.id = customer.user_id')
+      .orderBy('customer.created_at', 'DESC')
+      .skip(pagination.skip)
+      .take(pagination.size);
+
+    if (branchId) {
+      qb.andWhere('user.branch_id = :branchId', { branchId });
+    }
+
+    const [data, total] = await qb.getManyAndCount();
+    return toPaginationResponse(data, total, pagination.page, pagination.size);
+  }
+
   async findByUserId(userId: string): Promise<Customer | null> {
     return this.customerRepository.findOne({
       where: { userId },
@@ -229,21 +246,25 @@ export class CustomerService extends BaseService<Customer> {
     keyword: string,
     page?: number | string,
     size?: number | string,
+    branchId?: string,
   ) {
     const pagination = normalizePagination(page, size);
-    if (!keyword || !keyword.trim()) {
-      const [data, total] = await this.customerRepository.findAndCount({
-        skip: pagination.skip,
-        take: pagination.size,
-      });
+    const qb = this.customerRepository
+      .createQueryBuilder('c')
+      .leftJoin('users', 'user', 'user.id = c.user_id');
 
-      return toPaginationResponse(data, total, pagination.page, pagination.size);
+    if (keyword?.trim()) {
+      qb.where(
+        '(c.full_name ILIKE :kw OR c.customer_code ILIKE :kw OR c.phone ILIKE :kw)',
+        { kw: `%${keyword}%` },
+      );
     }
 
-    const qb = this.customerRepository.createQueryBuilder('c');
-    qb.where('c.full_name ILIKE :kw', { kw: `%${keyword}%` })
-      .orWhere('c.customer_code ILIKE :kw', { kw: `%${keyword}%` })
-      .orWhere('c.phone ILIKE :kw', { kw: `%${keyword}%` })
+    if (branchId) {
+      qb.andWhere('user.branch_id = :branchId', { branchId });
+    }
+
+    qb
       .orderBy('c.created_at', 'DESC')
       .skip(pagination.skip)
       .take(pagination.size);

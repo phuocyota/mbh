@@ -13,8 +13,13 @@ export class StockVoucherController {
   @ApiOperation({ summary: 'Get all stock import/export vouchers' })
   @ApiQuery({ name: 'page', required: false, type: Number })
   @ApiQuery({ name: 'size', required: false, type: Number })
-  findAll(@Query('page') page?: string, @Query('size') size?: string) {
-    return this.stockVoucherService.findAll(page, size);
+  @ApiQuery({ name: 'branchId', required: false })
+  findAll(
+    @Query('branchId') branchId?: string,
+    @Query('page') page?: string,
+    @Query('size') size?: string,
+  ) {
+    return this.stockVoucherService.findAll(page, size, branchId);
   }
 
   @Post('imports')

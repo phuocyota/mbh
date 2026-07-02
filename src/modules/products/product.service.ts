@@ -56,6 +56,12 @@ export class ProductService extends BaseService<Product> {
       query.andWhere('p.category_id = :categoryId', { categoryId });
     }
 
+    if (filter.branchId) {
+      query.andWhere('p.branch_id = :branchId', { branchId: filter.branchId });
+    } else {
+      query.andWhere('p.branch_id IS NULL');
+    }
+
     if (filter.stockStatus && filter.stockStatus !== 'all') {
       const branchIdCondition = filter.branchId ? `AND stock.branch_id = :branchId` : '';
       const stockSubquery = `
@@ -318,8 +324,12 @@ export class ProductService extends BaseService<Product> {
     }
   }
 
-  async findAllCategories(page?: number | string, size?: number | string) {
-    return this.categoryService.findActive(page, size);
+  async findAllCategories(
+    page?: number | string,
+    size?: number | string,
+    branchId?: string,
+  ) {
+    return this.categoryService.findActive(page, size, branchId);
   }
 
   async findAllCategoriesWithProducts(filter: ProductPriceFilter = {}) {

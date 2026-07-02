@@ -8,6 +8,9 @@ export class PayrollDto {
   @ApiProperty({ description: 'Payroll code' })
   code: string;
 
+  @ApiProperty({ description: 'Branch ID', required: false, nullable: true })
+  branchId?: string | null;
+
   @ApiProperty({ description: 'Payroll name' })
   name: string;
 

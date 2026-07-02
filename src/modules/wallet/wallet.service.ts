@@ -17,6 +17,7 @@ import {
   WALLET_TRANSACTION_REF_TYPE,
   WALLET_TRANSACTION_TYPE,
 } from '../../common/constant/constant';
+import { normalizePagination, toPaginationResponse } from '../../common/dto/pagination.dto';
 
 const DEFERRED_PAYMENT_REASON_CODE = 'TT_TRA_CHAM';
 
@@ -43,6 +44,24 @@ export class WalletService extends BaseService<Wallet> {
 
   protected getEntityName(): string {
     return 'Wallet';
+  }
+
+  async findAll(page?: any, size?: any, branchId?: string) {
+    const pagination = normalizePagination(page, size);
+    const query = this.walletRepository
+      .createQueryBuilder('wallet')
+      .leftJoinAndSelect('wallet.customer', 'customer')
+      .leftJoin('users', 'user', 'user.id = customer.user_id')
+      .orderBy('wallet.created_at', 'DESC')
+      .skip(pagination.skip)
+      .take(pagination.size);
+
+    if (branchId) {
+      query.andWhere('user.branch_id = :branchId', { branchId });
+    }
+
+    const [data, total] = await query.getManyAndCount();
+    return toPaginationResponse(data, total, pagination.page, pagination.size);
   }
 
   /**

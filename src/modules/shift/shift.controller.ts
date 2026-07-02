@@ -16,6 +16,7 @@ import {
   ApiResponse,
   ApiBearerAuth,
   ApiParam,
+  ApiQuery,
 } from '@nestjs/swagger';
 import { ShiftService } from './shift.service';
 import { CreateShiftDto } from './dto/create-shift.dto';
@@ -29,16 +30,18 @@ export class ShiftController {
 
   @Get()
   @ApiOperation({ summary: 'Get all shifts' })
+  @ApiQuery({ name: 'branchId', required: false })
   @ApiResponse({
     status: 200,
     description: 'List of shifts',
     type: [ShiftDto],
   })
   async findAll(
+    @Query('branchId') branchId?: string,
     @Query('page') page?: string,
     @Query('size') size?: string,
   ) {
-    return this.shiftService.findAll(page, size);
+    return this.shiftService.findAll(page, size, branchId);
   }
 
   @Get(':id')

@@ -4,7 +4,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, EntityManager, In, Repository } from 'typeorm';
+import { DataSource, EntityManager, FindOptionsWhere, In, Repository } from 'typeorm';
 import {
   Debt,
   Fund,
@@ -57,9 +57,20 @@ export class FinanceService {
     private dataSource: DataSource,
   ) {}
 
-  async findFunds(page?: number | string, size?: number | string) {
+  async findFunds(
+    page?: number | string,
+    size?: number | string,
+    branchId?: string,
+  ) {
     const pagination = normalizePagination(page, size);
+    const where: FindOptionsWhere<Fund> = {};
+
+    if (branchId) {
+      where.branchId = branchId;
+    }
+
     const [data, total] = await this.fundRepository.findAndCount({
+      where,
       skip: pagination.skip,
       take: pagination.size,
     });
@@ -71,13 +82,26 @@ export class FinanceService {
     return this.fundRepository.save(this.fundRepository.create(dto));
   }
 
-  async findMoneyVouchers(page?: number | string, size?: number | string) {
+  async findMoneyVouchers(
+    page?: number | string,
+    size?: number | string,
+    branchId?: string,
+  ) {
     const pagination = normalizePagination(page, size);
-    const [data, total] = await this.moneyVoucherRepository.findAndCount({
-      relations: ['fund', 'order', 'supplier'],
-      skip: pagination.skip,
-      take: pagination.size,
-    });
+    const query = this.moneyVoucherRepository
+      .createQueryBuilder('voucher')
+      .leftJoinAndSelect('voucher.fund', 'fund')
+      .leftJoinAndSelect('voucher.order', 'order')
+      .leftJoinAndSelect('voucher.supplier', 'supplier')
+      .orderBy('voucher.createdAt', 'DESC')
+      .skip(pagination.skip)
+      .take(pagination.size);
+
+    if (branchId) {
+      query.andWhere('fund.branchId = :branchId', { branchId });
+    }
+
+    const [data, total] = await query.getManyAndCount();
 
     return toPaginationResponse(data, total, pagination.page, pagination.size);
   }
@@ -354,17 +378,28 @@ export class FinanceService {
     return this.dataSource.transaction(executor);
   }
 
-  async findReceiptsReceived(page?: number | string, size?: number | string) {
+  async findReceiptsReceived(
+    page?: number | string,
+    size?: number | string,
+    branchId?: string,
+  ) {
     const pagination = normalizePagination(page, size);
-    const [idRows, total] = await Promise.all([
-      this.fundReceiptReceivedRepository
+    const baseQuery = this.fundReceiptReceivedRepository
         .createQueryBuilder('receipt')
-        .select('receipt.id', 'id')
+        .select('receipt.id', 'id');
+
+    if (branchId) {
+      baseQuery.where('receipt.branchId = :branchId', { branchId });
+    }
+
+    const [idRows, total] = await Promise.all([
+      baseQuery
+        .clone()
         .orderBy('receipt.createdAt', 'DESC')
         .offset(pagination.skip)
         .limit(pagination.size)
         .getRawMany<{ id: string }>(),
-      this.fundReceiptReceivedRepository.count(),
+      baseQuery.clone().getCount(),
     ]);
 
     const ids = idRows.map((row) => row.id);
@@ -385,17 +420,28 @@ export class FinanceService {
     return toPaginationResponse(data, total, pagination.page, pagination.size);
   }
 
-  async findReceiptsPaid(page?: number | string, size?: number | string) {
+  async findReceiptsPaid(
+    page?: number | string,
+    size?: number | string,
+    branchId?: string,
+  ) {
     const pagination = normalizePagination(page, size);
-    const [idRows, total] = await Promise.all([
-      this.fundReceiptPaidRepository
+    const baseQuery = this.fundReceiptPaidRepository
         .createQueryBuilder('receipt')
-        .select('receipt.id', 'id')
+        .select('receipt.id', 'id');
+
+    if (branchId) {
+      baseQuery.where('receipt.branchId = :branchId', { branchId });
+    }
+
+    const [idRows, total] = await Promise.all([
+      baseQuery
+        .clone()
         .orderBy('receipt.createdAt', 'DESC')
         .offset(pagination.skip)
         .limit(pagination.size)
         .getRawMany<{ id: string }>(),
-      this.fundReceiptPaidRepository.count(),
+      baseQuery.clone().getCount(),
     ]);
 
     const ids = idRows.map((row) => row.id);
@@ -416,17 +462,33 @@ export class FinanceService {
     return toPaginationResponse(data, total, pagination.page, pagination.size);
   }
 
-  async findTransfers(page?: number | string, size?: number | string) {
+  async findTransfers(
+    page?: number | string,
+    size?: number | string,
+    branchId?: string,
+  ) {
     const pagination = normalizePagination(page, size);
-    const [idRows, total] = await Promise.all([
-      this.fundReceiptTransferRepository
+    const baseQuery = this.fundReceiptTransferRepository
         .createQueryBuilder('transfer')
-        .select('transfer.id', 'id')
+        .innerJoin('transfer.fromFund', 'fromFund')
+        .innerJoin('transfer.toFund', 'toFund')
+        .select('transfer.id', 'id');
+
+    if (branchId) {
+      baseQuery.where(
+        '(fromFund.branchId = :branchId OR toFund.branchId = :branchId)',
+        { branchId },
+      );
+    }
+
+    const [idRows, total] = await Promise.all([
+      baseQuery
+        .clone()
         .orderBy('transfer.createdAt', 'DESC')
         .offset(pagination.skip)
         .limit(pagination.size)
         .getRawMany<{ id: string }>(),
-      this.fundReceiptTransferRepository.count(),
+      baseQuery.clone().getCount(),
     ]);
 
     const ids = idRows.map((row) => row.id);
@@ -449,14 +511,24 @@ export class FinanceService {
     return toPaginationResponse(data, total, pagination.page, pagination.size);
   }
 
-  async findDetails(page?: number | string, size?: number | string) {
+  async findDetails(
+    page?: number | string,
+    size?: number | string,
+    branchId?: string,
+  ) {
     const pagination = normalizePagination(page, size);
-    const [data, total] = await this.fundDetailRepository.findAndCount({
-      relations: ['fund'],
-      order: { createdAt: 'DESC' },
-      skip: pagination.skip,
-      take: pagination.size,
-    });
+    const query = this.fundDetailRepository
+      .createQueryBuilder('detail')
+      .leftJoinAndSelect('detail.fund', 'fund')
+      .orderBy('detail.createdAt', 'DESC')
+      .skip(pagination.skip)
+      .take(pagination.size);
+
+    if (branchId) {
+      query.andWhere('fund.branchId = :branchId', { branchId });
+    }
+
+    const [data, total] = await query.getManyAndCount();
 
     return toPaginationResponse(data, total, pagination.page, pagination.size);
   }

@@ -5,6 +5,7 @@ import {
   IsOptional,
   IsNumber,
   Min,
+  IsUUID,
 } from 'class-validator';
 import {
   ACTIVE_INACTIVE_STATUS_VALUES,
@@ -46,4 +47,12 @@ export class CreateCategoryDto {
   })
   @IsOptional()
   status?: string;
+
+  @ApiProperty({
+    description: 'Branch ID',
+    required: false,
+  })
+  @IsOptional()
+  @IsUUID()
+  branchId?: string;
 }

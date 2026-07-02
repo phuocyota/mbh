@@ -1,9 +1,13 @@
-import { Entity, Column } from 'typeorm';
+import { Entity, Column, ManyToOne, JoinColumn } from 'typeorm';
 import { BaseEntity } from '../common/sql/base.entity';
 import { PAYROLL_STATUS } from '../common/constant/constant';
+import { Branch } from './branch.entity';
 
 @Entity('payrolls')
 export class Payroll extends BaseEntity {
+  @Column('uuid', { nullable: true, name: 'branch_id' })
+  branchId: string | null;
+
   @Column('varchar', { unique: true, name: 'code' })
   code: string;
 
@@ -33,4 +37,8 @@ export class Payroll extends BaseEntity {
 
   @Column('text', { nullable: true })
   note: string;
+
+  @ManyToOne(() => Branch, { nullable: true })
+  @JoinColumn({ name: 'branch_id' })
+  branch: Branch | null;
 }

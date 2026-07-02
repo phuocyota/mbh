@@ -9,6 +9,12 @@ export class CategoryDto extends BaseDto {
   name: string;
 
   @ApiProperty({
+    description: 'Branch ID',
+    required: false,
+  })
+  branchId?: string | null;
+
+  @ApiProperty({
     description: 'Category description',
     example: 'All beverages and drinks',
   })

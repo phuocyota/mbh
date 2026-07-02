@@ -12,6 +12,7 @@ import {
 
 interface FindAllOptions {
   status?: string;
+  branchId?: string;
   page?: number | string;
   size?: number | string;
 }
@@ -37,9 +38,14 @@ export class PayrollService extends BaseService<Payroll> {
     if (status && status !== PAYROLL_STATUS_FILTER_ALL) {
       where.status = status;
     }
+
+    if (options?.branchId) {
+      where.branchId = options.branchId;
+    }
     
     const [data, total] = await this.payrollRepository.findAndCount({
       where,
+      relations: ['branch'],
       order: { createdAt: 'DESC' },
       skip: pagination.skip,
       take: pagination.size,

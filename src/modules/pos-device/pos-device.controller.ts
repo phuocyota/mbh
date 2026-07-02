@@ -16,6 +16,7 @@ import {
   ApiResponse,
   ApiBearerAuth,
   ApiParam,
+  ApiQuery,
 } from '@nestjs/swagger';
 import { POSDeviceService } from './pos-device.service';
 import { CreatePOSDeviceDto } from './dto/create-pos-device.dto';
@@ -29,16 +30,18 @@ export class POSDeviceController {
 
   @Get()
   @ApiOperation({ summary: 'Get all POS devices' })
+  @ApiQuery({ name: 'branchId', required: false })
   @ApiResponse({
     status: 200,
     description: 'List of POS devices',
     type: [POSDeviceDto],
   })
   async findAll(
+    @Query('branchId') branchId?: string,
     @Query('page') page?: string,
     @Query('size') size?: string,
   ) {
-    return this.posDeviceService.findAll(page, size);
+    return this.posDeviceService.findAll(page, size, branchId);
   }
 
   @Get(':id')

@@ -3,9 +3,13 @@ import { BaseEntity } from '../common/sql/base.entity';
 import { Category } from './category.entity';
 import { ProductPriceHistory } from './product-price-history.entity';
 import { MealItem } from './meal-item.entity';
+import { Branch } from './branch.entity';
 
 @Entity('products')
 export class Product extends BaseEntity {
+  @Column('uuid', { name: 'branch_id', nullable: true })
+  branchId: string | null;
+
   @Column('uuid', { name: 'category_id' })
   categoryId: string;
 
@@ -48,6 +52,10 @@ export class Product extends BaseEntity {
   @ManyToOne(() => Category, (category) => category.products)
   @JoinColumn({ name: 'category_id' })
   category: Category;
+
+  @ManyToOne(() => Branch, (branch) => branch.products, { nullable: true })
+  @JoinColumn({ name: 'branch_id' })
+  branch: Branch | null;
 
   @OneToMany(() => ProductPriceHistory, (history) => history.product)
   priceHistories: ProductPriceHistory[];

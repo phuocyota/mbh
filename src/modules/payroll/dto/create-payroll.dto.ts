@@ -5,6 +5,9 @@ import {
 } from '../../../common/constant/constant';
 
 export class CreatePayrollDto {
+  @ApiPropertyOptional({ description: 'Branch ID' })
+  branchId?: string;
+
   @ApiProperty({ description: 'Payroll name' })
   name: string;
 

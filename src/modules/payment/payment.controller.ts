@@ -16,6 +16,7 @@ import {
   ApiResponse,
   ApiBearerAuth,
   ApiParam,
+  ApiQuery,
 } from '@nestjs/swagger';
 import { PaymentService } from './payment.service';
 import { CreatePaymentDto } from './dto/create-payment.dto';
@@ -29,16 +30,18 @@ export class PaymentController {
 
   @Get()
   @ApiOperation({ summary: 'Get all payments' })
+  @ApiQuery({ name: 'branchId', required: false })
   @ApiResponse({
     status: 200,
     description: 'List of payments',
     type: [PaymentDto],
   })
   async findAll(
+    @Query('branchId') branchId?: string,
     @Query('page') page?: string,
     @Query('size') size?: string,
   ) {
-    return this.paymentService.findAll(page, size);
+    return this.paymentService.findAll(page, size, branchId);
   }
 
   @Get(':id')

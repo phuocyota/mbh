@@ -1,5 +1,5 @@
 import { Body, Controller, Get, Post, Query } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
 import { FinanceService } from './finance.service';
 import { CreateFundDto } from './dto/create-fund.dto';
 import { CreateMoneyVoucherDto } from './dto/create-money-voucher.dto';
@@ -13,8 +13,13 @@ export class FinanceController {
 
   @Get('funds')
   @ApiOperation({ summary: 'Get all funds' })
-  findFunds(@Query('page') page?: string, @Query('size') size?: string) {
-    return this.financeService.findFunds(page, size);
+  @ApiQuery({ name: 'branchId', required: false })
+  findFunds(
+    @Query('branchId') branchId?: string,
+    @Query('page') page?: string,
+    @Query('size') size?: string,
+  ) {
+    return this.financeService.findFunds(page, size, branchId);
   }
 
   @Post('funds')
@@ -25,11 +30,13 @@ export class FinanceController {
 
   @Get('money-vouchers')
   @ApiOperation({ summary: 'Get all money vouchers' })
+  @ApiQuery({ name: 'branchId', required: false })
   findMoneyVouchers(
+    @Query('branchId') branchId?: string,
     @Query('page') page?: string,
     @Query('size') size?: string,
   ) {
-    return this.financeService.findMoneyVouchers(page, size);
+    return this.financeService.findMoneyVouchers(page, size, branchId);
   }
 
   @Post('receipts')
@@ -46,32 +53,46 @@ export class FinanceController {
 
   @Get('receipts/received')
   @ApiOperation({ summary: 'Get all received receipts (PT)' })
+  @ApiQuery({ name: 'branchId', required: false })
   findReceiptsReceived(
+    @Query('branchId') branchId?: string,
     @Query('page') page?: string,
     @Query('size') size?: string,
   ) {
-    return this.financeService.findReceiptsReceived(page, size);
+    return this.financeService.findReceiptsReceived(page, size, branchId);
   }
 
   @Get('receipts/paid')
   @ApiOperation({ summary: 'Get all paid receipts (PC)' })
+  @ApiQuery({ name: 'branchId', required: false })
   findReceiptsPaid(
+    @Query('branchId') branchId?: string,
     @Query('page') page?: string,
     @Query('size') size?: string,
   ) {
-    return this.financeService.findReceiptsPaid(page, size);
+    return this.financeService.findReceiptsPaid(page, size, branchId);
   }
 
   @Get('transfers')
   @ApiOperation({ summary: 'Get all fund transfers (CQ)' })
-  findTransfers(@Query('page') page?: string, @Query('size') size?: string) {
-    return this.financeService.findTransfers(page, size);
+  @ApiQuery({ name: 'branchId', required: false })
+  findTransfers(
+    @Query('branchId') branchId?: string,
+    @Query('page') page?: string,
+    @Query('size') size?: string,
+  ) {
+    return this.financeService.findTransfers(page, size, branchId);
   }
 
   @Get('details')
   @ApiOperation({ summary: 'Get all fund details' })
-  findDetails(@Query('page') page?: string, @Query('size') size?: string) {
-    return this.financeService.findDetails(page, size);
+  @ApiQuery({ name: 'branchId', required: false })
+  findDetails(
+    @Query('branchId') branchId?: string,
+    @Query('page') page?: string,
+    @Query('size') size?: string,
+  ) {
+    return this.financeService.findDetails(page, size, branchId);
   }
 
   @Post('transfers')

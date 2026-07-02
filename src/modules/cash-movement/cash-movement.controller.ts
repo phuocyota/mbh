@@ -16,6 +16,7 @@ import {
   ApiResponse,
   ApiBearerAuth,
   ApiParam,
+  ApiQuery,
 } from '@nestjs/swagger';
 import { CashMovementService } from './cash-movement.service';
 import { CreateCashMovementDto } from './dto/create-cash-movement.dto';
@@ -29,16 +30,18 @@ export class CashMovementController {
 
   @Get()
   @ApiOperation({ summary: 'Get all cash movements' })
+  @ApiQuery({ name: 'branchId', required: false })
   @ApiResponse({
     status: 200,
     description: 'List of cash movements',
     type: [CashMovementDto],
   })
   async findAll(
+    @Query('branchId') branchId?: string,
     @Query('page') page?: string,
     @Query('size') size?: string,
   ) {
-    return this.cashMovementService.findAll(page, size);
+    return this.cashMovementService.findAll(page, size, branchId);
   }
 
   @Get(':id')

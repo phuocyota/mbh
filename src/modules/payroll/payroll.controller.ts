@@ -43,6 +43,7 @@ export class PayrollController {
   })
   @ApiQuery({ name: 'page', required: false, type: Number })
   @ApiQuery({ name: 'size', required: false, type: Number })
+  @ApiQuery({ name: 'branchId', required: false })
   @ApiResponse({
     status: 200,
     description: 'List of payrolls',
@@ -50,10 +51,11 @@ export class PayrollController {
   })
   async findAll(
     @Query('status') status?: string,
+    @Query('branchId') branchId?: string,
     @Query('page') page?: string,
     @Query('size') size?: string,
   ) {
-    return this.payrollService.findAll({ status, page, size });
+    return this.payrollService.findAll({ status, branchId, page, size });
   }
 
   @Get(':id')

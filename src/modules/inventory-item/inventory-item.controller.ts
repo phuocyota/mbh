@@ -33,21 +33,24 @@ export class InventoryItemController {
     summary: 'Compatibility inventory item list backed by products stock',
   })
   @ApiQuery({ name: 'search', required: false })
+  @ApiQuery({ name: 'branchId', required: false })
   @ApiQuery({ name: 'page', required: false, type: Number })
   @ApiQuery({ name: 'size', required: false, type: Number })
   async findAll(
     @Query('search') search?: string,
+    @Query('branchId') branchId?: string,
     @Query('page') page?: string,
     @Query('size') size?: string,
   ) {
-    return this.inventoryItemService.findAll(search, page, size);
+    return this.inventoryItemService.findAll(search, page, size, branchId);
   }
 
   @Get(':id')
   @ApiOperation({ summary: 'Get inventory item by product ID' })
   @ApiParam({ name: 'id', description: 'Product ID' })
-  async findOne(@Param('id') id: string) {
-    return this.inventoryItemService.findOne(id);
+  @ApiQuery({ name: 'branchId', required: false })
+  async findOne(@Param('id') id: string, @Query('branchId') branchId?: string) {
+    return this.inventoryItemService.findOne(id, branchId);
   }
 
   @Post()

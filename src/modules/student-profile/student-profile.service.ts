@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { StudentProfile } from '../../entities/student-profile.entity';
 import { BaseService } from '../../common/sql/base.service';
+import { normalizePagination, toPaginationResponse } from '../../common/dto/pagination.dto';
 
 @Injectable()
 export class StudentProfileService extends BaseService<StudentProfile> {
@@ -15,5 +16,23 @@ export class StudentProfileService extends BaseService<StudentProfile> {
 
   protected getEntityName(): string {
     return 'StudentProfile';
+  }
+
+  async findAll(page?: any, size?: any, branchId?: string) {
+    const pagination = normalizePagination(page, size);
+    const query = this.studentProfileRepository
+      .createQueryBuilder('profile')
+      .leftJoinAndSelect('profile.customer', 'customer')
+      .leftJoin('users', 'user', 'user.id = customer.user_id')
+      .orderBy('profile.created_at', 'DESC')
+      .skip(pagination.skip)
+      .take(pagination.size);
+
+    if (branchId) {
+      query.andWhere('user.branch_id = :branchId', { branchId });
+    }
+
+    const [data, total] = await query.getManyAndCount();
+    return toPaginationResponse(data, total, pagination.page, pagination.size);
   }
 }

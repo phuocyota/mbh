@@ -15,12 +15,21 @@ export class InventoryItemService {
     private readonly dataSource: DataSource,
   ) {}
 
-  async findAll(search?: string, page?: number | string, size?: number | string) {
+  async findAll(
+    search?: string,
+    page?: number | string,
+    size?: number | string,
+    branchId?: string,
+  ) {
+    const resolvedBranchId = branchId || DEFAULT_BRANCH_ID;
     const pagination = normalizePagination(page, size);
     const query = this.productRepository
       .createQueryBuilder('product')
       .leftJoinAndSelect('product.category', 'category')
-      .where('product.is_active = :isActive', { isActive: true });
+      .where('product.is_active = :isActive', { isActive: true })
+      .andWhere('product.branch_id = :branchId', {
+        branchId: resolvedBranchId,
+      });
 
     if (search?.trim()) {
       query.andWhere(
@@ -58,6 +67,7 @@ export class InventoryItemService {
       .filter((product): product is Product => !!product);
     const quantityByProductId = await this.getQuantityByProductIds(
       products.map((product) => product.id),
+      resolvedBranchId,
     );
 
     return toPaginationResponse(
@@ -70,9 +80,10 @@ export class InventoryItemService {
     );
   }
 
-  async findOne(id: string) {
+  async findOne(id: string, branchId?: string) {
+    const resolvedBranchId = branchId || DEFAULT_BRANCH_ID;
     const product = await this.productRepository.findOne({
-      where: { id },
+      where: { id, branchId: resolvedBranchId },
       relations: ['category'],
     });
 
@@ -80,7 +91,10 @@ export class InventoryItemService {
       throw new NotFoundException(`Inventory item not found: ${id}`);
     }
 
-    const quantityByProductId = await this.getQuantityByProductIds([product.id]);
+    const quantityByProductId = await this.getQuantityByProductIds(
+      [product.id],
+      resolvedBranchId,
+    );
     return this.toInventoryItem(
       product,
       quantityByProductId.get(product.id) || 0,
@@ -88,6 +102,7 @@ export class InventoryItemService {
   }
 
   async create(dto: any) {
+    const branchId = dto.branchId || DEFAULT_BRANCH_ID;
     if (!dto.categoryId) {
       throw new BadRequestException('categoryId is required to create product-backed inventory item');
     }
@@ -99,6 +114,7 @@ export class InventoryItemService {
           categoryId: dto.categoryId,
           sku: dto.sku,
           name: dto.name,
+          branchId,
           description: dto.notes,
           price: Number(dto.price || dto.costPerUnit || 0),
           costPrice: Number(dto.costPerUnit || 0),
@@ -112,17 +128,21 @@ export class InventoryItemService {
           trx,
           savedProduct.id,
           Number(dto.quantity || 0),
+          branchId,
         );
       }
 
       return savedProduct;
     });
 
-    return this.findOne(product.id);
+    return this.findOne(product.id, branchId);
   }
 
   async update(id: string, dto: any) {
-    const product = await this.productRepository.findOne({ where: { id } });
+    const branchId = dto.branchId || DEFAULT_BRANCH_ID;
+    const product = await this.productRepository.findOne({
+      where: { id, branchId },
+    });
 
     if (!product) {
       throw new NotFoundException(`Inventory item not found: ${id}`);
@@ -145,11 +165,12 @@ export class InventoryItemService {
           trx,
           product.id,
           Number(dto.quantity || 0),
+          branchId,
         );
       }
     });
 
-    return this.findOne(id);
+    return this.findOne(id, branchId);
   }
 
   async delete(id: string) {
@@ -182,7 +203,7 @@ export class InventoryItemService {
     };
   }
 
-  private async getQuantityByProductIds(productIds: string[]) {
+  private async getQuantityByProductIds(productIds: string[], branchId: string) {
     const quantityByProductId = new Map<string, number>();
     if (productIds.length === 0) {
       return quantityByProductId;
@@ -192,7 +213,9 @@ export class InventoryItemService {
       .createQueryBuilder('stockItem')
       .select('stockItem.productId', 'productId')
       .addSelect('COALESCE(SUM(stockItem.quantity), 0)', 'quantity')
+      .innerJoin('stockItem.stock', 'stock')
       .where({ productId: In(productIds) })
+      .andWhere('stock.branchId = :branchId', { branchId })
       .groupBy('stockItem.productId')
       .getRawMany<{ productId: string; quantity: string }>();
 
@@ -203,17 +226,17 @@ export class InventoryItemService {
     return quantityByProductId;
   }
 
-  private async getOrCreateDefaultStock(trx: EntityManager) {
+  private async getOrCreateDefaultStock(trx: EntityManager, branchId: string) {
     const stockRepo = trx.getRepository(Stock);
     let stock = await stockRepo.findOne({
-      where: { branchId: DEFAULT_BRANCH_ID },
+      where: { branchId },
     });
 
     if (!stock) {
       stock = await stockRepo.save(
         stockRepo.create({
           name: 'Kho Chi Nhanh',
-          branchId: DEFAULT_BRANCH_ID,
+          branchId,
         }),
       );
     }
@@ -225,8 +248,9 @@ export class InventoryItemService {
     trx: EntityManager,
     productId: string,
     quantity: number,
+    branchId: string,
   ) {
-    const stock = await this.getOrCreateDefaultStock(trx);
+    const stock = await this.getOrCreateDefaultStock(trx, branchId);
     const stockItemRepo = trx.getRepository(StockItem);
     let stockItem = await stockItemRepo.findOne({
       where: { stockId: stock.id, productId },

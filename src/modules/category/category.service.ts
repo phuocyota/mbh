@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { FindOptionsWhere, IsNull, Repository } from 'typeorm';
 import { Category } from '../../entities/category.entity';
 import { StockItem } from '../../entities/stock-item.entity';
 import { BaseService } from '../../common/sql/base.service';
@@ -21,6 +21,26 @@ export class CategoryService extends BaseService<Category> {
     return 'Category';
   }
 
+  async findAll(page?: any, size?: any, branchId?: string) {
+    const pagination = normalizePagination(page, size);
+    const where: FindOptionsWhere<Category> = {};
+
+    if (branchId) {
+      where.branchId = branchId;
+    } else {
+      where.branchId = IsNull();
+    }
+
+    const [data, total] = await this.categoryRepository.findAndCount({
+      where,
+      order: { sortOrder: 'ASC' },
+      skip: pagination.skip,
+      take: pagination.size,
+    });
+
+    return toPaginationResponse(data, total, pagination.page, pagination.size);
+  }
+
   async delete(id: string, user: JwtPayload): Promise<Category> {
     const item = await this.findOne(id);
     item.updatedBy = user.userId;
@@ -28,10 +48,24 @@ export class CategoryService extends BaseService<Category> {
     return item;
   }
 
-  async findActive(page?: number | string, size?: number | string) {
+  async findActive(
+    page?: number | string,
+    size?: number | string,
+    branchId?: string,
+  ) {
     const pagination = normalizePagination(page, size);
+    const where: FindOptionsWhere<Category> = {
+      status: COMMON_STATUS.ACTIVE,
+    };
+
+    if (branchId) {
+      where.branchId = branchId;
+    } else {
+      where.branchId = IsNull();
+    }
+
     const [data, total] = await this.categoryRepository.findAndCount({
-      where: { status: COMMON_STATUS.ACTIVE },
+      where,
       order: { sortOrder: 'ASC' },
       skip: pagination.skip,
       take: pagination.size,
@@ -71,7 +105,14 @@ export class CategoryService extends BaseService<Category> {
       params.isCanteenItem = filter.isCanteenItem;
     }
 
-    const categories = await this.categoryRepository
+    if (filter.branchId) {
+      productConditions.push('product.branch_id = :branchId');
+      params.branchId = filter.branchId;
+    } else {
+      productConditions.push('product.branch_id IS NULL');
+    }
+
+    const query = this.categoryRepository
       .createQueryBuilder('category')
       .leftJoinAndSelect(
         'category.products',
@@ -79,7 +120,17 @@ export class CategoryService extends BaseService<Category> {
         productConditions.join(' AND '),
         params,
       )
-      .where('category.status = :status', { status: COMMON_STATUS.ACTIVE })
+      .where('category.status = :status', { status: COMMON_STATUS.ACTIVE });
+
+    if (filter.branchId) {
+      query.andWhere('category.branch_id = :branchId', {
+        branchId: filter.branchId,
+      });
+    } else {
+      query.andWhere('category.branch_id IS NULL');
+    }
+
+    const categories = await query
       .orderBy('category.sort_order', 'ASC')
       .addOrderBy('product.name', 'ASC')
       .getMany();

@@ -40,6 +40,23 @@ export class RefundService extends BaseService<Refund> {
     return 'Refund';
   }
 
+  async findAll(page?: any, size?: any, branchId?: string) {
+    const pagination = normalizePagination(page, size);
+    const query = this.refundRepository
+      .createQueryBuilder('refund')
+      .leftJoin('orders', 'order', 'order.id = refund.order_id')
+      .orderBy('refund.created_at', 'DESC')
+      .skip(pagination.skip)
+      .take(pagination.size);
+
+    if (branchId) {
+      query.andWhere('order.branch_id = :branchId', { branchId });
+    }
+
+    const [data, total] = await query.getManyAndCount();
+    return toPaginationResponse(data, total, pagination.page, pagination.size);
+  }
+
   async createRefund(dto: CreateRefundDto, userId: string): Promise<Refund> {
     return this.runInTransaction(async () => {
       const order = await this.orderService.findOrderByIdOrThrow(dto.orderId);

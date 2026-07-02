@@ -2,6 +2,9 @@ import { Entity, Column, OneToMany } from 'typeorm';
 import { BaseEntity } from '../common/sql/base.entity';
 import { POSDevice } from './pos-device.entity';
 import { COMMON_STATUS } from '../common/constant/constant';
+import { Category } from './category.entity';
+import { Product } from './product.entity';
+import { Payroll } from './payroll.entity';
 
 @Entity('branches')
 export class Branch extends BaseEntity {
@@ -26,6 +29,15 @@ export class Branch extends BaseEntity {
   // Relations
   @OneToMany(() => POSDevice, (device) => device.branch)
   posDevices: POSDevice[];
+
+  @OneToMany(() => Category, (category) => category.branch)
+  categories: Category[];
+
+  @OneToMany(() => Product, (product) => product.branch)
+  products: Product[];
+
+  @OneToMany(() => Payroll, (payroll) => payroll.branch)
+  payrolls: Payroll[];
 
   @OneToMany('Order', 'branch')
   orders: any[];

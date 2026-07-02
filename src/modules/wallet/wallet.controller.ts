@@ -34,16 +34,18 @@ export class WalletController {
 
   @Get()
   @ApiOperation({ summary: 'Get all wallets' })
+  @ApiQuery({ name: 'branchId', required: false })
   @ApiResponse({
     status: 200,
     description: 'List of wallets',
     type: [WalletDto],
   })
   async findAll(
+    @Query('branchId') branchId?: string,
     @Query('page') page?: string,
     @Query('size') size?: string,
   ) {
-    return this.walletService.findAll(page, size);
+    return this.walletService.findAll(page, size, branchId);
   }
 
   @Post('topup')

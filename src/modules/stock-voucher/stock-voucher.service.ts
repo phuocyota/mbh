@@ -50,19 +50,35 @@ export class StockVoucherService {
     private dataSource: DataSource,
   ) {}
 
-  async findAll(page?: number | string, size?: number | string) {
+  async findAll(
+    page?: number | string,
+    size?: number | string,
+    branchId?: string,
+  ) {
     const pagination = normalizePagination(page, size);
-    const [data, total] = await this.stockReceiptDetailRepository.findAndCount({
-      relations: [
-        'product',
-        'importReceipt',
-        'exportReceipt',
-        'transferReceipt',
-      ],
-      order: { createdAt: 'DESC' },
-      skip: pagination.skip,
-      take: pagination.size,
-    });
+    const query = this.stockReceiptDetailRepository
+      .createQueryBuilder('detail')
+      .leftJoinAndSelect('detail.product', 'product')
+      .leftJoinAndSelect('detail.importReceipt', 'importReceipt')
+      .leftJoinAndSelect('detail.exportReceipt', 'exportReceipt')
+      .leftJoinAndSelect('detail.transferReceipt', 'transferReceipt')
+      .orderBy('detail.createdAt', 'DESC')
+      .skip(pagination.skip)
+      .take(pagination.size);
+
+    if (branchId) {
+      query.andWhere(
+        `(
+          importReceipt.branchId = :branchId
+          OR exportReceipt.branchId = :branchId
+          OR transferReceipt.fromBranchId = :branchId
+          OR transferReceipt.toBranchId = :branchId
+        )`,
+        { branchId },
+      );
+    }
+
+    const [data, total] = await query.getManyAndCount();
 
     return toPaginationResponse(data, total, pagination.page, pagination.size);
   }

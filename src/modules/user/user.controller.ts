@@ -19,6 +19,7 @@ import {
   ApiResponse,
   ApiBearerAuth,
   ApiParam,
+  ApiQuery,
 } from '@nestjs/swagger';
 import { UserService } from './user.service';
 import { CreateUserDto } from './dto/create-user.dto';
@@ -59,12 +60,14 @@ export class UserController {
 
   @Get()
   @ApiOperation({ summary: 'Get all users' })
+  @ApiQuery({ name: 'branchId', required: false })
   @ApiResponse({ status: 200, description: 'List of users', type: [UserDto] })
   async findAll(
+    @Query('branchId') branchId?: string,
     @Query('page') page?: string,
     @Query('size') size?: string,
   ) {
-    return this.userService.findAll(page, size);
+    return this.userService.findAll(page, size, branchId);
   }
 
   @Get(':id')

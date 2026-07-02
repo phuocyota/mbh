@@ -64,13 +64,15 @@ export class ProductController {
   }
 
   @ApiOperation({ summary: 'Get all product categories' })
+  @ApiQuery({ name: 'branchId', required: false })
   @ApiResponse({ status: 200, description: 'List of categories' })
   @Get('categories')
   async findAllCategories(
+    @Query('branchId') branchId?: string,
     @Query('page') page?: string,
     @Query('size') size?: string,
   ) {
-    return this.productService.findAllCategories(page, size);
+    return this.productService.findAllCategories(page, size, branchId);
   }
 
   @ApiOperation({ summary: 'Get active categories with active products' })

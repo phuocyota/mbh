@@ -18,6 +18,7 @@ import {
   ApiResponse,
   ApiBearerAuth,
   ApiParam,
+  ApiQuery,
 } from '@nestjs/swagger';
 import { RefundService } from './refund.service';
 import {
@@ -36,16 +37,18 @@ export class RefundController {
 
   @Get()
   @ApiOperation({ summary: 'Get all refunds' })
+  @ApiQuery({ name: 'branchId', required: false })
   @ApiResponse({
     status: 200,
     description: 'List of refunds',
     type: [RefundDto],
   })
   async findAll(
+    @Query('branchId') branchId?: string,
     @Query('page') page?: string,
     @Query('size') size?: string,
   ) {
-    return this.refundService.findAll(page, size);
+    return this.refundService.findAll(page, size, branchId);
   }
 
   @Get('by-order/:orderId')

@@ -16,6 +16,7 @@ import {
   ApiResponse,
   ApiBearerAuth,
   ApiParam,
+  ApiQuery,
 } from '@nestjs/swagger';
 import { CategoryService } from './category.service';
 import { CreateCategoryDto } from './dto/create-category.dto';
@@ -29,16 +30,18 @@ export class CategoryController {
 
   @Get()
   @ApiOperation({ summary: 'Get all categories' })
+  @ApiQuery({ name: 'branchId', required: false })
   @ApiResponse({
     status: 200,
     description: 'List of categories',
     type: [CategoryDto],
   })
   async findAll(
+    @Query('branchId') branchId?: string,
     @Query('page') page?: string,
     @Query('size') size?: string,
   ) {
-    return this.categoryService.findAll(page, size);
+    return this.categoryService.findAll(page, size, branchId);
   }
 
   @Get(':id')

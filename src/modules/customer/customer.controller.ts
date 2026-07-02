@@ -30,16 +30,18 @@ export class CustomerController {
 
   @Get()
   @ApiOperation({ summary: 'Get all customers' })
+  @ApiQuery({ name: 'branchId', required: false })
   @ApiResponse({
     status: 200,
     description: 'List of customers',
     type: [CustomerDto],
   })
   async findAll(
+    @Query('branchId') branchId?: string,
     @Query('page') page?: string,
     @Query('size') size?: string,
   ) {
-    return this.customerService.findAll(page, size);
+    return this.customerService.findAll(page, size, branchId);
   }
 
   @Get('search')
@@ -47,16 +49,23 @@ export class CustomerController {
     summary: 'Tìm khách hàng theo tên / mã / số điện thoại',
   })
   @ApiQuery({ name: 'keyword', required: false, type: String })
+  @ApiQuery({ name: 'branchId', required: false })
   @ApiQuery({ name: 'page', required: false, type: Number })
   @ApiQuery({ name: 'size', required: false, type: Number })
   @ApiQuery({ name: 'limit', required: false, type: Number })
   async search(
     @Query('keyword') keyword: string,
+    @Query('branchId') branchId?: string,
     @Query('page') page?: string,
     @Query('size') size?: string,
     @Query('limit') limit?: string,
   ) {
-    return this.customerService.searchCustomers(keyword, page, size ?? limit);
+    return this.customerService.searchCustomers(
+      keyword,
+      page,
+      size ?? limit,
+      branchId,
+    );
   }
 
   @Get('by-card/:cardUid')
