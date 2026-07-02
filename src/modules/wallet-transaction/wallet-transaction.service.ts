@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { WalletTransaction } from '../../entities/wallet-transaction.entity';
 import { BaseService } from '../../common/sql/base.service';
 import {
@@ -47,10 +47,38 @@ export class WalletTransactionService extends BaseService<WalletTransaction> {
       query.andWhere('wt.type = :type', { type });
     }
 
-    const [data, total] = await query
-      .skip(pagination.skip)
-      .take(pagination.size)
-      .getManyAndCount();
+    const [idRows, total] = await Promise.all([
+      query
+        .clone()
+        .select('wt.id', 'id')
+        .offset(pagination.skip)
+        .limit(pagination.size)
+        .getRawMany<{ id: string }>(),
+      query.clone().getCount(),
+    ]);
+
+    const ids = idRows.map((row) => row.id);
+    if (!ids.length) {
+      return toPaginationResponse([], total, pagination.page, pagination.size);
+    }
+
+    const walletTransactions = await this.walletTransactionRepository.find({
+      where: { id: In(ids) },
+      relations: ['customer', 'createdByUser'],
+    });
+
+    const walletTransactionById = new Map(
+      walletTransactions.map((walletTransaction) => [
+        walletTransaction.id,
+        walletTransaction,
+      ]),
+    );
+    const data = ids
+      .map((id) => walletTransactionById.get(id))
+      .filter(
+        (walletTransaction): walletTransaction is WalletTransaction =>
+          !!walletTransaction,
+      );
 
     return toPaginationResponse(data, total, pagination.page, pagination.size);
   }

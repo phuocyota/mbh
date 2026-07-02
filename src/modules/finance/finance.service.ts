@@ -4,7 +4,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, EntityManager, Repository } from 'typeorm';
+import { DataSource, EntityManager, In, Repository } from 'typeorm';
 import {
   Debt,
   Fund,
@@ -356,36 +356,95 @@ export class FinanceService {
 
   async findReceiptsReceived(page?: number | string, size?: number | string) {
     const pagination = normalizePagination(page, size);
-    const [data, total] = await this.fundReceiptReceivedRepository.findAndCount({
+    const [idRows, total] = await Promise.all([
+      this.fundReceiptReceivedRepository
+        .createQueryBuilder('receipt')
+        .select('receipt.id', 'id')
+        .orderBy('receipt.createdAt', 'DESC')
+        .offset(pagination.skip)
+        .limit(pagination.size)
+        .getRawMany<{ id: string }>(),
+      this.fundReceiptReceivedRepository.count(),
+    ]);
+
+    const ids = idRows.map((row) => row.id);
+    if (!ids.length) {
+      return toPaginationResponse([], total, pagination.page, pagination.size);
+    }
+
+    const receipts = await this.fundReceiptReceivedRepository.find({
+      where: { id: In(ids) },
       relations: ['fund', 'order', 'details'],
       order: { createdAt: 'DESC' },
-      skip: pagination.skip,
-      take: pagination.size,
     });
+    const receiptById = new Map(receipts.map((receipt) => [receipt.id, receipt]));
+    const data = ids
+      .map((id) => receiptById.get(id))
+      .filter((receipt): receipt is FundReceiptReceived => !!receipt);
 
     return toPaginationResponse(data, total, pagination.page, pagination.size);
   }
 
   async findReceiptsPaid(page?: number | string, size?: number | string) {
     const pagination = normalizePagination(page, size);
-    const [data, total] = await this.fundReceiptPaidRepository.findAndCount({
+    const [idRows, total] = await Promise.all([
+      this.fundReceiptPaidRepository
+        .createQueryBuilder('receipt')
+        .select('receipt.id', 'id')
+        .orderBy('receipt.createdAt', 'DESC')
+        .offset(pagination.skip)
+        .limit(pagination.size)
+        .getRawMany<{ id: string }>(),
+      this.fundReceiptPaidRepository.count(),
+    ]);
+
+    const ids = idRows.map((row) => row.id);
+    if (!ids.length) {
+      return toPaginationResponse([], total, pagination.page, pagination.size);
+    }
+
+    const receipts = await this.fundReceiptPaidRepository.find({
+      where: { id: In(ids) },
       relations: ['fund', 'order', 'details'],
       order: { createdAt: 'DESC' },
-      skip: pagination.skip,
-      take: pagination.size,
     });
+    const receiptById = new Map(receipts.map((receipt) => [receipt.id, receipt]));
+    const data = ids
+      .map((id) => receiptById.get(id))
+      .filter((receipt): receipt is FundReceiptPaid => !!receipt);
 
     return toPaginationResponse(data, total, pagination.page, pagination.size);
   }
 
   async findTransfers(page?: number | string, size?: number | string) {
     const pagination = normalizePagination(page, size);
-    const [data, total] = await this.fundReceiptTransferRepository.findAndCount({
+    const [idRows, total] = await Promise.all([
+      this.fundReceiptTransferRepository
+        .createQueryBuilder('transfer')
+        .select('transfer.id', 'id')
+        .orderBy('transfer.createdAt', 'DESC')
+        .offset(pagination.skip)
+        .limit(pagination.size)
+        .getRawMany<{ id: string }>(),
+      this.fundReceiptTransferRepository.count(),
+    ]);
+
+    const ids = idRows.map((row) => row.id);
+    if (!ids.length) {
+      return toPaginationResponse([], total, pagination.page, pagination.size);
+    }
+
+    const transfers = await this.fundReceiptTransferRepository.find({
+      where: { id: In(ids) },
       relations: ['fromFund', 'toFund', 'details'],
       order: { createdAt: 'DESC' },
-      skip: pagination.skip,
-      take: pagination.size,
     });
+    const transferById = new Map(
+      transfers.map((transfer) => [transfer.id, transfer]),
+    );
+    const data = ids
+      .map((id) => transferById.get(id))
+      .filter((transfer): transfer is FundReceiptTransfer => !!transfer);
 
     return toPaginationResponse(data, total, pagination.page, pagination.size);
   }

@@ -29,11 +29,33 @@ export class InventoryItemService {
       );
     }
 
-    const [products, total] = await query
-      .orderBy('product.name', 'ASC')
-      .skip(pagination.skip)
-      .take(pagination.size)
-      .getManyAndCount();
+    const orderedQuery = query.orderBy('product.name', 'ASC');
+    const [idRows, total] = await Promise.all([
+      orderedQuery
+        .clone()
+        .select('product.id', 'id')
+        .offset(pagination.skip)
+        .limit(pagination.size)
+        .getRawMany<{ id: string }>(),
+      orderedQuery.clone().getCount(),
+    ]);
+
+    const productIds = idRows.map((row) => row.id);
+    if (!productIds.length) {
+      return toPaginationResponse([], total, pagination.page, pagination.size);
+    }
+
+    const loadedProducts = await this.productRepository.find({
+      where: { id: In(productIds) },
+      relations: ['category'],
+    });
+
+    const productById = new Map(
+      loadedProducts.map((product) => [product.id, product]),
+    );
+    const products = productIds
+      .map((id) => productById.get(id))
+      .filter((product): product is Product => !!product);
     const quantityByProductId = await this.getQuantityByProductIds(
       products.map((product) => product.id),
     );

@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { Product, ProductPriceHistory } from 'src/entities';
 import { StockItem } from '../../entities/stock-item.entity';
 import { BaseService } from '../../common/sql/base.service';
@@ -96,10 +96,32 @@ export class ProductService extends BaseService<Product> {
 
     query.orderBy('category.sortOrder', 'ASC').addOrderBy('p.name', 'ASC');
 
-    const [products, total] = await query
-      .skip(pagination.skip)
-      .take(pagination.size)
-      .getManyAndCount();
+    const [idRows, total] = await Promise.all([
+      query
+        .clone()
+        .select('p.id', 'id')
+        .offset(pagination.skip)
+        .limit(pagination.size)
+        .getRawMany<{ id: string }>(),
+      query.clone().getCount(),
+    ]);
+
+    const productIds = idRows.map((row) => row.id);
+    if (!productIds.length) {
+      return toPaginationResponse([], total, pagination.page, pagination.size);
+    }
+
+    const loadedProducts = await this.productRepository.find({
+      where: { id: In(productIds) },
+      relations: ['category'],
+    });
+
+    const productById = new Map(
+      loadedProducts.map((product) => [product.id, product]),
+    );
+    const products = productIds
+      .map((id) => productById.get(id))
+      .filter((product): product is Product => !!product);
 
     if (!filter.branchId || !products.length) {
       return toPaginationResponse(products, total, pagination.page, pagination.size);
