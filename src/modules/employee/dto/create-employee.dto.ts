@@ -5,6 +5,7 @@ import {
   IsNumber,
   IsIn,
   Min,
+  IsUUID,
 } from 'class-validator';
 
 export class CreateEmployeeDto {
@@ -36,6 +37,11 @@ export class CreateEmployeeDto {
   @IsNumber()
   @Min(0)
   debt?: number;
+
+  @ApiProperty({ example: '11111111-1111-4111-8111-111111111111', required: false })
+  @IsOptional()
+  @IsUUID()
+  branchId?: string;
 
   @ApiProperty({ example: '', required: false })
   @IsOptional()

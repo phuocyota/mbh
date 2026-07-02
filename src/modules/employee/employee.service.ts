@@ -24,14 +24,17 @@ export class EmployeeService extends BaseService<Employee> {
 
   async findAll(
     status?: string,
+    branchId?: string,
     page?: number | string,
     size?: number | string,
   ): Promise<PaginationResponseDto<Employee>> {
     const pagination = normalizePagination(page, size);
     const where: any = {};
     if (status) where.status = status;
+    if (branchId) where.branchId = branchId;
     const [data, total] = await this.employeeRepository.findAndCount({
       where,
+      relations: ['branch'],
       order: { code: 'ASC' },
       skip: pagination.skip,
       take: pagination.size,
