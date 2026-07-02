@@ -1,9 +1,16 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, EntityManager, In, Repository } from 'typeorm';
 import { Product, Stock, StockItem } from '../../entities';
 import { DEFAULT_BRANCH_ID } from '../../common/constant/default-branch.constant';
-import { normalizePagination, toPaginationResponse } from '../../common/dto/pagination.dto';
+import {
+  normalizePagination,
+  toPaginationResponse,
+} from '../../common/dto/pagination.dto';
 
 @Injectable()
 export class InventoryItemService {
@@ -33,7 +40,7 @@ export class InventoryItemService {
 
     if (search?.trim()) {
       query.andWhere(
-        '(LOWER(product.name) LIKE :search OR LOWER(COALESCE(product.sku, \'\')) LIKE :search)',
+        '(LOWER(product.name) LIKE :search OR CAST(product.id AS text) LIKE :search)',
         { search: `%${search.trim().toLowerCase()}%` },
       );
     }
@@ -104,7 +111,9 @@ export class InventoryItemService {
   async create(dto: any) {
     const branchId = dto.branchId || DEFAULT_BRANCH_ID;
     if (!dto.categoryId) {
-      throw new BadRequestException('categoryId is required to create product-backed inventory item');
+      throw new BadRequestException(
+        'categoryId is required to create product-backed inventory item',
+      );
     }
 
     const product = await this.dataSource.transaction(async (trx) => {
@@ -112,7 +121,6 @@ export class InventoryItemService {
       const savedProduct = await productRepo.save(
         productRepo.create({
           categoryId: dto.categoryId,
-          sku: dto.sku,
           name: dto.name,
           branchId,
           description: dto.notes,
@@ -148,11 +156,11 @@ export class InventoryItemService {
       throw new NotFoundException(`Inventory item not found: ${id}`);
     }
 
-    if (dto.sku !== undefined) product.sku = dto.sku;
     if (dto.name !== undefined) product.name = dto.name;
     if (dto.notes !== undefined) product.description = dto.notes;
     if (dto.unit !== undefined) product.unit = dto.unit;
-    if (dto.costPerUnit !== undefined) product.costPrice = Number(dto.costPerUnit);
+    if (dto.costPerUnit !== undefined)
+      product.costPrice = Number(dto.costPerUnit);
     if (dto.price !== undefined) product.price = Number(dto.price);
     if (dto.categoryId !== undefined) product.categoryId = dto.categoryId;
     if (dto.status !== undefined) product.isActive = dto.status === 'ACTIVE';
@@ -188,7 +196,6 @@ export class InventoryItemService {
     return {
       id: product.id,
       productId: product.id,
-      sku: product.sku,
       name: product.name,
       quantity,
       unit: product.unit,
@@ -203,7 +210,10 @@ export class InventoryItemService {
     };
   }
 
-  private async getQuantityByProductIds(productIds: string[], branchId: string) {
+  private async getQuantityByProductIds(
+    productIds: string[],
+    branchId: string,
+  ) {
     const quantityByProductId = new Map<string, number>();
     if (productIds.length === 0) {
       return quantityByProductId;

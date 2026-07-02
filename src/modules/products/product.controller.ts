@@ -8,6 +8,7 @@ import {
   Delete,
   UseGuards,
   Query,
+  Req,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -27,6 +28,10 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 export class ProductController {
   constructor(private productService: ProductService) {}
 
+  private resolveBranchId(req: any, queryBranchId?: string) {
+    return req.user?.branchId || queryBranchId;
+  }
+
   @ApiOperation({ summary: 'Get all products' })
   @ApiQuery({ name: 'categoryId', required: false })
   @ApiQuery({ name: 'branchId', required: false })
@@ -38,6 +43,7 @@ export class ProductController {
   @ApiResponse({ status: 200, description: 'List of products' })
   @Get()
   async findAll(
+    @Req() req: any,
     @Query('categoryId') categoryId?: string,
     @Query('branchId') branchId?: string,
     @Query('minPrice') minPrice?: number,
@@ -53,7 +59,7 @@ export class ProductController {
     return this.productService.findProducts(categoryId, {
       minPrice,
       maxPrice,
-      branchId,
+      branchId: this.resolveBranchId(req, branchId),
       isCanteenItem: parseOptionalBoolean(isCanteenItem),
       search,
       displayStatus,
@@ -68,11 +74,16 @@ export class ProductController {
   @ApiResponse({ status: 200, description: 'List of categories' })
   @Get('categories')
   async findAllCategories(
+    @Req() req: any,
     @Query('branchId') branchId?: string,
     @Query('page') page?: string,
     @Query('size') size?: string,
   ) {
-    return this.productService.findAllCategories(page, size, branchId);
+    return this.productService.findAllCategories(
+      page,
+      size,
+      this.resolveBranchId(req, branchId),
+    );
   }
 
   @ApiOperation({ summary: 'Get active categories with active products' })
@@ -85,6 +96,7 @@ export class ProductController {
   @ApiResponse({ status: 200, description: 'List of categories with products' })
   @Get('full')
   async findAllCategoriesWithProducts(
+    @Req() req: any,
     @Query('branchId') branchId?: string,
     @Query('minPrice') minPrice?: number,
     @Query('maxPrice') maxPrice?: number,
@@ -93,7 +105,7 @@ export class ProductController {
     @Query('size') size?: string,
   ) {
     return this.productService.findAllCategoriesWithProducts({
-      branchId,
+      branchId: this.resolveBranchId(req, branchId),
       minPrice,
       maxPrice,
       isCanteenItem: parseOptionalBoolean(isCanteenItem),

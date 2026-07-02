@@ -9,6 +9,8 @@ import {
   HttpCode,
   HttpStatus,
   Query,
+  UseGuards,
+  Req,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -21,12 +23,18 @@ import {
 import { CategoryService } from './category.service';
 import { CreateCategoryDto } from './dto/create-category.dto';
 import { CategoryDto } from './dto/category.dto';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
 @ApiTags('Categories')
 @ApiBearerAuth()
 @Controller('categories')
+@UseGuards(JwtAuthGuard)
 export class CategoryController {
   constructor(private categoryService: CategoryService) {}
+
+  private resolveBranchId(req: any, queryBranchId?: string) {
+    return req.user?.branchId || queryBranchId;
+  }
 
   @Get()
   @ApiOperation({ summary: 'Get all categories' })
@@ -37,11 +45,16 @@ export class CategoryController {
     type: [CategoryDto],
   })
   async findAll(
+    @Req() req: any,
     @Query('branchId') branchId?: string,
     @Query('page') page?: string,
     @Query('size') size?: string,
   ) {
-    return this.categoryService.findAll(page, size, branchId);
+    return this.categoryService.findAll(
+      page,
+      size,
+      this.resolveBranchId(req, branchId),
+    );
   }
 
   @Get(':id')

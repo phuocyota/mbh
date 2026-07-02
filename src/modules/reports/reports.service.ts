@@ -587,13 +587,14 @@ export class ReportsService {
       .leftJoin('stock_items', 'stockItem', 'stockItem.product_id = product.id')
       .leftJoin('stocks', 'stock', 'stock.id = stockItem.stock_id')
       .select('product.id', 'productId')
-      .addSelect('product.sku', 'sku')
       .addSelect('product.name', 'name')
       .addSelect('product.unit', 'unit')
-      .addSelect('MAX(COALESCE(stockItem.updated_at, product.updated_at))', 'updatedAt')
+      .addSelect(
+        'MAX(COALESCE(stockItem.updated_at, product.updated_at))',
+        'updatedAt',
+      )
       .where('product.is_active = :isActive', { isActive: true })
       .groupBy('product.id')
-      .addGroupBy('product.sku')
       .addGroupBy('product.name')
       .addGroupBy('product.unit')
       .orderBy('product.name', 'ASC');
@@ -613,7 +614,6 @@ export class ReportsService {
 
     return rows.map((row) => ({
       productId: row.productId,
-      sku: row.sku,
       name: row.name,
       unit: row.unit,
       quantity: Number(row.quantity || 0),

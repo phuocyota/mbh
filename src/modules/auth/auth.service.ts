@@ -33,18 +33,14 @@ export class AuthService {
 
   async login(user: any, deviceId?: string) {
     const studentInfo =
-      user.role === USER_ROLE.STUDENT
-        ? await this.getStudentInfo(user.id)
-        : {};
+      user.role === USER_ROLE.STUDENT ? await this.getStudentInfo(user.id) : {};
     const resolvedBranchId = user.branchId || (studentInfo as any).branchId;
     const resolvedBranchName =
       user.branch?.name || (studentInfo as any).branchName;
-    const branchInfo = resolvedBranchId
-      ? {
-          branchId: resolvedBranchId,
-          branchName: resolvedBranchName || null,
-        }
-      : {};
+    const branchInfo = {
+      branchId: resolvedBranchId || null,
+      branchName: resolvedBranchName || null,
+    };
 
     const payload = {
       email: user.email,
@@ -161,7 +157,9 @@ export class AuthService {
     }
   }
 
-  private async findUserIdByStudentCodeForAuth(studentCode: string): Promise<string> {
+  private async findUserIdByStudentCodeForAuth(
+    studentCode: string,
+  ): Promise<string> {
     try {
       return await this.customerService.findUserIdByStudentCode(studentCode);
     } catch (error) {
@@ -179,7 +177,9 @@ export class AuthService {
     }
 
     if (!ADMIN_LOGIN_ROLES.includes(user.role as any)) {
-      throw new UnauthorizedException('This endpoint is only for admin/manager/staff');
+      throw new UnauthorizedException(
+        'This endpoint is only for admin/manager/staff',
+      );
     }
 
     if (user.status !== COMMON_STATUS.ACTIVE) {

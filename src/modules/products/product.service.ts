@@ -6,7 +6,10 @@ import { StockItem } from '../../entities/stock-item.entity';
 import { BaseService } from '../../common/sql/base.service';
 import { ERROR_MESSAGES } from '../../common/constant/error-messages.constant';
 import { CategoryService } from '../category/category.service';
-import { normalizePagination, toPaginationResponse } from '../../common/dto/pagination.dto';
+import {
+  normalizePagination,
+  toPaginationResponse,
+} from '../../common/dto/pagination.dto';
 
 type ProductPriceFilter = {
   minPrice?: number;
@@ -47,8 +50,8 @@ export class ProductService extends BaseService<Product> {
 
     if (filter.search) {
       query.andWhere(
-        '(LOWER(p.name) LIKE LOWER(:search) OR LOWER(p.sku) LIKE LOWER(:search))',
-        { search: `%${filter.search}%` }
+        '(LOWER(p.name) LIKE LOWER(:search) OR CAST(p.id AS text) ILIKE :search)',
+        { search: `%${filter.search}%` },
       );
     }
 
@@ -63,7 +66,9 @@ export class ProductService extends BaseService<Product> {
     }
 
     if (filter.stockStatus && filter.stockStatus !== 'all') {
-      const branchIdCondition = filter.branchId ? `AND stock.branch_id = :branchId` : '';
+      const branchIdCondition = filter.branchId
+        ? `AND stock.branch_id = :branchId`
+        : '';
       const stockSubquery = `
         (SELECT COALESCE(SUM(si.quantity), 0)
          FROM stock_items si
@@ -74,10 +79,14 @@ export class ProductService extends BaseService<Product> {
       if (filter.branchId) {
         query.setParameter('branchId', filter.branchId);
       }
-      if (filter.stockStatus === 'inStock') query.andWhere(`${stockSubquery} > 0`);
-      if (filter.stockStatus === 'outOfStock') query.andWhere(`${stockSubquery} <= 0`);
-      if (filter.stockStatus === 'under') query.andWhere(`${stockSubquery} < 5`);
-      if (filter.stockStatus === 'over') query.andWhere(`${stockSubquery} >= 5`);
+      if (filter.stockStatus === 'inStock')
+        query.andWhere(`${stockSubquery} > 0`);
+      if (filter.stockStatus === 'outOfStock')
+        query.andWhere(`${stockSubquery} <= 0`);
+      if (filter.stockStatus === 'under')
+        query.andWhere(`${stockSubquery} < 5`);
+      if (filter.stockStatus === 'over')
+        query.andWhere(`${stockSubquery} >= 5`);
     }
 
     if (filter.isCanteenItem !== undefined) {
@@ -118,7 +127,12 @@ export class ProductService extends BaseService<Product> {
       .filter((product): product is Product => !!product);
 
     if (!filter.branchId || !products.length) {
-      return toPaginationResponse(products, total, pagination.page, pagination.size);
+      return toPaginationResponse(
+        products,
+        total,
+        pagination.page,
+        pagination.size,
+      );
     }
 
     const stockRows = await this.productRepository.manager
@@ -142,7 +156,12 @@ export class ProductService extends BaseService<Product> {
       (product as any).remain = stockByProductId.get(product.id) || 0;
     });
 
-    return toPaginationResponse(products, total, pagination.page, pagination.size);
+    return toPaginationResponse(
+      products,
+      total,
+      pagination.page,
+      pagination.size,
+    );
   }
 
   async findOne(id: string) {
@@ -298,19 +317,37 @@ export class ProductService extends BaseService<Product> {
 
   async delete(id: string, user: { userId: string }): Promise<Product> {
     const product = await this.findOne(id);
-    const queryRunner = this.productRepository.manager.connection.createQueryRunner();
+    const queryRunner =
+      this.productRepository.manager.connection.createQueryRunner();
 
     await queryRunner.connect();
     await queryRunner.startTransaction();
 
     try {
-      await queryRunner.query(`DELETE FROM meal_items WHERE product_id = $1`, [id]);
-      await queryRunner.query(`DELETE FROM order_items WHERE product_id = $1`, [id]);
-      await queryRunner.query(`DELETE FROM stock_receipt_detail WHERE product_id = $1`, [id]);
-      await queryRunner.query(`DELETE FROM stock_items WHERE product_id = $1`, [id]);
-      await queryRunner.query(`DELETE FROM stock_take_items WHERE product_id = $1`, [id]);
-      await queryRunner.query(`DELETE FROM product_price_history WHERE product_id = $1`, [id]);
-      await queryRunner.query(`DELETE FROM cart_items WHERE product_id = $1`, [id]);
+      await queryRunner.query(`DELETE FROM meal_items WHERE product_id = $1`, [
+        id,
+      ]);
+      await queryRunner.query(`DELETE FROM order_items WHERE product_id = $1`, [
+        id,
+      ]);
+      await queryRunner.query(
+        `DELETE FROM stock_receipt_detail WHERE product_id = $1`,
+        [id],
+      );
+      await queryRunner.query(`DELETE FROM stock_items WHERE product_id = $1`, [
+        id,
+      ]);
+      await queryRunner.query(
+        `DELETE FROM stock_take_items WHERE product_id = $1`,
+        [id],
+      );
+      await queryRunner.query(
+        `DELETE FROM product_price_history WHERE product_id = $1`,
+        [id],
+      );
+      await queryRunner.query(`DELETE FROM cart_items WHERE product_id = $1`, [
+        id,
+      ]);
 
       await queryRunner.query(`DELETE FROM products WHERE id = $1`, [id]);
 

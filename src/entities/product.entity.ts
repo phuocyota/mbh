@@ -1,4 +1,11 @@
-import { Entity, Column, ManyToOne, JoinColumn, OneToMany } from 'typeorm';
+import {
+  Entity,
+  Column,
+  ManyToOne,
+  JoinColumn,
+  OneToMany,
+  Unique,
+} from 'typeorm';
 import { BaseEntity } from '../common/sql/base.entity';
 import { Category } from './category.entity';
 import { ProductPriceHistory } from './product-price-history.entity';
@@ -6,15 +13,13 @@ import { MealItem } from './meal-item.entity';
 import { Branch } from './branch.entity';
 
 @Entity('products')
+@Unique('UQ_products_id_branch_id', ['id', 'branchId'])
 export class Product extends BaseEntity {
   @Column('uuid', { name: 'branch_id', nullable: true })
   branchId: string | null;
 
   @Column('uuid', { name: 'category_id' })
   categoryId: string;
-
-  @Column('varchar', { nullable: true, unique: true })
-  sku: string | null;
 
   @Column('varchar')
   name: string;
