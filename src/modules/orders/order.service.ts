@@ -4,7 +4,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { Order } from 'src/entities';
 import { ERROR_MESSAGES } from '../../common/constant/error-messages.constant';
 import { OrderNumberService } from './order-number.service';
@@ -381,25 +381,43 @@ export class OrderService {
     size?: number | string,
   ) {
     const pagination = normalizePagination(page, size);
-    const query = this.orderRepository
+    const baseQuery = this.orderRepository
       .createQueryBuilder('o')
-      .leftJoinAndSelect('o.items', 'items')
-      .leftJoinAndSelect('o.customer', 'customer')
       .orderBy('o.created_at', 'DESC');
 
     if (branchId) {
-      query.where('o.branch_id = :branchId', { branchId });
+      baseQuery.where('o.branch_id = :branchId', { branchId });
     }
 
     const resolvedStatus = resolveOrderStatus(status);
     if (resolvedStatus !== undefined) {
-      query.andWhere('o.status = :status', { status: resolvedStatus });
+      baseQuery.andWhere('o.status = :status', { status: resolvedStatus });
     }
 
-    const [data, total] = await query
-      .skip(pagination.skip)
-      .take(pagination.size)
-      .getManyAndCount();
+    const [idRows, total] = await Promise.all([
+      baseQuery
+        .clone()
+        .select('o.id', 'id')
+        .offset(pagination.skip)
+        .limit(pagination.size)
+        .getRawMany<{ id: string }>(),
+      baseQuery.clone().getCount(),
+    ]);
+
+    const ids = idRows.map((row) => row.id);
+    if (!ids.length) {
+      return toPaginationResponse([], total, pagination.page, pagination.size);
+    }
+
+    const orders = await this.orderRepository.find({
+      where: { id: In(ids) },
+      relations: ['items', 'customer'],
+    });
+
+    const orderById = new Map(orders.map((order) => [order.id, order]));
+    const data = ids
+      .map((id) => orderById.get(id))
+      .filter((order): order is Order => !!order);
 
     return toPaginationResponse(data, total, pagination.page, pagination.size);
   }
