@@ -10,6 +10,7 @@ import {
   HttpCode,
   HttpStatus,
   UseGuards,
+  Req,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -36,12 +37,18 @@ export class EmployeeController {
   @ApiResponse({ status: 200, description: 'Danh sách nhân viên' })
   @ApiQuery({ name: 'branchId', required: false, description: 'Filter by branch ID' })
   async findAll(
+    @Req() req: any,
     @Query('status') status?: string,
     @Query('branchId') branchId?: string,
     @Query('page') page?: string,
     @Query('size') size?: string,
   ) {
-    return this.employeeService.findAll(status, branchId, page, size);
+    return this.employeeService.findAll(
+      status,
+      req.user?.branchId || branchId,
+      page,
+      size,
+    );
   }
 
   @Get(':id')
