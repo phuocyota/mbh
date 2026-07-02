@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { MealItem } from '../../entities/meal-item.entity';
 import { Customer } from '../../entities/customer.entity';
 import { CustomerMealItem } from '../../entities/customer-meal-item.entity';
@@ -31,12 +31,32 @@ export class MealItemService extends BaseService<MealItem> {
 
   async findAll(filter: MealItemQueryDto = {}) {
     const pagination = normalizePagination(filter.page, filter.size);
-    const query = this.buildMealItemQuery(filter);
+    const baseQuery = this.buildMealItemQuery(filter);
 
-    const [data, total] = await query
-      .skip(pagination.skip)
-      .take(pagination.size)
-      .getManyAndCount();
+    const [idRows, total] = await Promise.all([
+      baseQuery
+        .clone()
+        .select('mealItem.id', 'id')
+        .offset(pagination.skip)
+        .limit(pagination.size)
+        .getRawMany<{ id: string }>(),
+      baseQuery.clone().getCount(),
+    ]);
+
+    const ids = idRows.map((row) => row.id);
+    if (!ids.length) {
+      return toPaginationResponse([], total, pagination.page, pagination.size);
+    }
+
+    const mealItems = await this.mealItemRepository.find({
+      where: { id: In(ids) },
+      relations: ['branch', 'product', 'product.category'],
+    });
+
+    const mealItemById = new Map(mealItems.map((mealItem) => [mealItem.id, mealItem]));
+    const data = ids
+      .map((id) => mealItemById.get(id))
+      .filter((mealItem): mealItem is MealItem => !!mealItem);
 
     return toPaginationResponse(data, total, pagination.page, pagination.size);
   }

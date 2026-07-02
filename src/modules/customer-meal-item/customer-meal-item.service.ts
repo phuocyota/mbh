@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { CustomerMealItem } from '../../entities/customer-meal-item.entity';
 import { BaseService } from '../../common/sql/base.service';
 import { JwtPayload } from '../../common/interface/jwt-payload.interface';
@@ -78,15 +78,51 @@ export class CustomerMealItemService extends BaseService<CustomerMealItem> {
       });
     }
 
-    const [data, total] = await query
+    const orderedQuery = query
       .orderBy('mealItem.date_key', 'ASC', 'NULLS LAST')
       .addOrderBy('mealItem.day_of_week', 'ASC', 'NULLS LAST')
       .addOrderBy('mealItem.meal_period', 'ASC')
       .addOrderBy('product.name', 'ASC')
-      .addOrderBy('customer.full_name', 'ASC')
-      .skip(pagination.skip)
-      .take(pagination.size)
-      .getManyAndCount();
+      .addOrderBy('customer.full_name', 'ASC');
+
+    const [idRows, total] = await Promise.all([
+      orderedQuery
+        .clone()
+        .select('customerMealItem.id', 'id')
+        .offset(pagination.skip)
+        .limit(pagination.size)
+        .getRawMany<{ id: string }>(),
+      orderedQuery.clone().getCount(),
+    ]);
+
+    const ids = idRows.map((row) => row.id);
+    if (!ids.length) {
+      return toPaginationResponse([], total, pagination.page, pagination.size);
+    }
+
+    const customerMealItems = await this.customerMealItemRepository.find({
+      where: { id: In(ids) },
+      relations: [
+        'customer',
+        'mealItem',
+        'mealItem.branch',
+        'mealItem.product',
+        'mealItem.product.category',
+      ],
+    });
+
+    const customerMealItemById = new Map(
+      customerMealItems.map((customerMealItem) => [
+        customerMealItem.id,
+        customerMealItem,
+      ]),
+    );
+    const data = ids
+      .map((id) => customerMealItemById.get(id))
+      .filter(
+        (customerMealItem): customerMealItem is CustomerMealItem =>
+          !!customerMealItem,
+      );
 
     return toPaginationResponse(data, total, pagination.page, pagination.size);
   }

@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, EntityManager, Repository } from 'typeorm';
+import { DataSource, EntityManager, In, Repository } from 'typeorm';
 import { Product, StockTake, StockTakeItem, Stock, StockItem } from '../../entities';
 import { CreateStockTakeDto } from './dto/create-stock-take.dto';
 import { DEFAULT_BRANCH_ID } from '../../common/constant/default-branch.constant';
@@ -39,11 +39,33 @@ export class StockTakeService {
       query.andWhere('stockTake.branchId = :branchId', { branchId: filters.branchId });
     }
 
-    const [data, total] = await query
-      .orderBy('stockTake.createdAt', 'DESC')
-      .skip(pagination.skip)
-      .take(pagination.size)
-      .getManyAndCount();
+    const orderedQuery = query.orderBy('stockTake.createdAt', 'DESC');
+    const [idRows, total] = await Promise.all([
+      orderedQuery
+        .clone()
+        .select('stockTake.id', 'id')
+        .offset(pagination.skip)
+        .limit(pagination.size)
+        .getRawMany<{ id: string }>(),
+      orderedQuery.clone().getCount(),
+    ]);
+
+    const ids = idRows.map((row) => row.id);
+    if (!ids.length) {
+      return toPaginationResponse([], total, pagination.page, pagination.size);
+    }
+
+    const stockTakes = await this.stockTakeRepository.find({
+      where: { id: In(ids) },
+      relations: ['branch', 'items', 'items.product'],
+    });
+
+    const stockTakeById = new Map(
+      stockTakes.map((stockTake) => [stockTake.id, stockTake]),
+    );
+    const data = ids
+      .map((id) => stockTakeById.get(id))
+      .filter((stockTake): stockTake is StockTake => !!stockTake);
 
     return toPaginationResponse(data, total, pagination.page, pagination.size);
   }

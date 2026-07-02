@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, Repository } from 'typeorm';
+import { DataSource, In, Repository } from 'typeorm';
 import { Product, StockReceiptTransfer, StockReceiptDetail, Stock, StockItem } from '../../entities';
 import { CreateStockTransferDto } from './dto/create-stock-transfer.dto';
 import { StockVoucherService } from '../stock-voucher/stock-voucher.service';
@@ -50,11 +50,35 @@ export class StockTransferService {
       query.andWhere('transfer.toBranchId = :toBranchId', { toBranchId: filters.toBranchId });
     }
 
-    const [data, total] = await query
-      .orderBy('transfer.createdAt', 'DESC')
-      .skip(pagination.skip)
-      .take(pagination.size)
-      .getManyAndCount();
+    const orderedQuery = query.orderBy('transfer.createdAt', 'DESC');
+    const [idRows, total] = await Promise.all([
+      orderedQuery
+        .clone()
+        .select('transfer.id', 'id')
+        .offset(pagination.skip)
+        .limit(pagination.size)
+        .getRawMany<{ id: string }>(),
+      orderedQuery.clone().getCount(),
+    ]);
+
+    const ids = idRows.map((row) => row.id);
+    if (!ids.length) {
+      return toPaginationResponse([], total, pagination.page, pagination.size);
+    }
+
+    const transfers = await this.transferRepository.find({
+      where: { id: In(ids) },
+      relations: ['fromBranch', 'toBranch', 'details', 'details.product'],
+    });
+
+    const transferById = new Map(
+      transfers.map((transfer) => [transfer.id, transfer]),
+    );
+    const data = ids
+      .map((id) => transferById.get(id))
+      .filter(
+        (transfer): transfer is StockReceiptTransfer => !!transfer,
+      );
 
     return toPaginationResponse(data, total, pagination.page, pagination.size);
   }
