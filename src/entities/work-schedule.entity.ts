@@ -11,7 +11,13 @@ export class WorkSchedule extends BaseEntity {
   workDate: string;
 
   @Column('varchar')
-  shift: string; // morning, afternoon, full
+  shift: string; // morning, afternoon, full, custom
+
+  @Column('time', { name: 'start_time', nullable: true })
+  startTime?: string | null;
+
+  @Column('time', { name: 'end_time', nullable: true })
+  endTime?: string | null;
 
   @Column('text', { nullable: true })
   note: string;

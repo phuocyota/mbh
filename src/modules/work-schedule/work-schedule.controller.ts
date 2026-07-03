@@ -10,6 +10,7 @@ import {
   HttpCode,
   HttpStatus,
   UseGuards,
+  Req,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -21,6 +22,7 @@ import {
 } from '@nestjs/swagger';
 import { WorkScheduleService } from './work-schedule.service';
 import { CreateWorkScheduleDto } from './dto/create-work-schedule.dto';
+import { CreateWeeklyWorkScheduleDto } from './dto/create-weekly-work-schedule.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
 @ApiTags('Work Schedules')
@@ -39,11 +41,18 @@ export class WorkScheduleController {
   @ApiQuery({ name: 'employeeId', required: false, description: 'Lọc theo nhân viên' })
   @ApiResponse({ status: 200, description: 'Bảng chấm công theo tuần' })
   async getTimeSheet(
+    @Req() req: any,
     @Query('from') from: string,
     @Query('to') to: string,
     @Query('employeeId') employeeId?: string,
+    @Query('branchId') branchId?: string,
   ) {
-    return this.workScheduleService.getWeeklyTimeSheet(from, to, employeeId);
+    return this.workScheduleService.getWeeklyTimeSheet(
+      from,
+      to,
+      employeeId,
+      req.user?.branchId || branchId,
+    );
   }
 
   @Get('monthly')
@@ -55,14 +64,17 @@ export class WorkScheduleController {
   @ApiQuery({ name: 'employeeId', required: false, description: 'Lọc theo nhân viên' })
   @ApiResponse({ status: 200, description: 'Lịch làm việc theo tháng' })
   async getMonthlySchedule(
+    @Req() req: any,
     @Query('year') year: string,
     @Query('month') month: string,
     @Query('employeeId') employeeId?: string,
+    @Query('branchId') branchId?: string,
   ) {
     return this.workScheduleService.getMonthlySchedule(
       Number(year),
       Number(month),
       employeeId,
+      req.user?.branchId || branchId,
     );
   }
 
@@ -81,6 +93,16 @@ export class WorkScheduleController {
   @ApiResponse({ status: 201, description: 'Tạo thành công' })
   async create(@Body() dto: CreateWorkScheduleDto) {
     return this.workScheduleService.create(dto, { userId: 'system' } as any);
+  }
+
+  @Post('weekly-repeat')
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({ summary: 'Create work schedules from a weekly template' })
+  @ApiResponse({ status: 201, description: 'Created successfully' })
+  async createWeeklySchedule(@Body() dto: CreateWeeklyWorkScheduleDto) {
+    return this.workScheduleService.createWeeklySchedule(dto, {
+      userId: 'system',
+    } as any);
   }
 
   @Put(':id')

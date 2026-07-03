@@ -1312,7 +1312,237 @@ DELETE /api/suppliers/:id
 
 ---
 
-## 11. Payrolls (Bảng lương)
+## 11. Work Schedules (Lich lam viec nhan vien)
+
+API cho man them/sua lich lam viec nhan vien.
+
+Auth: can JWT.
+
+Luu y chung:
+
+- App co success response wrapper, FE doc data tai `response.data.data`.
+- `shift` la 1 gia tri duy nhat cho 1 nhan vien + 1 ngay. UI nen xem `Ca sang`, `Ca chieu`, `Ca ngay`, `Ca lam theo khung gio` nhu radio/segmented choice, khong gui nhieu ca cho cung mot ngay.
+- Ca co dinh: `morning` = 08:00-12:00, `afternoon` = 13:00-17:00, `full` = 08:00-17:00.
+- Ca theo khung gio: gui `shift: "custom"` kem `startTime` va `endTime` dang `HH:mm`.
+- Backend validate `startTime < endTime`. Chua ho tro ca qua ngay, vi du 22:00-06:00.
+- Checkbox `Lap lai hang tuan`: FE gui mot tuan mau vao `POST /api/work-schedules/weekly-repeat`, BE se sinh record ngay cu the cho cac tuan trong khoang `fromDate` den `toDate`.
+
+Shift type:
+
+```ts
+type WorkScheduleShift = 'morning' | 'afternoon' | 'full' | 'custom';
+```
+
+### Lay bang cham cong theo tuan
+
+```http
+GET /api/work-schedules/timesheet?from=2026-06-29&to=2026-07-05
+GET /api/work-schedules/timesheet?from=2026-06-29&to=2026-07-05&employeeId=employee-id
+GET /api/work-schedules/timesheet?from=2026-06-29&to=2026-07-05&branchId=branch-id
+```
+
+Query params:
+
+- `from`: required, `YYYY-MM-DD`.
+- `to`: required, `YYYY-MM-DD`.
+- `employeeId`: optional.
+- `branchId`: optional. For manager, BE uu tien `branchId` trong JWT token.
+
+Response `data`:
+
+```json
+[
+  {
+    "id": "employee-id",
+    "code": "NV001",
+    "name": "Nguyen Van A",
+    "debt": 0,
+    "shifts": {
+      "29": "morning",
+      "30": "custom"
+    },
+    "shiftDetails": {
+      "29": {
+        "shift": "morning",
+        "startTime": null,
+        "endTime": null
+      },
+      "30": {
+        "shift": "custom",
+        "startTime": "08:30:00",
+        "endTime": "11:30:00"
+      }
+    }
+  }
+]
+```
+
+FE dang dung `shifts[day]` co the giu nguyen de ve cell nhanh. Khi can hien thi gio custom, doc them `shiftDetails[day].startTime/endTime`.
+
+### Lay lich lam viec theo thang
+
+```http
+GET /api/work-schedules/monthly?year=2026&month=7
+GET /api/work-schedules/monthly?year=2026&month=7&employeeId=employee-id
+GET /api/work-schedules/monthly?year=2026&month=7&branchId=branch-id
+```
+
+Response `data`:
+
+```json
+[
+  {
+    "id": "work-schedule-id",
+    "employeeId": "employee-id",
+    "employeeName": "Nguyen Van A",
+    "employeeCode": "NV001",
+    "workDate": "2026-07-03",
+    "shift": "custom",
+    "startTime": "08:30:00",
+    "endTime": "11:30:00",
+    "note": null
+  }
+]
+```
+
+### Tao lich lam viec
+
+```http
+POST /api/work-schedules
+```
+
+Body ca co dinh:
+
+```json
+{
+  "employeeId": "employee-id",
+  "workDate": "2026-07-03",
+  "shift": "morning",
+  "note": ""
+}
+```
+
+Body ca theo khung gio:
+
+```json
+{
+  "employeeId": "employee-id",
+  "workDate": "2026-07-03",
+  "shift": "custom",
+  "startTime": "08:30",
+  "endTime": "11:30",
+  "note": "Lam nua buoi"
+}
+```
+
+Required:
+
+- `employeeId`
+- `workDate`
+- `shift`
+- `startTime`, `endTime` neu `shift = custom`
+
+Optional:
+
+- `note`
+
+Luu y: Khi `shift` khac `custom`, backend se clear `startTime/endTime` ve `null`.
+
+### Tao lich tu mau tuan
+
+Dung khi UI chon lich cho 1 tuan va tick `Lap lai hang tuan`. BE khong luu recurrence rule; endpoint nay se sinh san cac record `work_schedules` theo tung `workDate`, giong cach `meal-items` dang doc theo `dateKey` cu the.
+
+```http
+POST /api/work-schedules/weekly-repeat
+```
+
+Body:
+
+```json
+{
+  "employeeId": "employee-id",
+  "fromDate": "2026-06-29",
+  "toDate": "2026-08-02",
+  "replaceExisting": true,
+  "weeklyShifts": [
+    {
+      "dayOfWeek": 1,
+      "shift": "morning",
+      "note": ""
+    },
+    {
+      "dayOfWeek": 3,
+      "shift": "custom",
+      "startTime": "08:30",
+      "endTime": "11:30",
+      "note": "Lam nua buoi"
+    },
+    {
+      "dayOfWeek": 5,
+      "shift": "full"
+    }
+  ]
+}
+```
+
+Field notes:
+
+- `fromDate`, `toDate`: khoang ngay can ap dung, dang `YYYY-MM-DD`.
+- `weeklyShifts[].dayOfWeek`: theo JavaScript `Date.getDay()`, `0` Chu nhat, `1` Thu 2, ..., `6` Thu 7.
+- Moi `dayOfWeek` chi duoc gui 1 lan, vi lich hien tai chi co 1 ca cho 1 nhan vien trong 1 ngay.
+- `replaceExisting`: default `true`. Khi true, BE xoa lich cu cua nhan vien tai cac ngay duoc sinh ra roi tao lai, tranh duplicate.
+- Neu `shift = custom`, bat buoc co `startTime` va `endTime` dang `HH:mm`.
+
+Response `data`:
+
+```json
+{
+  "created": 15,
+  "replaced": 15,
+  "schedules": [
+    {
+      "id": "work-schedule-id",
+      "employeeId": "employee-id",
+      "workDate": "2026-06-29",
+      "shift": "morning",
+      "startTime": null,
+      "endTime": null,
+      "note": ""
+    }
+  ]
+}
+```
+
+### Cap nhat lich lam viec
+
+```http
+PUT /api/work-schedules/:id
+```
+
+Body giong create.
+
+Vi du doi tu custom ve ca chieu:
+
+```json
+{
+  "employeeId": "employee-id",
+  "workDate": "2026-07-03",
+  "shift": "afternoon",
+  "note": ""
+}
+```
+
+### Xoa lich lam viec
+
+```http
+DELETE /api/work-schedules/:id
+```
+
+Response: HTTP `204 No Content`.
+
+---
+
+## 12. Payrolls (Bảng lương)
 
 API CRUD bảng lương.
 
@@ -1384,7 +1614,7 @@ DELETE /api/payrolls/:id
 
 ---
 
-## 12. User Profile
+## 13. User Profile
 
 ### Get current user profile
 
@@ -1432,7 +1662,7 @@ Body:
 
 ---
 
-## 13. Monthly Order Plan
+## 14. Monthly Order Plan
 
 API for the "Ke hoach dat hang hoa trong Thang" screen.
 
