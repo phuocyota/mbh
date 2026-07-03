@@ -9,6 +9,8 @@ import {
   HttpCode,
   HttpStatus,
   Query,
+  Req,
+  UseGuards,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -21,6 +23,7 @@ import {
 import { CashMovementService } from './cash-movement.service';
 import { CreateCashMovementDto } from './dto/create-cash-movement.dto';
 import { CashMovementDto } from './dto/cash-movement.dto';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
 @ApiTags('Cash Movements')
 @ApiBearerAuth()
@@ -29,6 +32,7 @@ export class CashMovementController {
   constructor(private cashMovementService: CashMovementService) {}
 
   @Get()
+  @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: 'Get all cash movements' })
   @ApiQuery({ name: 'branchId', required: false })
   @ApiResponse({
@@ -37,11 +41,16 @@ export class CashMovementController {
     type: [CashMovementDto],
   })
   async findAll(
+    @Req() req: any,
     @Query('branchId') branchId?: string,
     @Query('page') page?: string,
     @Query('size') size?: string,
   ) {
-    return this.cashMovementService.findAll(page, size, branchId);
+    return this.cashMovementService.findAll(
+      page,
+      size,
+      req.user?.branchId || branchId,
+    );
   }
 
   @Get(':id')

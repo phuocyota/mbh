@@ -1,5 +1,19 @@
-import { Body, Controller, Get, Param, Post, Query, UseGuards } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Post,
+  Query,
+  Req,
+  UseGuards,
+} from '@nestjs/common';
+import {
+  ApiBearerAuth,
+  ApiOperation,
+  ApiQuery,
+  ApiTags,
+} from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { StockTransferService } from './stock-transfer.service';
 import { CreateStockTransferDto } from './dto/create-stock-transfer.dto';
@@ -19,6 +33,7 @@ export class StockTransferController {
   @ApiQuery({ name: 'page', required: false, type: Number })
   @ApiQuery({ name: 'size', required: false, type: Number })
   findAll(
+    @Req() req: any,
     @Query('status') status?: string,
     @Query('fromBranchId') fromBranchId?: string,
     @Query('toBranchId') toBranchId?: string,
@@ -27,8 +42,9 @@ export class StockTransferController {
   ) {
     return this.stockTransferService.findAll({
       status,
-      fromBranchId,
-      toBranchId,
+      branchId: req.user?.branchId,
+      fromBranchId: req.user?.branchId ? undefined : fromBranchId,
+      toBranchId: req.user?.branchId ? undefined : toBranchId,
       page,
       size,
     });

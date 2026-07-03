@@ -33,6 +33,7 @@ export class WalletController {
   constructor(private walletService: WalletService) {}
 
   @Get()
+  @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: 'Get all wallets' })
   @ApiQuery({ name: 'branchId', required: false })
   @ApiResponse({
@@ -41,11 +42,16 @@ export class WalletController {
     type: [WalletDto],
   })
   async findAll(
+    @Req() req: any,
     @Query('branchId') branchId?: string,
     @Query('page') page?: string,
     @Query('size') size?: string,
   ) {
-    return this.walletService.findAll(page, size, branchId);
+    return this.walletService.findAll(
+      page,
+      size,
+      req.user?.branchId || branchId,
+    );
   }
 
   @Post('topup')

@@ -9,6 +9,8 @@ import {
   HttpCode,
   HttpStatus,
   Query,
+  Req,
+  UseGuards,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -21,6 +23,7 @@ import {
 import { ShiftService } from './shift.service';
 import { CreateShiftDto } from './dto/create-shift.dto';
 import { ShiftDto } from './dto/shift.dto';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
 @ApiTags('Shifts')
 @ApiBearerAuth()
@@ -29,6 +32,7 @@ export class ShiftController {
   constructor(private shiftService: ShiftService) {}
 
   @Get()
+  @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: 'Get all shifts' })
   @ApiQuery({ name: 'branchId', required: false })
   @ApiResponse({
@@ -37,11 +41,16 @@ export class ShiftController {
     type: [ShiftDto],
   })
   async findAll(
+    @Req() req: any,
     @Query('branchId') branchId?: string,
     @Query('page') page?: string,
     @Query('size') size?: string,
   ) {
-    return this.shiftService.findAll(page, size, branchId);
+    return this.shiftService.findAll(
+      page,
+      size,
+      req.user?.branchId || branchId,
+    );
   }
 
   @Get(':id')

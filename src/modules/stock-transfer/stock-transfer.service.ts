@@ -1,10 +1,23 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, In, Repository } from 'typeorm';
-import { Product, StockReceiptTransfer, StockReceiptDetail, Stock, StockItem } from '../../entities';
+import {
+  Product,
+  StockReceiptTransfer,
+  StockReceiptDetail,
+  Stock,
+  StockItem,
+} from '../../entities';
 import { CreateStockTransferDto } from './dto/create-stock-transfer.dto';
 import { StockVoucherService } from '../stock-voucher/stock-voucher.service';
-import { normalizePagination, toPaginationResponse } from '../../common/dto/pagination.dto';
+import {
+  normalizePagination,
+  toPaginationResponse,
+} from '../../common/dto/pagination.dto';
 
 @Injectable()
 export class StockTransferService {
@@ -26,6 +39,7 @@ export class StockTransferService {
   async findAll(
     filters: {
       status?: string;
+      branchId?: string;
       fromBranchId?: string;
       toBranchId?: string;
       page?: number | string;
@@ -43,11 +57,21 @@ export class StockTransferService {
     if (filters.status) {
       query.andWhere('transfer.status = :status', { status: filters.status });
     }
+    if (filters.branchId) {
+      query.andWhere(
+        '(transfer.fromBranchId = :branchId OR transfer.toBranchId = :branchId)',
+        { branchId: filters.branchId },
+      );
+    }
     if (filters.fromBranchId) {
-      query.andWhere('transfer.fromBranchId = :fromBranchId', { fromBranchId: filters.fromBranchId });
+      query.andWhere('transfer.fromBranchId = :fromBranchId', {
+        fromBranchId: filters.fromBranchId,
+      });
     }
     if (filters.toBranchId) {
-      query.andWhere('transfer.toBranchId = :toBranchId', { toBranchId: filters.toBranchId });
+      query.andWhere('transfer.toBranchId = :toBranchId', {
+        toBranchId: filters.toBranchId,
+      });
     }
 
     const orderedQuery = query.orderBy('transfer.createdAt', 'DESC');
@@ -76,9 +100,7 @@ export class StockTransferService {
     );
     const data = ids
       .map((id) => transferById.get(id))
-      .filter(
-        (transfer): transfer is StockReceiptTransfer => !!transfer,
-      );
+      .filter((transfer): transfer is StockReceiptTransfer => !!transfer);
 
     return toPaginationResponse(data, total, pagination.page, pagination.size);
   }
@@ -141,8 +163,14 @@ export class StockTransferService {
       const productRepo = trx.getRepository(Product);
       const stockRepo = trx.getRepository(Stock);
 
-      const fromStock = await this.getOrCreateBranchStock(stockRepo, dto.fromBranchId);
-      const toStock = await this.getOrCreateBranchStock(stockRepo, dto.toBranchId);
+      const fromStock = await this.getOrCreateBranchStock(
+        stockRepo,
+        dto.fromBranchId,
+      );
+      const toStock = await this.getOrCreateBranchStock(
+        stockRepo,
+        dto.toBranchId,
+      );
 
       let totalAmount = 0;
       const detailsToSave: StockReceiptDetail[] = [];
@@ -153,9 +181,13 @@ export class StockTransferService {
       }> = [];
 
       for (const dtoItem of dto.items) {
-        const product = await productRepo.findOne({ where: { id: dtoItem.productId } });
+        const product = await productRepo.findOne({
+          where: { id: dtoItem.productId },
+        });
         if (!product) {
-          throw new NotFoundException(`Product not found with ID ${dtoItem.productId}`);
+          throw new NotFoundException(
+            `Product not found with ID ${dtoItem.productId}`,
+          );
         }
 
         const unitCost = Number(product.costPrice || product.price || 0);
@@ -245,18 +277,36 @@ export class StockTransferService {
       }
 
       if (transfer.status !== 'DRAFT') {
-        throw new BadRequestException(`StockTransfer is already in ${transfer.status} status`);
+        throw new BadRequestException(
+          `StockTransfer is already in ${transfer.status} status`,
+        );
       }
 
-      const fromStock = await this.getOrCreateBranchStock(stockRepo, transfer.fromBranchId);
-      const toStock = await this.getOrCreateBranchStock(stockRepo, transfer.toBranchId);
+      const fromStock = await this.getOrCreateBranchStock(
+        stockRepo,
+        transfer.fromBranchId,
+      );
+      const toStock = await this.getOrCreateBranchStock(
+        stockRepo,
+        transfer.toBranchId,
+      );
 
       for (const detail of transfer.details) {
         if (detail.productId) {
           // Subtract from source stock
-          await this.updateStockItemQuantity(stockItemRepo, fromStock.id, detail.productId, -Number(detail.quantity));
+          await this.updateStockItemQuantity(
+            stockItemRepo,
+            fromStock.id,
+            detail.productId,
+            -Number(detail.quantity),
+          );
           // Add to destination stock
-          await this.updateStockItemQuantity(stockItemRepo, toStock.id, detail.productId, Number(detail.quantity));
+          await this.updateStockItemQuantity(
+            stockItemRepo,
+            toStock.id,
+            detail.productId,
+            Number(detail.quantity),
+          );
         }
       }
 

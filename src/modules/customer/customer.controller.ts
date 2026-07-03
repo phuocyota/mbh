@@ -9,6 +9,8 @@ import {
   Query,
   HttpCode,
   HttpStatus,
+  Req,
+  UseGuards,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -21,6 +23,7 @@ import {
 import { CustomerService } from './customer.service';
 import { CreateCustomerDto } from './dto/create-customer.dto';
 import { CustomerDto } from './dto/customer.dto';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
 @ApiTags('Customers')
 @ApiBearerAuth()
@@ -29,6 +32,7 @@ export class CustomerController {
   constructor(private customerService: CustomerService) {}
 
   @Get()
+  @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: 'Get all customers' })
   @ApiQuery({ name: 'branchId', required: false })
   @ApiResponse({
@@ -37,14 +41,20 @@ export class CustomerController {
     type: [CustomerDto],
   })
   async findAll(
+    @Req() req: any,
     @Query('branchId') branchId?: string,
     @Query('page') page?: string,
     @Query('size') size?: string,
   ) {
-    return this.customerService.findAll(page, size, branchId);
+    return this.customerService.findAll(
+      page,
+      size,
+      req.user?.branchId || branchId,
+    );
   }
 
   @Get('search')
+  @UseGuards(JwtAuthGuard)
   @ApiOperation({
     summary: 'Tìm khách hàng theo tên / mã / số điện thoại',
   })
@@ -54,6 +64,7 @@ export class CustomerController {
   @ApiQuery({ name: 'size', required: false, type: Number })
   @ApiQuery({ name: 'limit', required: false, type: Number })
   async search(
+    @Req() req: any,
     @Query('keyword') keyword: string,
     @Query('branchId') branchId?: string,
     @Query('page') page?: string,
@@ -64,7 +75,7 @@ export class CustomerController {
       keyword,
       page,
       size ?? limit,
-      branchId,
+      req.user?.branchId || branchId,
     );
   }
 

@@ -9,6 +9,8 @@ import {
   Post,
   Put,
   Query,
+  Req,
+  UseGuards,
 } from '@nestjs/common';
 import {
   ApiBearerAuth,
@@ -22,6 +24,7 @@ import { CustomerMealItemDto } from './dto/customer-meal-item.dto';
 import { CustomerMealItemQueryDto } from './dto/customer-meal-item-query.dto';
 import { CreateCustomerMealItemDto } from './dto/create-customer-meal-item.dto';
 import { UpdateCustomerMealItemDto } from './dto/update-customer-meal-item.dto';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
 @ApiTags('Customer Meal Items')
 @ApiBearerAuth()
@@ -30,14 +33,18 @@ export class CustomerMealItemController {
   constructor(private customerMealItemService: CustomerMealItemService) {}
 
   @Get()
+  @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: 'Get customer meal items' })
   @ApiResponse({
     status: 200,
     description: 'List of customer meal items',
     type: [CustomerMealItemDto],
   })
-  async findAll(@Query() query: CustomerMealItemQueryDto) {
-    return this.customerMealItemService.findAll(query);
+  async findAll(@Query() query: CustomerMealItemQueryDto, @Req() req: any) {
+    return this.customerMealItemService.findAll({
+      ...query,
+      branchId: req.user?.branchId || query.branchId,
+    });
   }
 
   @Get(':id')

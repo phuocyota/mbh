@@ -1,5 +1,19 @@
-import { Body, Controller, Get, Param, Post, Query, UseGuards } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Post,
+  Query,
+  Req,
+  UseGuards,
+} from '@nestjs/common';
+import {
+  ApiBearerAuth,
+  ApiOperation,
+  ApiQuery,
+  ApiTags,
+} from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { StockTakeService } from './stock-take.service';
 import { CreateStockTakeDto } from './dto/create-stock-take.dto';
@@ -18,12 +32,18 @@ export class StockTakeController {
   @ApiQuery({ name: 'page', required: false, type: Number })
   @ApiQuery({ name: 'size', required: false, type: Number })
   findAll(
+    @Req() req: any,
     @Query('status') status?: string,
     @Query('branchId') branchId?: string,
     @Query('page') page?: string,
     @Query('size') size?: string,
   ) {
-    return this.stockTakeService.findAll({ status, branchId, page, size });
+    return this.stockTakeService.findAll({
+      status,
+      branchId: req.user?.branchId || branchId,
+      page,
+      size,
+    });
   }
 
   @Get(':id')

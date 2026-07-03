@@ -36,6 +36,7 @@ export class RefundController {
   constructor(private refundService: RefundService) {}
 
   @Get()
+  @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: 'Get all refunds' })
   @ApiQuery({ name: 'branchId', required: false })
   @ApiResponse({
@@ -44,11 +45,16 @@ export class RefundController {
     type: [RefundDto],
   })
   async findAll(
+    @Req() req: any,
     @Query('branchId') branchId?: string,
     @Query('page') page?: string,
     @Query('size') size?: string,
   ) {
-    return this.refundService.findAll(page, size, branchId);
+    return this.refundService.findAll(
+      page,
+      size,
+      req.user?.branchId || branchId,
+    );
   }
 
   @Get('by-order/:orderId')

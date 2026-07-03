@@ -57,4 +57,4 @@ export class CreateMoneyVoucherDto {
   @IsOptional()
   @IsString()
   note?: string;
-}
+}

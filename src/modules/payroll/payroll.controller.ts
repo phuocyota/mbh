@@ -9,6 +9,8 @@ import {
   HttpCode,
   HttpStatus,
   Query,
+  Req,
+  UseGuards,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -26,6 +28,7 @@ import {
   PAYROLL_STATUS_FILTER_ALL,
   PAYROLL_STATUS_VALUES,
 } from '../../common/constant/constant';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
 @ApiTags('Payrolls')
 @ApiBearerAuth()
@@ -34,6 +37,7 @@ export class PayrollController {
   constructor(private payrollService: PayrollService) {}
 
   @Get()
+  @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: 'Get all payrolls with optional filters' })
   @ApiQuery({
     name: 'status',
@@ -50,12 +54,18 @@ export class PayrollController {
     type: [PayrollDto],
   })
   async findAll(
+    @Req() req: any,
     @Query('status') status?: string,
     @Query('branchId') branchId?: string,
     @Query('page') page?: string,
     @Query('size') size?: string,
   ) {
-    return this.payrollService.findAll({ status, branchId, page, size });
+    return this.payrollService.findAll({
+      status,
+      branchId: req.user?.branchId || branchId,
+      page,
+      size,
+    });
   }
 
   @Get(':id')
@@ -89,10 +99,7 @@ export class PayrollController {
     if (status) {
       payload.status = status;
     }
-    return this.payrollService.create(
-      payload,
-      { userId: 'system' } as any,
-    );
+    return this.payrollService.create(payload, { userId: 'system' } as any);
   }
 
   @Put(':id')
@@ -104,10 +111,7 @@ export class PayrollController {
     type: PayrollDto,
   })
   @ApiResponse({ status: 404, description: 'Payroll not found' })
-  async update(
-    @Param('id') id: string,
-    @Body() updateDto: UpdatePayrollDto,
-  ) {
+  async update(@Param('id') id: string, @Body() updateDto: UpdatePayrollDto) {
     // Recalculate remaining if totalSalary or paid is updated
     if (updateDto.totalSalary !== undefined || updateDto.paid !== undefined) {
       const existing = await this.payrollService.findOne(id);
@@ -118,7 +122,9 @@ export class PayrollController {
     if (updateDto.status) {
       updateDto.status = updateDto.status.toUpperCase();
     }
-    return this.payrollService.update(id, updateDto, { userId: 'system' } as any);
+    return this.payrollService.update(id, updateDto, {
+      userId: 'system',
+    } as any);
   }
 
   @Delete(':id')

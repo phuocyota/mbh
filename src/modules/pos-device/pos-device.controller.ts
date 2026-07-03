@@ -9,6 +9,8 @@ import {
   HttpCode,
   HttpStatus,
   Query,
+  Req,
+  UseGuards,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -21,6 +23,7 @@ import {
 import { POSDeviceService } from './pos-device.service';
 import { CreatePOSDeviceDto } from './dto/create-pos-device.dto';
 import { POSDeviceDto } from './dto/pos-device.dto';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
 @ApiTags('POS Devices')
 @ApiBearerAuth()
@@ -29,6 +32,7 @@ export class POSDeviceController {
   constructor(private posDeviceService: POSDeviceService) {}
 
   @Get()
+  @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: 'Get all POS devices' })
   @ApiQuery({ name: 'branchId', required: false })
   @ApiResponse({
@@ -37,11 +41,16 @@ export class POSDeviceController {
     type: [POSDeviceDto],
   })
   async findAll(
+    @Req() req: any,
     @Query('branchId') branchId?: string,
     @Query('page') page?: string,
     @Query('size') size?: string,
   ) {
-    return this.posDeviceService.findAll(page, size, branchId);
+    return this.posDeviceService.findAll(
+      page,
+      size,
+      req.user?.branchId || branchId,
+    );
   }
 
   @Get(':id')

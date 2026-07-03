@@ -59,15 +59,17 @@ export class UserController {
   }
 
   @Get()
+  @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: 'Get all users' })
   @ApiQuery({ name: 'branchId', required: false })
   @ApiResponse({ status: 200, description: 'List of users', type: [UserDto] })
   async findAll(
+    @Req() req: any,
     @Query('branchId') branchId?: string,
     @Query('page') page?: string,
     @Query('size') size?: string,
   ) {
-    return this.userService.findAll(page, size, branchId);
+    return this.userService.findAll(page, size, req.user?.branchId || branchId);
   }
 
   @Get(':id')

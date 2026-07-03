@@ -9,6 +9,8 @@ import {
   HttpCode,
   HttpStatus,
   Query,
+  Req,
+  UseGuards,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -21,6 +23,7 @@ import {
 import { PaymentService } from './payment.service';
 import { CreatePaymentDto } from './dto/create-payment.dto';
 import { PaymentDto } from './dto/payment.dto';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
 @ApiTags('Payments')
 @ApiBearerAuth()
@@ -29,6 +32,7 @@ export class PaymentController {
   constructor(private paymentService: PaymentService) {}
 
   @Get()
+  @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: 'Get all payments' })
   @ApiQuery({ name: 'branchId', required: false })
   @ApiResponse({
@@ -37,11 +41,16 @@ export class PaymentController {
     type: [PaymentDto],
   })
   async findAll(
+    @Req() req: any,
     @Query('branchId') branchId?: string,
     @Query('page') page?: string,
     @Query('size') size?: string,
   ) {
-    return this.paymentService.findAll(page, size, branchId);
+    return this.paymentService.findAll(
+      page,
+      size,
+      req.user?.branchId || branchId,
+    );
   }
 
   @Get(':id')

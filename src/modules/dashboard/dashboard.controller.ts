@@ -1,9 +1,4 @@
-import {
-  Controller,
-  Get,
-  Query,
-  UseGuards,
-} from '@nestjs/common';
+import { Controller, Get, Query, Req, UseGuards } from '@nestjs/common';
 import {
   ApiTags,
   ApiBearerAuth,
@@ -29,10 +24,14 @@ export class DashboardController {
   })
   @ApiQuery({ name: 'branchId', required: false })
   getRevenueStats(
+    @Req() req: any,
     @Query('filter') filter = '7days',
     @Query('branchId') branchId?: string,
   ) {
-    return this.dashboardService.getRevenueStats(filter, branchId);
+    return this.dashboardService.getRevenueStats(
+      filter,
+      req.user?.branchId || branchId,
+    );
   }
 
   @Get('customers')
@@ -44,25 +43,37 @@ export class DashboardController {
   })
   @ApiQuery({ name: 'branchId', required: false })
   getCustomerStats(
+    @Req() req: any,
     @Query('filter') filter = '7days',
     @Query('branchId') branchId?: string,
   ) {
-    return this.dashboardService.getCustomerStats(filter, branchId);
+    return this.dashboardService.getCustomerStats(
+      filter,
+      req.user?.branchId || branchId,
+    );
   }
 
   @Get('recent-activities')
-  @ApiOperation({ summary: 'Recent dashboard activities from orders and stock vouchers' })
+  @ApiOperation({
+    summary: 'Recent dashboard activities from orders and stock vouchers',
+  })
   @ApiQuery({ name: 'limit', required: false, type: Number })
   @ApiQuery({ name: 'branchId', required: false })
   getRecentActivities(
+    @Req() req: any,
     @Query('limit') limit?: number,
     @Query('branchId') branchId?: string,
   ) {
-    return this.dashboardService.getRecentActivities(limit, branchId);
+    return this.dashboardService.getRecentActivities(
+      limit,
+      req.user?.branchId || branchId,
+    );
   }
 
   @Get('employee-attendance')
-  @ApiOperation({ summary: 'Dashboard employee attendance summary from work schedules' })
+  @ApiOperation({
+    summary: 'Dashboard employee attendance summary from work schedules',
+  })
   @ApiQuery({
     name: 'filter',
     required: false,
@@ -77,10 +88,14 @@ export class DashboardController {
   @ApiQuery({ name: 'date', required: false })
   @ApiQuery({ name: 'branchId', required: false })
   getHourlyRevenueStats(
+    @Req() req: any,
     @Query('date') date?: string,
     @Query('branchId') branchId?: string,
   ) {
-    return this.dashboardService.getHourlyRevenueStats(date, branchId);
+    return this.dashboardService.getHourlyRevenueStats(
+      date,
+      req.user?.branchId || branchId,
+    );
   }
 
   @Get('customers/hourly')
@@ -88,10 +103,13 @@ export class DashboardController {
   @ApiQuery({ name: 'date', required: false })
   @ApiQuery({ name: 'branchId', required: false })
   getHourlyCustomerStats(
+    @Req() req: any,
     @Query('date') date?: string,
     @Query('branchId') branchId?: string,
   ) {
-    return this.dashboardService.getHourlyCustomerStats(date, branchId);
+    return this.dashboardService.getHourlyCustomerStats(
+      date,
+      req.user?.branchId || branchId,
+    );
   }
 }
-

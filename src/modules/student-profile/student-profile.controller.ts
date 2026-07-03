@@ -9,6 +9,8 @@ import {
   HttpCode,
   HttpStatus,
   Query,
+  Req,
+  UseGuards,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -21,6 +23,7 @@ import {
 import { StudentProfileService } from './student-profile.service';
 import { CreateStudentProfileDto } from './dto/create-student-profile.dto';
 import { StudentProfileDto } from './dto/student-profile.dto';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
 @ApiTags('Student Profiles')
 @ApiBearerAuth()
@@ -29,6 +32,7 @@ export class StudentProfileController {
   constructor(private studentProfileService: StudentProfileService) {}
 
   @Get()
+  @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: 'Get all student profiles' })
   @ApiQuery({ name: 'branchId', required: false })
   @ApiResponse({
@@ -37,11 +41,16 @@ export class StudentProfileController {
     type: [StudentProfileDto],
   })
   async findAll(
+    @Req() req: any,
     @Query('branchId') branchId?: string,
     @Query('page') page?: string,
     @Query('size') size?: string,
   ) {
-    return this.studentProfileService.findAll(page, size, branchId);
+    return this.studentProfileService.findAll(
+      page,
+      size,
+      req.user?.branchId || branchId,
+    );
   }
 
   @Get(':id')
