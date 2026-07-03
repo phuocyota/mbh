@@ -51,12 +51,6 @@ export class WorkScheduleService extends BaseService<WorkSchedule> {
 
     const slotByDay = new Map<number, WeeklyWorkScheduleSlotDto>();
     for (const slot of dto.weeklyShifts) {
-      if (slotByDay.has(slot.dayOfWeek)) {
-        throw new BadRequestException(
-          `Duplicate weekly shift for dayOfWeek ${slot.dayOfWeek}`,
-        );
-      }
-
       this.buildSchedulePayload({
         employeeId: dto.employeeId,
         workDate: dto.fromDate,
@@ -65,7 +59,16 @@ export class WorkScheduleService extends BaseService<WorkSchedule> {
         endTime: slot.endTime,
         note: slot.note,
       });
-      slotByDay.set(slot.dayOfWeek, slot);
+
+      for (const dayOfWeek of this.getSlotDays(slot)) {
+        if (slotByDay.has(dayOfWeek)) {
+          throw new BadRequestException(
+            `Duplicate weekly shift for dayOfWeek ${dayOfWeek}`,
+          );
+        }
+
+        slotByDay.set(dayOfWeek, slot);
+      }
     }
 
     const schedules = this.buildWeekScheduleDates(
@@ -281,6 +284,18 @@ export class WorkScheduleService extends BaseService<WorkSchedule> {
     }
 
     return schedules;
+  }
+
+  private getSlotDays(slot: WeeklyWorkScheduleSlotDto): number[] {
+    if (slot.dayOfWeeks?.length) {
+      return slot.dayOfWeeks;
+    }
+
+    if (slot.dayOfWeek === undefined || slot.dayOfWeek === null) {
+      throw new BadRequestException('dayOfWeek or dayOfWeeks is required');
+    }
+
+    return [slot.dayOfWeek];
   }
 
   private parseDateKey(dateKey: string) {

@@ -1,6 +1,8 @@
 import { Type } from 'class-transformer';
 import { ApiProperty } from '@nestjs/swagger';
 import {
+  ArrayMaxSize,
+  ArrayMinSize,
   ArrayNotEmpty,
   IsArray,
   IsBoolean,
@@ -19,12 +21,31 @@ import {
 export class WeeklyWorkScheduleSlotDto {
   @ApiProperty({
     description: 'Day of week from JavaScript getDay(): 0 Sunday, 6 Saturday',
+    required: false,
     example: 1,
   })
+  @ValidateIf((dto) => !dto.dayOfWeeks?.length)
   @IsInt()
   @Min(0)
   @Max(6)
-  dayOfWeek: number;
+  dayOfWeek?: number;
+
+  @ApiProperty({
+    description:
+      'Multiple days of week from JavaScript getDay(): 0 Sunday, 6 Saturday',
+    required: false,
+    example: [1, 3, 5],
+    type: [Number],
+  })
+  @IsOptional()
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(7)
+  @IsInt({ each: true })
+  @Min(0, { each: true })
+  @Max(6, { each: true })
+  @Type(() => Number)
+  dayOfWeeks?: number[];
 
   @ApiProperty({ example: 'morning', enum: ['morning', 'afternoon', 'full', 'custom'] })
   @IsIn(['morning', 'afternoon', 'full', 'custom'])

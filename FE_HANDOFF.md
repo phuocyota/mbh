@@ -1478,6 +1478,12 @@ Body:
       "note": "Lam nua buoi"
     },
     {
+      "dayOfWeeks": [2, 4, 6],
+      "shift": "custom",
+      "startTime": "08:00",
+      "endTime": "17:00"
+    },
+    {
       "dayOfWeek": 5,
       "shift": "full"
     }
@@ -1489,7 +1495,8 @@ Field notes:
 
 - `fromDate`, `toDate`: khoang ngay can ap dung, dang `YYYY-MM-DD`.
 - `weeklyShifts[].dayOfWeek`: theo JavaScript `Date.getDay()`, `0` Chu nhat, `1` Thu 2, ..., `6` Thu 7.
-- Moi `dayOfWeek` chi duoc gui 1 lan, vi lich hien tai chi co 1 ca cho 1 nhan vien trong 1 ngay.
+- `weeklyShifts[].dayOfWeeks`: dung khi cung mot khung gio/ca ap dung cho nhieu ngay trong tuan, vi du `[1, 3, 5]`.
+- Moi ngay trong tuan chi duoc gui 1 lan qua `dayOfWeek` hoac `dayOfWeeks`, vi lich hien tai chi co 1 ca cho 1 nhan vien trong 1 ngay.
 - `replaceExisting`: default `true`. Khi true, BE xoa lich cu cua nhan vien tai cac ngay duoc sinh ra roi tao lai, tranh duplicate.
 - Neu `shift = custom`, bat buoc co `startTime` va `endTime` dang `HH:mm`.
 
