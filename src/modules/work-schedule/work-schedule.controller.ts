@@ -121,6 +121,6 @@ export class WorkScheduleController {
   @ApiResponse({ status: 204, description: 'Xóa thành công' })
   @ApiResponse({ status: 404, description: 'Không tìm thấy' })
   async delete(@Param('id') id: string): Promise<void> {
-    await this.workScheduleService.delete(id, { userId: 'system' } as any);
+    await this.workScheduleService.hardDelete(id);
   }
 }
