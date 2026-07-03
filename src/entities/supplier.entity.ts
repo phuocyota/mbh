@@ -1,8 +1,12 @@
-import { Entity, Column } from 'typeorm';
+import { Entity, Column, ManyToOne, JoinColumn } from 'typeorm';
 import { BaseEntity } from '../common/sql/base.entity';
+import { Branch } from './branch.entity';
 
 @Entity('suppliers')
 export class Supplier extends BaseEntity {
+  @Column('uuid', { name: 'branch_id', nullable: true })
+  branchId: string | null;
+
   @Column('varchar', { unique: true, name: 'code' })
   code: string;
 
@@ -45,9 +49,18 @@ export class Supplier extends BaseEntity {
   @Column('numeric', { precision: 15, scale: 2, default: 0 })
   debt: number;
 
-  @Column('numeric', { precision: 15, scale: 2, default: 0, name: 'total_purchase' })
+  @Column('numeric', {
+    precision: 15,
+    scale: 2,
+    default: 0,
+    name: 'total_purchase',
+  })
   totalPurchase: number;
 
   @Column('varchar', { default: 'active' })
   status: string; // active, inactive
+
+  @ManyToOne(() => Branch, { nullable: true })
+  @JoinColumn({ name: 'branch_id' })
+  branch: Branch | null;
 }

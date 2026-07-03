@@ -11,4 +11,3 @@ import { SupplierController } from './supplier.controller';
   exports: [SupplierService],
 })
 export class SupplierModule {}
-

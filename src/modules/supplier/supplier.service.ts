@@ -1,7 +1,16 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { EntityManager, Repository, Like, DataSource, In } from 'typeorm';
-import { Supplier, Debt, StockReceiptImport, MoneyVoucher } from '../../entities';
+import {
+  Supplier,
+  Debt,
+  StockReceiptImport,
+  MoneyVoucher,
+} from '../../entities';
 import { BaseService } from '../../common/sql/base.service';
 import {
   normalizePagination,
@@ -12,6 +21,7 @@ import {
 interface FindAllOptions {
   status?: string;
   search?: string;
+  branchId?: string;
   page?: number | string;
   size?: number | string;
 }
@@ -32,14 +42,20 @@ export class SupplierService extends BaseService<Supplier> {
     return 'Supplier';
   }
 
-  async findAll(options?: FindAllOptions): Promise<PaginationResponseDto<Supplier>> {
+  async findAll(
+    options?: FindAllOptions,
+  ): Promise<PaginationResponseDto<Supplier>> {
     const pagination = normalizePagination(options?.page, options?.size);
     const where: any = {};
-    
+
     if (options?.status && options.status !== 'all') {
       where.status = options.status;
     }
-    
+
+    if (options?.branchId) {
+      where.branchId = options.branchId;
+    }
+
     if (options?.search) {
       const searchTerm = `%${options.search}%`;
       const [data, total] = await this.supplierRepository.findAndCount({
@@ -52,9 +68,14 @@ export class SupplierService extends BaseService<Supplier> {
         take: pagination.size,
       });
 
-      return toPaginationResponse(data, total, pagination.page, pagination.size);
+      return toPaginationResponse(
+        data,
+        total,
+        pagination.page,
+        pagination.size,
+      );
     }
-    
+
     const [data, total] = await this.supplierRepository.findAndCount({
       where,
       skip: pagination.skip,
@@ -118,7 +139,8 @@ export class SupplierService extends BaseService<Supplier> {
       throw new NotFoundException(`Supplier not found: ${params.supplierId}`);
     }
 
-    supplier.totalPurchase = Number(supplier.totalPurchase || 0) + params.amount;
+    supplier.totalPurchase =
+      Number(supplier.totalPurchase || 0) + params.amount;
 
     const nextDebt = Number(supplier.debt || 0) + params.amount;
     supplier.debt = nextDebt;
@@ -157,10 +179,12 @@ export class SupplierService extends BaseService<Supplier> {
 
     let stockVouchers: StockReceiptImport[] = [];
     if (stockVoucherIds.length > 0) {
-      stockVouchers = await this.dataSource.getRepository(StockReceiptImport).find({
-        where: { id: In(stockVoucherIds) },
-        relations: ['details', 'details.product'],
-      });
+      stockVouchers = await this.dataSource
+        .getRepository(StockReceiptImport)
+        .find({
+          where: { id: In(stockVoucherIds) },
+          relations: ['details', 'details.product'],
+        });
     }
 
     let moneyVouchers: MoneyVoucher[] = [];
@@ -187,4 +211,3 @@ export class SupplierService extends BaseService<Supplier> {
     });
   }
 }
-

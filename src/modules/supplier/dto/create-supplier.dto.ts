@@ -1,7 +1,12 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsNotEmpty, IsOptional, IsString } from 'class-validator';
+import { IsNotEmpty, IsOptional, IsString, IsUUID } from 'class-validator';
 
 export class CreateSupplierDto {
+  @ApiPropertyOptional({ description: 'Branch ID' })
+  @IsOptional()
+  @IsUUID()
+  branchId?: string;
+
   @ApiProperty({ description: 'Supplier name' })
   @IsNotEmpty()
   @IsString()
@@ -77,9 +82,11 @@ export class CreateSupplierDto {
   @IsString()
   note?: string;
 
-  @ApiPropertyOptional({ description: 'Status (active, inactive)', default: 'active' })
+  @ApiPropertyOptional({
+    description: 'Status (active, inactive)',
+    default: 'active',
+  })
   @IsOptional()
   @IsString()
   status?: string;
 }
-

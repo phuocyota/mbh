@@ -5,6 +5,7 @@ import { COMMON_STATUS } from '../common/constant/constant';
 import { Category } from './category.entity';
 import { Product } from './product.entity';
 import { Payroll } from './payroll.entity';
+import { Supplier } from './supplier.entity';
 
 @Entity('branches')
 export class Branch extends BaseEntity {
@@ -38,6 +39,9 @@ export class Branch extends BaseEntity {
 
   @OneToMany(() => Payroll, (payroll) => payroll.branch)
   payrolls: Payroll[];
+
+  @OneToMany(() => Supplier, (supplier) => supplier.branch)
+  suppliers: Supplier[];
 
   @OneToMany('Order', 'branch')
   orders: any[];

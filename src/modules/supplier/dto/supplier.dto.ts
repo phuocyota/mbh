@@ -4,6 +4,9 @@ export class SupplierDto {
   @ApiProperty({ description: 'Supplier ID' })
   id: string;
 
+  @ApiProperty({ description: 'Branch ID', required: false, nullable: true })
+  branchId?: string | null;
+
   @ApiProperty({ description: 'Supplier code' })
   code: string;
 
@@ -34,10 +37,18 @@ export class SupplierDto {
   @ApiProperty({ description: 'Ward', required: false, nullable: true })
   ward?: string;
 
-  @ApiProperty({ description: 'ID card number', required: false, nullable: true })
+  @ApiProperty({
+    description: 'ID card number',
+    required: false,
+    nullable: true,
+  })
   idCard?: string;
 
-  @ApiProperty({ description: 'Supplier group', required: false, nullable: true })
+  @ApiProperty({
+    description: 'Supplier group',
+    required: false,
+    nullable: true,
+  })
   group?: string;
 
   @ApiProperty({ description: 'Note', required: false, nullable: true })

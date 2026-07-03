@@ -9,6 +9,8 @@ import {
   HttpCode,
   HttpStatus,
   Query,
+  Req,
+  UseGuards,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -22,6 +24,7 @@ import { SupplierService } from './supplier.service';
 import { CreateSupplierDto } from './dto/create-supplier.dto';
 import { UpdateSupplierDto } from './dto/update-supplier.dto';
 import { SupplierDto } from './dto/supplier.dto';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
 @ApiTags('Suppliers')
 @ApiBearerAuth()
@@ -30,9 +33,19 @@ export class SupplierController {
   constructor(private supplierService: SupplierService) {}
 
   @Get()
+  @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: 'Get all suppliers with optional filters' })
-  @ApiQuery({ name: 'status', required: false, description: 'Filter by status (active, inactive, all)' })
-  @ApiQuery({ name: 'search', required: false, description: 'Search by code, name, or phone' })
+  @ApiQuery({
+    name: 'status',
+    required: false,
+    description: 'Filter by status (active, inactive, all)',
+  })
+  @ApiQuery({
+    name: 'search',
+    required: false,
+    description: 'Search by code, name, or phone',
+  })
+  @ApiQuery({ name: 'branchId', required: false })
   @ApiQuery({ name: 'page', required: false, type: Number })
   @ApiQuery({ name: 'size', required: false, type: Number })
   @ApiResponse({
@@ -41,12 +54,20 @@ export class SupplierController {
     type: [SupplierDto],
   })
   async findAll(
+    @Req() req: any,
     @Query('status') status?: string,
     @Query('search') search?: string,
+    @Query('branchId') branchId?: string,
     @Query('page') page?: string,
     @Query('size') size?: string,
   ) {
-    return this.supplierService.findAll({ status, search, page, size });
+    return this.supplierService.findAll({
+      status,
+      search,
+      branchId: req.user?.branchId || branchId,
+      page,
+      size,
+    });
   }
 
   @Get(':id')
@@ -63,6 +84,7 @@ export class SupplierController {
   }
 
   @Post()
+  @UseGuards(JwtAuthGuard)
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Create new supplier' })
   @ApiResponse({
@@ -70,25 +92,23 @@ export class SupplierController {
     description: 'Supplier created',
     type: SupplierDto,
   })
-  async create(@Body() createDto: CreateSupplierDto) {
+  async create(@Body() createDto: CreateSupplierDto, @Req() req: any) {
     const code = await this.supplierService.generateCode();
     const mappedData = {
       ...createDto,
+      branchId: req.user?.branchId || createDto.branchId,
       province: createDto.city || createDto.province,
       idCard: createDto.cccd || createDto.idCard,
       companyName: createDto.company || createDto.companyName,
       code,
     };
-    
+
     // Clean up FE specific fields to avoid TypeORM mismatch or other issues
     delete (mappedData as any).city;
     delete (mappedData as any).cccd;
     delete (mappedData as any).company;
 
-    return this.supplierService.create(
-      mappedData,
-      { userId: 'system' } as any,
-    );
+    return this.supplierService.create(mappedData, { userId: 'system' } as any);
   }
 
   @Put(':id')
@@ -100,10 +120,7 @@ export class SupplierController {
     type: SupplierDto,
   })
   @ApiResponse({ status: 404, description: 'Supplier not found' })
-  async update(
-    @Param('id') id: string,
-    @Body() updateDto: UpdateSupplierDto,
-  ) {
+  async update(@Param('id') id: string, @Body() updateDto: UpdateSupplierDto) {
     const mappedData = {
       ...updateDto,
     };
@@ -120,9 +137,10 @@ export class SupplierController {
       delete (mappedData as any).company;
     }
 
-    return this.supplierService.update(id, mappedData, { userId: 'system' } as any);
+    return this.supplierService.update(id, mappedData, {
+      userId: 'system',
+    } as any);
   }
-
 
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
