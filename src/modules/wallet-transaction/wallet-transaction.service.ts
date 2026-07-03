@@ -27,11 +27,13 @@ export class WalletTransactionService extends BaseService<WalletTransaction> {
     size?: any,
     search?: string,
     type?: string,
+    branchId?: string | null,
   ): Promise<PaginationResponseDto<WalletTransaction>> {
     const pagination = normalizePagination(page, size);
     const query = this.walletTransactionRepository
       .createQueryBuilder('wt')
       .leftJoinAndSelect('wt.customer', 'customer')
+      .leftJoin('users', 'walletUser', 'walletUser.id = customer.user_id')
       .leftJoinAndSelect('wt.createdByUser', 'createdByUser')
       .orderBy('wt.createdAt', 'DESC');
 
@@ -45,6 +47,10 @@ export class WalletTransactionService extends BaseService<WalletTransaction> {
 
     if (type && type !== 'all') {
       query.andWhere('wt.type = :type', { type });
+    }
+
+    if (branchId) {
+      query.andWhere('walletUser.branch_id = :branchId', { branchId });
     }
 
     const [idRows, total] = await Promise.all([

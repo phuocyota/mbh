@@ -9,6 +9,8 @@ import {
   HttpCode,
   HttpStatus,
   Query,
+  Req,
+  UseGuards,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -16,10 +18,12 @@ import {
   ApiResponse,
   ApiBearerAuth,
   ApiParam,
+  ApiQuery,
 } from '@nestjs/swagger';
 import { WalletTransactionService } from './wallet-transaction.service';
 import { CreateWalletTransactionDto } from './dto/create-wallet-transaction.dto';
 import { WalletTransactionDto } from './dto/wallet-transaction.dto';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
 @ApiTags('Wallet Transactions')
 @ApiBearerAuth()
@@ -28,19 +32,31 @@ export class WalletTransactionController {
   constructor(private walletTransactionService: WalletTransactionService) {}
 
   @Get()
+  @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: 'Get all wallet transactions' })
   @ApiResponse({
     status: 200,
     description: 'List of wallet transactions',
     type: [WalletTransactionDto],
   })
+  @ApiQuery({ name: 'page', required: false })
+  @ApiQuery({ name: 'size', required: false })
+  @ApiQuery({ name: 'search', required: false })
+  @ApiQuery({ name: 'type', required: false })
   async findAll(
+    @Req() req: any,
     @Query('page') page?: string,
     @Query('size') size?: string,
     @Query('search') search?: string,
     @Query('type') type?: string,
   ) {
-    return this.walletTransactionService.findAll(page, size, search, type);
+    return this.walletTransactionService.findAll(
+      page,
+      size,
+      search,
+      type,
+      req.user?.branchId,
+    );
   }
 
   @Get(':id')
