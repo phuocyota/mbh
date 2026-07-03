@@ -1,7 +1,7 @@
 import { ForbiddenException, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { Product, StockItem } from '../../entities';
+import { CustomerMealItem, Product, StockItem } from '../../entities';
 import { OrderService } from '../orders/order.service';
 import { OrderItemService } from '../order-item/order-item.service';
 import { PaymentService } from '../payment/payment.service';
@@ -17,6 +17,18 @@ interface DateRange {
 interface ResolvedDateRange {
   from: Date;
   to: Date;
+}
+
+interface MealItemReportRow {
+  date: string;
+  level: string;
+  mealPeriod: string;
+  dishName: string;
+  unitPrice: string | number;
+  ordered: string | number;
+  cancelled: string | number;
+  served: string | number;
+  amount: string | number;
 }
 
 type ReportUser = {
@@ -37,6 +49,8 @@ export class ReportsService {
     private productRepository: Repository<Product>,
     @InjectRepository(StockItem)
     private stockItemRepository: Repository<StockItem>,
+    @InjectRepository(CustomerMealItem)
+    private customerMealItemRepository: Repository<CustomerMealItem>,
   ) {}
 
   private resolveRange(range: DateRange): ResolvedDateRange {
@@ -771,12 +785,233 @@ export class ReportsService {
     return this.stockSnapshot(branchId, user);
   }
 
+  async mealItemReport(
+    query: {
+      from: string;
+      to: string;
+      branchId?: string;
+      level?: string;
+      mealPeriod?: string;
+    },
+    user?: ReportUser,
+  ) {
+    const branchId = this.resolveBranchId(query.branchId, user);
+    const reportQuery = this.customerMealItemRepository
+      .createQueryBuilder('cmi')
+      .innerJoin('cmi.mealItem', 'meal')
+      .innerJoin('meal.product', 'product')
+      .select('meal.dateKey', 'date')
+      .addSelect('meal.level', 'level')
+      .addSelect('meal.mealPeriod', 'mealPeriod')
+      .addSelect('product.name', 'dishName')
+      .addSelect('product.price', 'unitPrice')
+      .addSelect('COALESCE(SUM(cmi.quantity), 0)', 'ordered')
+      .addSelect(
+        `COALESCE(SUM(CASE WHEN cmi.status <> :activeStatus THEN cmi.quantity ELSE 0 END), 0)`,
+        'cancelled',
+      )
+      .addSelect(
+        `COALESCE(SUM(CASE WHEN cmi.status = :activeStatus THEN cmi.quantity ELSE 0 END), 0)`,
+        'served',
+      )
+      .addSelect(
+        `COALESCE(SUM(CASE WHEN cmi.status = :activeStatus THEN cmi.quantity * product.price ELSE 0 END), 0)`,
+        'amount',
+      )
+      .where('meal.dateKey >= :from', { from: query.from })
+      .andWhere('meal.dateKey <= :to', { to: query.to })
+      .setParameter('activeStatus', 'ACTIVE')
+      .groupBy('meal.dateKey')
+      .addGroupBy('meal.level')
+      .addGroupBy('meal.mealPeriod')
+      .addGroupBy('product.id')
+      .addGroupBy('product.name')
+      .addGroupBy('product.price')
+      .orderBy('meal.dateKey', 'ASC')
+      .addOrderBy('meal.level', 'ASC')
+      .addOrderBy('meal.mealPeriod', 'ASC')
+      .addOrderBy('product.name', 'ASC');
+
+    if (branchId) {
+      reportQuery.andWhere('meal.branchId = :branchId', { branchId });
+    }
+
+    if (query.level && query.level !== 'all') {
+      reportQuery.andWhere('meal.level = :level', {
+        level: query.level,
+      });
+    }
+
+    if (query.mealPeriod && query.mealPeriod !== 'all') {
+      reportQuery.andWhere('meal.mealPeriod = :mealPeriod', {
+        mealPeriod: query.mealPeriod,
+      });
+    }
+
+    const rows = await reportQuery.getRawMany<MealItemReportRow>();
+    const detailLogs = rows.map((row) => {
+      const ordered = Number(row.ordered || 0);
+      const cancelled = Number(row.cancelled || 0);
+      const served = Number(row.served || 0);
+      const amount = Number(row.amount || 0);
+
+      return {
+        date: row.date,
+        level: row.level,
+        mealPeriod: row.mealPeriod,
+        dishName: row.dishName,
+        unitPrice: Number(row.unitPrice || 0),
+        ordered,
+        cancelled,
+        served,
+        amount,
+        status: this.resolveMealItemReportStatus(ordered, cancelled, served),
+      };
+    });
+
+    const totalMealsOrdered = detailLogs.reduce(
+      (sum, row) => sum + row.ordered,
+      0,
+    );
+    const totalMealsCancelled = detailLogs.reduce(
+      (sum, row) => sum + row.cancelled,
+      0,
+    );
+    const totalMealsServed = detailLogs.reduce(
+      (sum, row) => sum + row.served,
+      0,
+    );
+    const totalRevenue = detailLogs.reduce((sum, row) => sum + row.amount, 0);
+
+    return {
+      summary: {
+        totalMealsOrdered,
+        totalMealsCancelled,
+        totalMealsServed,
+        totalRevenue,
+        completionRate:
+          totalMealsOrdered > 0
+            ? Number(((totalMealsServed / totalMealsOrdered) * 100).toFixed(2))
+            : 0,
+      },
+      dailyTrend: this.buildMealItemDailyTrend(detailLogs),
+      levelStats: this.buildMealItemLevelStats(detailLogs),
+      mealStats: this.buildMealItemPeriodStats(detailLogs),
+      detailLogs,
+    };
+  }
+
   private safeAverage(total: number, quantity: number) {
     if (quantity <= 0) {
       return 0;
     }
 
     return Math.round(total / quantity);
+  }
+
+  private resolveMealItemReportStatus(
+    ordered: number,
+    cancelled: number,
+    served: number,
+  ) {
+    if (ordered > 0 && served === 0 && cancelled > 0) {
+      return 'CANCELLED';
+    }
+
+    if (cancelled > 0) {
+      return 'PARTIAL_CANCELLED';
+    }
+
+    return 'COMPLETED';
+  }
+
+  private buildMealItemDailyTrend(
+    rows: Array<{ date: string; served: number; amount: number }>,
+  ) {
+    const daily = new Map<
+      string,
+      { date: string; portions: number; revenue: number }
+    >();
+
+    rows.forEach((row) => {
+      const item = daily.get(row.date) || {
+        date: row.date,
+        portions: 0,
+        revenue: 0,
+      };
+
+      item.portions += row.served;
+      item.revenue += row.amount;
+      daily.set(row.date, item);
+    });
+
+    return Array.from(daily.values()).sort((left, right) =>
+      left.date.localeCompare(right.date),
+    );
+  }
+
+  private buildMealItemLevelStats(
+    rows: Array<{ level: string; served: number }>,
+  ) {
+    const levels = new Map<string, number>();
+
+    rows.forEach((row) => {
+      levels.set(row.level, (levels.get(row.level) || 0) + row.served);
+    });
+
+    return Array.from(levels.entries())
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([level, value]) => ({
+        level,
+        name: this.getMealItemLevelName(level),
+        value,
+      }));
+  }
+
+  private buildMealItemPeriodStats(
+    rows: Array<{ mealPeriod: string; served: number }>,
+  ) {
+    const periods = new Map<string, number>();
+    const order = ['BREAKFAST', 'LUNCH', 'AFTERNOON', 'DINNER'];
+
+    rows.forEach((row) => {
+      periods.set(
+        row.mealPeriod,
+        (periods.get(row.mealPeriod) || 0) + row.served,
+      );
+    });
+
+    return Array.from(periods.entries())
+      .sort(
+        ([left], [right]) =>
+          order.indexOf(left) - order.indexOf(right) ||
+          left.localeCompare(right),
+      )
+      .map(([mealPeriod, value]) => ({
+        mealPeriod,
+        name: this.getMealItemPeriodName(mealPeriod),
+        value,
+      }));
+  }
+
+  private getMealItemLevelName(level: string) {
+    const names: Record<string, string> = {
+      preschool: 'M\u1ea7m non',
+      primary: 'Ti\u1ec3u h\u1ecdc',
+    };
+
+    return names[level] || level;
+  }
+
+  private getMealItemPeriodName(mealPeriod: string) {
+    const names: Record<string, string> = {
+      BREAKFAST: '\u0102n s\u00e1ng',
+      LUNCH: '\u0102n tr\u01b0a',
+      AFTERNOON: '\u0102n x\u1ebf',
+      DINNER: '\u0102n t\u1ed1i',
+    };
+
+    return names[mealPeriod] || mealPeriod;
   }
 
   private async getStockOnHandByProduct(branchId?: string) {

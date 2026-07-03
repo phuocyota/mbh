@@ -12,6 +12,7 @@ import {
   CustomerReportQueryDto,
   DateRangeQueryDto,
   EmployeeReportQueryDto,
+  MealItemReportQueryDto,
   MenuPerformanceQueryDto,
   MonthlyOrderPlanQueryDto,
   TopProductsQueryDto,
@@ -180,5 +181,27 @@ export class ReportsController {
     @Req() req: any,
   ) {
     return this.reportsService.inventoryReport(branchId, req.user);
+  }
+
+  @Get('meal-items')
+  @ApiOperation({ summary: 'Thong ke ban tru theo suat an' })
+  @ApiQuery({ name: 'branchId', required: false, type: String })
+  @ApiQuery({ name: 'from', required: true, type: String })
+  @ApiQuery({ name: 'to', required: true, type: String })
+  @ApiQuery({
+    name: 'level',
+    required: false,
+    enum: ['preschool', 'primary', 'all'],
+  })
+  @ApiQuery({
+    name: 'mealPeriod',
+    required: false,
+    enum: ['BREAKFAST', 'LUNCH', 'AFTERNOON', 'DINNER', 'all'],
+  })
+  async mealItemReport(
+    @Query() query: MealItemReportQueryDto,
+    @Req() req: any,
+  ) {
+    return this.reportsService.mealItemReport(query, req.user);
   }
 }

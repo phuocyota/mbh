@@ -10,6 +10,7 @@ import {
   Matches,
 } from 'class-validator';
 import { Type } from 'class-transformer';
+import { MEAL_PERIOD_VALUES } from '../../../common/constant/constant';
 
 export class DateRangeQueryDto {
   @ApiProperty({
@@ -148,4 +149,53 @@ export class MonthlyOrderPlanQueryDto extends DateRangeQueryDto {
   @IsNumber()
   @Min(0)
   maxRate?: number;
+}
+
+const BOARDING_LEVELS = ['preschool', 'primary', 'all'] as const;
+const BOARDING_MEAL_PERIODS = [...MEAL_PERIOD_VALUES, 'all'] as const;
+
+export class MealItemReportQueryDto {
+  @ApiProperty({
+    description: 'Branch ID (loc theo chi nhanh)',
+    required: false,
+  })
+  @IsOptional()
+  @IsUUID()
+  branchId?: string;
+
+  @ApiProperty({
+    description: 'Ngay bat dau khoang thong ke YYYY-MM-DD',
+    required: true,
+    example: '2026-06-25',
+  })
+  @IsDateString()
+  from: string;
+
+  @ApiProperty({
+    description: 'Ngay ket thuc khoang thong ke YYYY-MM-DD',
+    required: true,
+    example: '2026-07-02',
+  })
+  @IsDateString()
+  to: string;
+
+  @ApiProperty({
+    description: 'Khoi lop',
+    enum: BOARDING_LEVELS,
+    required: false,
+    default: 'all',
+  })
+  @IsOptional()
+  @IsIn(BOARDING_LEVELS)
+  level?: (typeof BOARDING_LEVELS)[number];
+
+  @ApiProperty({
+    description: 'Bua an',
+    enum: BOARDING_MEAL_PERIODS,
+    required: false,
+    default: 'all',
+  })
+  @IsOptional()
+  @IsIn(BOARDING_MEAL_PERIODS)
+  mealPeriod?: (typeof BOARDING_MEAL_PERIODS)[number];
 }
