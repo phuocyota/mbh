@@ -187,6 +187,15 @@ export class ProductService extends BaseService<Product> {
       const productRepository = manager.getRepository(Product);
       const historyRepository = manager.getRepository(ProductPriceHistory);
 
+      if (!productDto.code || !String(productDto.code).trim()) {
+        productDto.code = await this.generateProductCode(
+          productRepository,
+          productDto.branchId,
+        );
+      } else {
+        productDto.code = String(productDto.code).trim();
+      }
+
       const product = productRepository.create({
         ...(productDto as Partial<Product>),
       });
@@ -395,6 +404,53 @@ export class ProductService extends BaseService<Product> {
     const productDto = { ...dto };
     delete productDto.quantity;
     return productDto;
+  }
+
+  private async generateProductCode(
+    productRepository: Repository<Product>,
+    branchId?: string | null,
+  ) {
+    const prefix = 'SP';
+    const query = productRepository
+      .createQueryBuilder('product')
+      .select(
+        `COALESCE(MAX(CAST(SUBSTRING(product.code FROM ${
+          prefix.length + 1
+        }) AS INTEGER)), 0)`,
+        'maxCode',
+      )
+      .where('product.code ~ :codePattern', {
+        codePattern: `^${prefix}[0-9]+$`,
+      });
+
+    if (branchId) {
+      query.andWhere('product.branchId = :branchId', { branchId });
+    } else {
+      query.andWhere('product.branchId IS NULL');
+    }
+
+    const result = await query.getRawOne<{ maxCode: string | number }>();
+    let nextNumber = Number(result?.maxCode || 0) + 1;
+
+    while (true) {
+      const code = `${prefix}${String(nextNumber).padStart(6, '0')}`;
+      const existingQuery = productRepository
+        .createQueryBuilder('product')
+        .where('product.code = :code', { code });
+
+      if (branchId) {
+        existingQuery.andWhere('product.branchId = :branchId', { branchId });
+      } else {
+        existingQuery.andWhere('product.branchId IS NULL');
+      }
+
+      const exists = await existingQuery.getExists();
+      if (!exists) {
+        return code;
+      }
+
+      nextNumber += 1;
+    }
   }
 
   private async recordPriceHistoryIfChanged(

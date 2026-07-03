@@ -126,8 +126,11 @@ export class ProductController {
   @ApiOperation({ summary: 'Create new product' })
   @ApiResponse({ status: 201, description: 'Product created' })
   @Post()
-  async create(@Body() createProductDto: any) {
-    return this.productService.createProduct(createProductDto);
+  async create(@Req() req: any, @Body() createProductDto: any) {
+    return this.productService.createProduct({
+      ...createProductDto,
+      branchId: this.resolveBranchId(req, createProductDto?.branchId),
+    });
   }
 
   @ApiOperation({ summary: 'Update product' })
