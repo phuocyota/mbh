@@ -381,6 +381,12 @@ GET /api/meal-items/week-plan?branchId=branch-id&from=2026-06-29&to=2026-07-05&l
 
 Response `week-plan` da group san theo ngay + bua. `items` trong moi bua la cac lua chon mon da them, da duoc sap xep theo `sortOrder`. Mac dinh `mealPeriods` la 3 bua `BREAKFAST`, `LUNCH`, `AFTERNOON`; neu co `mealPeriod` khac trong data thi backend append them vao response. Neu khong truyen du `from`/`to`, backend tu quy ve tuan Thu 2-Chu nhat cua `dateKey`/`from`/ngay hien tai.
 
+Voi token hoc sinh/phu huynh, moi `items` trong mot ngay + bua van tra toan bo mon admin setup cho slot do. Backend danh dau:
+
+- `isSelected: true`, `selectionSource: "CUSTOMER"` neu user da chon mon do.
+- `isDefaultSelection: true`, `selectionSource: "DEFAULT"` cho mon uu tien dau tien theo `sortOrder` khi user chua chon mon nao trong slot.
+- Cac mon con lai co `selectionSource: null`.
+
 ```json
 {
   "from": "2026-06-29",
@@ -409,6 +415,9 @@ Response `week-plan` da group san theo ngay + bua. `items` trong moi bua la cac 
               "dateKey": "2026-06-29",
               "sortOrder": 1,
               "status": "ACTIVE",
+              "isSelected": false,
+              "isDefaultSelection": true,
+              "selectionSource": "DEFAULT",
               "product": {
                 "id": "product-id",
                 "name": "Com tam",
@@ -637,6 +646,27 @@ Optional:
 - `note`
 
 Rule backend: mot khach hang khong duoc gan trung cung mot `mealItemId`.
+
+### Hoc sinh/phu huynh chon mon trong thuc don ngay
+
+Dung endpoint nay cho app hoc sinh/phu huynh. FE chi gui `mealItemId` cua mon nam trong danh sach admin setup, backend tu tim `customer` theo JWT va thay the lua chon cu trong cung slot `branchId + dateKey/dayOfWeek + mealPeriod + level`.
+
+```http
+POST /api/customer-meal-items/me/select
+Authorization: Bearer <accessToken>
+```
+
+Body:
+
+```json
+{
+  "mealItemId": "meal-item-id",
+  "quantity": 1,
+  "note": "Khong cay"
+}
+```
+
+Neu user chua chon slot do, `GET /api/meal-items/week-plan` se mac dinh lay mon dau tien theo `sortOrder`. Khi user chon mon moi, cac lua chon cu trong cung slot se chuyen `INACTIVE`, mon vua chon la `ACTIVE`.
 
 ### Cap nhat mon theo nhu cau khach
 

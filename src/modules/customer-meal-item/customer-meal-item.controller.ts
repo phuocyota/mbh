@@ -23,6 +23,7 @@ import { CustomerMealItemService } from './customer-meal-item.service';
 import { CustomerMealItemDto } from './dto/customer-meal-item.dto';
 import { CustomerMealItemQueryDto } from './dto/customer-meal-item-query.dto';
 import { CreateCustomerMealItemDto } from './dto/create-customer-meal-item.dto';
+import { SelectCustomerMealItemDto } from './dto/select-customer-meal-item.dto';
 import { UpdateCustomerMealItemDto } from './dto/update-customer-meal-item.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
@@ -57,6 +58,29 @@ export class CustomerMealItemController {
   })
   async findOne(@Param('id') id: string) {
     return this.customerMealItemService.findOne(id);
+  }
+
+  @Post('me/select')
+  @UseGuards(JwtAuthGuard)
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({
+    summary:
+      'Select one meal item for the current customer in its day/meal slot',
+  })
+  @ApiResponse({
+    status: 201,
+    description: 'Customer meal item selected',
+    type: CustomerMealItemDto,
+  })
+  async selectForCurrentCustomer(
+    @Body() dto: SelectCustomerMealItemDto,
+    @Req() req: any,
+  ) {
+    return this.customerMealItemService.selectForUser(
+      req.user?.userId,
+      dto,
+      req.user,
+    );
   }
 
   @Post()

@@ -9,8 +9,11 @@ import { JwtPayload } from '../../common/interface/jwt-payload.interface';
 import { CreateMealItemDto } from './dto/create-meal-item.dto';
 import { UpdateMealItemDto } from './dto/update-meal-item.dto';
 import { MealItemQueryDto } from './dto/meal-item-query.dto';
-import { MEAL_PERIOD } from '../../common/constant/constant';
-import { normalizePagination, toPaginationResponse } from '../../common/dto/pagination.dto';
+import { COMMON_STATUS, MEAL_PERIOD } from '../../common/constant/constant';
+import {
+  normalizePagination,
+  toPaginationResponse,
+} from '../../common/dto/pagination.dto';
 
 @Injectable()
 export class MealItemService extends BaseService<MealItem> {
@@ -53,7 +56,9 @@ export class MealItemService extends BaseService<MealItem> {
       relations: ['branch', 'product', 'product.category'],
     });
 
-    const mealItemById = new Map(mealItems.map((mealItem) => [mealItem.id, mealItem]));
+    const mealItemById = new Map(
+      mealItems.map((mealItem) => [mealItem.id, mealItem]),
+    );
     const data = ids
       .map((id) => mealItemById.get(id))
       .filter((mealItem): mealItem is MealItem => !!mealItem);
@@ -158,8 +163,11 @@ export class MealItemService extends BaseService<MealItem> {
       dayOfWeek: this.getDayOfWeek(dateKey),
       meals: mealPeriods.map((mealPeriod) => ({
         mealPeriod,
-        items: mealItems.filter(
-          (item) => item.dateKey === dateKey && item.mealPeriod === mealPeriod,
+        items: this.applySlotSelection(
+          mealItems.filter(
+            (item) =>
+              item.dateKey === dateKey && item.mealPeriod === mealPeriod,
+          ),
         ),
       })),
     }));
@@ -180,7 +188,10 @@ export class MealItemService extends BaseService<MealItem> {
     };
   }
 
-  private async findAllRowsForUser(filter: MealItemQueryDto = {}, userId?: string) {
+  private async findAllRowsForUser(
+    filter: MealItemQueryDto = {},
+    userId?: string,
+  ) {
     if (!userId) {
       return this.findAllRows(filter);
     }
@@ -243,11 +254,9 @@ export class MealItemService extends BaseService<MealItem> {
 
     this.applyMealItemFilter(query, filter);
 
-    if (filter.status) {
-      query.andWhere('customerMealItem.status = :status', {
-        status: filter.status,
-      });
-    }
+    query.andWhere('customerMealItem.status = :customerMealItemStatus', {
+      customerMealItemStatus: filter.status || COMMON_STATUS.ACTIVE,
+    });
 
     return query.getMany();
   }
@@ -316,6 +325,31 @@ export class MealItemService extends BaseService<MealItem> {
     if (left === undefined) return 1;
     if (right === undefined) return -1;
     return left - right;
+  }
+
+  private applySlotSelection(items: MealItem[]) {
+    const hasCustomerSelection = items.some(
+      (item) => !!(item as any).customerMealItem,
+    );
+    const defaultItem = hasCustomerSelection ? undefined : items[0];
+
+    return items.map((item) => {
+      const customerMealItem = (item as any).customerMealItem;
+      const isSelected = !!customerMealItem;
+      const isDefaultSelection =
+        !hasCustomerSelection && item.id === defaultItem?.id;
+
+      return {
+        ...item,
+        isSelected,
+        isDefaultSelection,
+        selectionSource: isSelected
+          ? 'CUSTOMER'
+          : isDefaultSelection
+            ? 'DEFAULT'
+            : null,
+      };
+    });
   }
 
   private resolveWeekMealPeriods(
