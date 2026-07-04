@@ -9,7 +9,10 @@ import { Branch } from '../../entities/branch.entity';
 import { BaseService } from '../../common/sql/base.service';
 import { ERROR_MESSAGES } from '../../common/constant/error-messages.constant';
 import { COMMON_STATUS } from '../../common/constant/constant';
-import { normalizePagination, toPaginationResponse } from '../../common/dto/pagination.dto';
+import {
+  normalizePagination,
+  toPaginationResponse,
+} from '../../common/dto/pagination.dto';
 
 @Injectable()
 export class CustomerService extends BaseService<Customer> {
@@ -36,13 +39,13 @@ export class CustomerService extends BaseService<Customer> {
     const pagination = normalizePagination(page, size);
     const qb = this.customerRepository
       .createQueryBuilder('customer')
-      .leftJoin('users', 'user', 'user.id = customer.user_id')
+      .leftJoin('users', 'customerUser', 'customerUser.id = customer.user_id')
       .orderBy('customer.created_at', 'DESC')
       .skip(pagination.skip)
       .take(pagination.size);
 
     if (branchId) {
-      qb.andWhere('user.branch_id = :branchId', { branchId });
+      qb.andWhere('customerUser.branch_id = :branchId', { branchId });
     }
 
     const [data, total] = await qb.getManyAndCount();
@@ -251,7 +254,7 @@ export class CustomerService extends BaseService<Customer> {
     const pagination = normalizePagination(page, size);
     const qb = this.customerRepository
       .createQueryBuilder('c')
-      .leftJoin('users', 'user', 'user.id = c.user_id');
+      .leftJoin('users', 'customerUser', 'customerUser.id = c.user_id');
 
     if (keyword?.trim()) {
       qb.where(
@@ -261,11 +264,10 @@ export class CustomerService extends BaseService<Customer> {
     }
 
     if (branchId) {
-      qb.andWhere('user.branch_id = :branchId', { branchId });
+      qb.andWhere('customerUser.branch_id = :branchId', { branchId });
     }
 
-    qb
-      .orderBy('c.created_at', 'DESC')
+    qb.orderBy('c.created_at', 'DESC')
       .skip(pagination.skip)
       .take(pagination.size);
 
