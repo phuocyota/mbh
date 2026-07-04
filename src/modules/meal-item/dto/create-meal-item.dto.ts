@@ -83,6 +83,16 @@ export class CreateMealItemDto {
   sortOrder?: number;
 
   @ApiProperty({
+    description: 'Expected quantity for this meal item in the meal period',
+    example: 50,
+    required: false,
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  expectedQuantity?: number;
+
+  @ApiProperty({
     description: 'Meal item status',
     enum: ACTIVE_INACTIVE_STATUS_VALUES,
     default: COMMON_STATUS.ACTIVE,

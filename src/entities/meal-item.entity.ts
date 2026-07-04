@@ -27,6 +27,9 @@ export class MealItem extends BaseEntity {
   @Column('int', { default: 0, name: 'sort_order' })
   sortOrder: number;
 
+  @Column('int', { default: 0, name: 'expected_quantity' })
+  expectedQuantity: number;
+
   @Column('varchar', { default: COMMON_STATUS.ACTIVE })
   status: string;
 

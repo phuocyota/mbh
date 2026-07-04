@@ -414,6 +414,7 @@ Voi token hoc sinh/phu huynh, moi `items` trong mot ngay + bua van tra toan bo m
               "dayOfWeek": 1,
               "dateKey": "2026-06-29",
               "sortOrder": 1,
+              "expectedQuantity": 50,
               "status": "ACTIVE",
               "isSelected": false,
               "isDefaultSelection": true,
@@ -446,6 +447,7 @@ Response `data`:
     "dayOfWeek": 1,
     "dateKey": "2026-07-01",
     "sortOrder": 1,
+    "expectedQuantity": 50,
     "status": "ACTIVE",
     "note": "Available on weekdays",
     "customerMealItem": {
@@ -506,6 +508,7 @@ Body:
   "dayOfWeek": 1,
   "dateKey": "2026-07-01",
   "sortOrder": 1,
+  "expectedQuantity": 50,
   "status": "ACTIVE",
   "note": "Available on weekdays"
 }
@@ -520,6 +523,7 @@ Required:
 Optional:
 
 - `sortOrder`: default `0`
+- `expectedQuantity`: default `0`, so luong du kien cua mon trong buoi
 - `status`: default `ACTIVE`
 - `level`: default `primary`
 - `dayOfWeek`
@@ -545,6 +549,7 @@ Body: partial cua body create.
   "dayOfWeek": 1,
   "dateKey": "2026-07-01",
   "sortOrder": 2,
+  "expectedQuantity": 60,
   "status": "ACTIVE",
   "note": "Only Monday to Friday"
 }

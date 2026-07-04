@@ -45,6 +45,12 @@ export class MealItemDto extends BaseDto {
   sortOrder: number;
 
   @ApiProperty({
+    description: 'Expected quantity for this meal item in the meal period',
+    example: 50,
+  })
+  expectedQuantity: number;
+
+  @ApiProperty({
     description: 'Meal item status',
     example: 'ACTIVE',
   })
