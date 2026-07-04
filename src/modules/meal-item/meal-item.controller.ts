@@ -41,13 +41,25 @@ export class MealItemController {
     type: [MealItemDto],
   })
   async findAll(@Query() query: MealItemQueryDto, @Req() req: any) {
-    return this.mealItemService.findAllForUser(query, req.user?.userId);
+    return this.mealItemService.findAllForUser(
+      {
+        ...query,
+        branchId: query.branchId || req.user?.branchId,
+      },
+      req.user?.userId,
+    );
   }
 
   @Get('week-plan')
   @ApiOperation({ summary: 'Get meal items grouped as a weekly plan' })
   async weekPlan(@Query() query: MealItemQueryDto, @Req() req: any) {
-    return this.mealItemService.getWeekPlan(query, req.user?.userId);
+    return this.mealItemService.getWeekPlan(
+      {
+        ...query,
+        branchId: query.branchId || req.user?.branchId,
+      },
+      req.user?.userId,
+    );
   }
 
   @Get(':id')
