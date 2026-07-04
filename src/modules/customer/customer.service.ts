@@ -40,7 +40,7 @@ export class CustomerService extends BaseService<Customer> {
     const qb = this.customerRepository
       .createQueryBuilder('customer')
       .leftJoin('users', 'customerUser', 'customerUser.id = customer.user_id')
-      .orderBy('customer.created_at', 'DESC')
+      .orderBy('customer.createdAt', 'DESC')
       .skip(pagination.skip)
       .take(pagination.size);
 
@@ -267,7 +267,7 @@ export class CustomerService extends BaseService<Customer> {
       qb.andWhere('customerUser.branch_id = :branchId', { branchId });
     }
 
-    qb.orderBy('c.created_at', 'DESC')
+    qb.orderBy('c.createdAt', 'DESC')
       .skip(pagination.skip)
       .take(pagination.size);
 
