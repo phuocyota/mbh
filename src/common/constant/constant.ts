@@ -29,6 +29,7 @@ export const CUSTOMER_TYPE_VALUES = Object.values(CUSTOMER_TYPE);
 export const USER_ROLE = {
   ADMIN: 'ADMIN',
   MANAGER: 'MANAGER',
+  SUPERVISOR: 'SUPERVISOR',
   CASHIER: 'CASHIER',
   KITCHEN: 'KITCHEN',
   STAFF: 'STAFF',
@@ -39,6 +40,7 @@ export const USER_ROLE_VALUES = Object.values(USER_ROLE);
 export const ADMIN_LOGIN_ROLES = [
   USER_ROLE.ADMIN,
   USER_ROLE.MANAGER,
+  USER_ROLE.SUPERVISOR,
   USER_ROLE.STAFF,
 ] as const;
 

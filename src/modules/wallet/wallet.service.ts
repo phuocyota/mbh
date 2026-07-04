@@ -17,7 +17,10 @@ import {
   WALLET_TRANSACTION_REF_TYPE,
   WALLET_TRANSACTION_TYPE,
 } from '../../common/constant/constant';
-import { normalizePagination, toPaginationResponse } from '../../common/dto/pagination.dto';
+import {
+  normalizePagination,
+  toPaginationResponse,
+} from '../../common/dto/pagination.dto';
 
 const DEFERRED_PAYMENT_REASON_CODE = 'TT_TRA_CHAM';
 
@@ -51,13 +54,13 @@ export class WalletService extends BaseService<Wallet> {
     const query = this.walletRepository
       .createQueryBuilder('wallet')
       .leftJoinAndSelect('wallet.customer', 'customer')
-      .leftJoin('users', 'user', 'user.id = customer.user_id')
-      .orderBy('wallet.created_at', 'DESC')
+      .leftJoin('users', 'customerUser', 'customerUser.id = customer.user_id')
+      .orderBy('wallet.createdAt', 'DESC')
       .skip(pagination.skip)
       .take(pagination.size);
 
     if (branchId) {
-      query.andWhere('user.branch_id = :branchId', { branchId });
+      query.andWhere('customerUser.branch_id = :branchId', { branchId });
     }
 
     const [data, total] = await query.getManyAndCount();
@@ -151,7 +154,9 @@ export class WalletService extends BaseService<Wallet> {
       const topupAmount = Number(amount);
       const outstandingAdvance = Math.max(0, -balanceBefore);
       if (outstandingAdvance <= 0) {
-        throw new BadRequestException('Customer has no advance amount to repay');
+        throw new BadRequestException(
+          'Customer has no advance amount to repay',
+        );
       }
       if (topupAmount > outstandingAdvance) {
         throw new BadRequestException(

@@ -20,7 +20,7 @@ export class User extends BaseEntity {
   passwordHash: string;
 
   @Column('varchar', { default: USER_ROLE.STAFF })
-  role: string; // ADMIN, MANAGER, CASHIER, KITCHEN, STAFF, STUDENT
+  role: string; // ADMIN, MANAGER, SUPERVISOR, CASHIER, KITCHEN, STAFF, STUDENT
 
   @Column('varchar', { default: COMMON_STATUS.ACTIVE })
   status: string; // ACTIVE, INACTIVE

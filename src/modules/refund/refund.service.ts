@@ -20,7 +20,10 @@ import {
   REFUND_STATUS,
   REFUNDABLE_ORDER_STATUSES,
 } from '../../common/constant/constant';
-import { normalizePagination, toPaginationResponse } from '../../common/dto/pagination.dto';
+import {
+  normalizePagination,
+  toPaginationResponse,
+} from '../../common/dto/pagination.dto';
 
 @Injectable()
 export class RefundService extends BaseService<Refund> {
@@ -44,13 +47,13 @@ export class RefundService extends BaseService<Refund> {
     const pagination = normalizePagination(page, size);
     const query = this.refundRepository
       .createQueryBuilder('refund')
-      .leftJoin('orders', 'order', 'order.id = refund.order_id')
-      .orderBy('refund.created_at', 'DESC')
+      .leftJoin('orders', 'refundOrder', 'refundOrder.id = refund.order_id')
+      .orderBy('refund.createdAt', 'DESC')
       .skip(pagination.skip)
       .take(pagination.size);
 
     if (branchId) {
-      query.andWhere('order.branch_id = :branchId', { branchId });
+      query.andWhere('refundOrder.branch_id = :branchId', { branchId });
     }
 
     const [data, total] = await query.getManyAndCount();

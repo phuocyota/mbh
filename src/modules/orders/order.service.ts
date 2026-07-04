@@ -22,7 +22,10 @@ import {
   REVENUE_ORDER_STATUSES,
   resolveOrderStatus,
 } from '../../common/constant/constant';
-import { normalizePagination, toPaginationResponse } from '../../common/dto/pagination.dto';
+import {
+  normalizePagination,
+  toPaginationResponse,
+} from '../../common/dto/pagination.dto';
 
 @Injectable()
 export class OrderService {
@@ -109,7 +112,10 @@ export class OrderService {
       await this.orderItemService.createManyForOrder(savedOrder.id, items);
     }
 
-    const initialPayment = this.getInitialPaymentDto(createOrderDto, totalAmount);
+    const initialPayment = this.getInitialPaymentDto(
+      createOrderDto,
+      totalAmount,
+    );
     if (initialPayment) {
       await this.paymentService.createSuccessPayment({
         ...initialPayment,
@@ -159,9 +165,7 @@ export class OrderService {
     return {
       ...payment,
       method:
-        payment.method ||
-        createOrderDto.paymentMethod ||
-        PAYMENT_METHOD.CASH,
+        payment.method || createOrderDto.paymentMethod || PAYMENT_METHOD.CASH,
       amount,
       fundId: payment.fundId || createOrderDto.fundId,
       createdBy: payment.createdBy || createOrderDto.createdBy,
@@ -383,7 +387,7 @@ export class OrderService {
     const pagination = normalizePagination(page, size);
     const baseQuery = this.orderRepository
       .createQueryBuilder('o')
-      .orderBy('o.created_at', 'DESC');
+      .orderBy('o.createdAt', 'DESC');
 
     if (branchId) {
       baseQuery.where('o.branch_id = :branchId', { branchId });
@@ -828,7 +832,9 @@ export class OrderService {
 
     const orderTime = new Date(order.createdAt).getTime();
     if (Date.now() - orderTime > 15 * 60 * 1000) {
-      throw new BadRequestException('Orders cannot be cancelled after 15 minutes');
+      throw new BadRequestException(
+        'Orders cannot be cancelled after 15 minutes',
+      );
     }
 
     await this.orderRepository.update(orderId, {

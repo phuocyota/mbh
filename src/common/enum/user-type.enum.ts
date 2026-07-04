@@ -1,5 +1,10 @@
 export enum UserType {
   ADMIN = 'ADMIN',
+  MANAGER = 'MANAGER',
+  SUPERVISOR = 'SUPERVISOR',
+  CASHIER = 'CASHIER',
+  KITCHEN = 'KITCHEN',
+  STAFF = 'STAFF',
   TEACHER = 'TEACHER',
   STUDENT = 'STUDENT',
 }

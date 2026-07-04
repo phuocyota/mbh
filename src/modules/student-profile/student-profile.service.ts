@@ -3,7 +3,10 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { StudentProfile } from '../../entities/student-profile.entity';
 import { BaseService } from '../../common/sql/base.service';
-import { normalizePagination, toPaginationResponse } from '../../common/dto/pagination.dto';
+import {
+  normalizePagination,
+  toPaginationResponse,
+} from '../../common/dto/pagination.dto';
 
 @Injectable()
 export class StudentProfileService extends BaseService<StudentProfile> {
@@ -23,13 +26,13 @@ export class StudentProfileService extends BaseService<StudentProfile> {
     const query = this.studentProfileRepository
       .createQueryBuilder('profile')
       .leftJoinAndSelect('profile.customer', 'customer')
-      .leftJoin('users', 'user', 'user.id = customer.user_id')
-      .orderBy('profile.created_at', 'DESC')
+      .leftJoin('users', 'customerUser', 'customerUser.id = customer.user_id')
+      .orderBy('profile.createdAt', 'DESC')
       .skip(pagination.skip)
       .take(pagination.size);
 
     if (branchId) {
-      query.andWhere('user.branch_id = :branchId', { branchId });
+      query.andWhere('customerUser.branch_id = :branchId', { branchId });
     }
 
     const [data, total] = await query.getManyAndCount();

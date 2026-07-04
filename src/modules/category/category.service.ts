@@ -6,7 +6,10 @@ import { StockItem } from '../../entities/stock-item.entity';
 import { BaseService } from '../../common/sql/base.service';
 import { JwtPayload } from '../../common/interface/jwt-payload.interface';
 import { COMMON_STATUS } from '../../common/constant/constant';
-import { normalizePagination, toPaginationResponse } from '../../common/dto/pagination.dto';
+import {
+  normalizePagination,
+  toPaginationResponse,
+} from '../../common/dto/pagination.dto';
 
 @Injectable()
 export class CategoryService extends BaseService<Category> {
@@ -131,7 +134,7 @@ export class CategoryService extends BaseService<Category> {
     }
 
     const categories = await query
-      .orderBy('category.sort_order', 'ASC')
+      .orderBy('category.sortOrder', 'ASC')
       .addOrderBy('product.name', 'ASC')
       .getMany();
 

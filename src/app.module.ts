@@ -1,11 +1,12 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ConfigModule } from '@nestjs/config';
-import { APP_FILTER } from '@nestjs/core';
+import { APP_FILTER, APP_GUARD } from '@nestjs/core';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { DATABASE_CONFIG } from './config/database.config';
 import { AllExceptionsFilter } from './common/filter/all-exceptions.filter';
+import { ReadOnlyRoleGuard } from './common/guard/read-only-role.guard';
 import { AuthModule } from './modules/auth/auth.module';
 import { ProductModule } from './modules/products/product.module';
 import { OrderModule } from './modules/orders/order.module';
@@ -93,6 +94,10 @@ import { CustomerMealItemModule } from './modules/customer-meal-item/customer-me
     {
       provide: APP_FILTER,
       useClass: AllExceptionsFilter,
+    },
+    {
+      provide: APP_GUARD,
+      useClass: ReadOnlyRoleGuard,
     },
   ],
 })

@@ -80,10 +80,10 @@ export class MealItemService extends BaseService<MealItem> {
     this.applyMealItemFilter(query, filter);
 
     return query
-      .orderBy('mealItem.date_key', 'ASC', 'NULLS LAST')
-      .addOrderBy('mealItem.day_of_week', 'ASC', 'NULLS LAST')
-      .addOrderBy('mealItem.meal_period', 'ASC')
-      .addOrderBy('mealItem.sort_order', 'ASC')
+      .orderBy('mealItem.dateKey', 'ASC', 'NULLS LAST')
+      .addOrderBy('mealItem.dayOfWeek', 'ASC', 'NULLS LAST')
+      .addOrderBy('mealItem.mealPeriod', 'ASC')
+      .addOrderBy('mealItem.sortOrder', 'ASC')
       .addOrderBy('product.name', 'ASC');
   }
 

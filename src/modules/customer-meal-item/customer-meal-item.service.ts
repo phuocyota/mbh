@@ -94,11 +94,11 @@ export class CustomerMealItemService extends BaseService<CustomerMealItem> {
     }
 
     const orderedQuery = query
-      .orderBy('mealItem.date_key', 'ASC', 'NULLS LAST')
-      .addOrderBy('mealItem.day_of_week', 'ASC', 'NULLS LAST')
-      .addOrderBy('mealItem.meal_period', 'ASC')
+      .orderBy('mealItem.dateKey', 'ASC', 'NULLS LAST')
+      .addOrderBy('mealItem.dayOfWeek', 'ASC', 'NULLS LAST')
+      .addOrderBy('mealItem.mealPeriod', 'ASC')
       .addOrderBy('product.name', 'ASC')
-      .addOrderBy('customer.full_name', 'ASC');
+      .addOrderBy('customer.fullName', 'ASC');
 
     const [idRows, total] = await Promise.all([
       orderedQuery

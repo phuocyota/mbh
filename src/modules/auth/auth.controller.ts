@@ -69,7 +69,9 @@ export class AuthController {
     return this.authService.loginCashier(dto);
   }
 
-  @ApiOperation({ summary: 'Admin/Manager/Staff login with email/password' })
+  @ApiOperation({
+    summary: 'Admin/Manager/Supervisor/Staff login with email/password',
+  })
   @ApiBody({ type: AdminLoginDto })
   @ApiResponse({
     status: 200,
@@ -77,7 +79,8 @@ export class AuthController {
   })
   @ApiResponse({
     status: 401,
-    description: 'Unauthorized - Only admin/manager/staff can use this endpoint',
+    description:
+      'Unauthorized - Only admin/manager/supervisor/staff can use this endpoint',
   })
   @Post('login/admin')
   async loginAdmin(@Body() dto: AdminLoginDto) {

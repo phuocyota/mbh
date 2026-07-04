@@ -2,6 +2,7 @@ import {
   Injectable,
   CanActivate,
   ExecutionContext,
+  ForbiddenException,
   UnauthorizedException,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
@@ -9,6 +10,9 @@ import * as jwt from 'jsonwebtoken';
 import { IS_PUBLIC_KEY } from '../decorator/public.decorator';
 import { JwtPayload } from '../interface/jwt-payload.interface';
 import { ERROR_MESSAGES } from '../constant/error-messages.constant';
+import { USER_ROLE } from '../constant/constant';
+
+const READ_ONLY_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
 
 @Injectable()
 export class AuthGuard implements CanActivate {
@@ -47,8 +51,19 @@ export class AuthGuard implements CanActivate {
       // Attach user to request
       request.user = decoded;
 
+      if (
+        decoded.userType === USER_ROLE.SUPERVISOR &&
+        !READ_ONLY_METHODS.has(request.method)
+      ) {
+        throw new ForbiddenException('SUPERVISOR chỉ có quyền xem');
+      }
+
       return true;
-    } catch {
+    } catch (error) {
+      if (error instanceof ForbiddenException) {
+        throw error;
+      }
+
       throw new UnauthorizedException(ERROR_MESSAGES.INVALID_TOKEN);
     }
   }
