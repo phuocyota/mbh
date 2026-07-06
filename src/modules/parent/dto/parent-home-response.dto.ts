@@ -64,6 +64,13 @@ export class OrderItemHomeDto {
   @ApiProperty({ description: 'Product name', example: 'Cơm gà' })
   name: string;
 
+  @ApiProperty({
+    description: 'Product image URL',
+    example: 'https://be.kidocanteen.kidoedu.vn/uploads/com-ga.jpg',
+    nullable: true,
+  })
+  imageUrl: string | null;
+
   @ApiProperty({ description: 'Quantity', example: 2 })
   quantity: number;
 
@@ -80,6 +87,13 @@ export class OrderAddonHomeDto {
 
   @ApiProperty({ description: 'Addon name', example: 'Sữa' })
   name: string;
+
+  @ApiProperty({
+    description: 'Addon image URL',
+    example: 'https://be.kidocanteen.kidoedu.vn/uploads/sua.jpg',
+    nullable: true,
+  })
+  imageUrl: string | null;
 
   @ApiProperty({ description: 'Quantity', example: 1 })
   quantity: number;

@@ -152,7 +152,7 @@ export class ParentService {
         createdAt: Between(today, tomorrow),
       },
       order: { createdAt: 'DESC' },
-      relations: ['items'],
+      relations: ['items', 'items.product'],
     });
 
     if (!order) {
@@ -167,6 +167,7 @@ export class ParentService {
       .map((item: OrderItem) => ({
         id: item.id,
         name: item.productName,
+        imageUrl: item.product?.imageUrl || null,
         quantity: item.quantity,
         unitPrice: Number(item.unitPrice),
         totalPrice: Number(item.totalAmount),
@@ -177,6 +178,7 @@ export class ParentService {
       .map((item: OrderItem) => ({
         id: item.id,
         name: item.productName,
+        imageUrl: item.product?.imageUrl || null,
         quantity: item.quantity,
         price: Number(item.totalAmount || 0),
       }));
