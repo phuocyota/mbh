@@ -136,4 +136,7 @@ export class Order extends BaseEntity {
 
   @OneToMany('Refund', 'order')
   refunds: any[];
+
+  @OneToMany('OrderStatusLog', 'order')
+  statusLogs: any[];
 }

@@ -844,6 +844,49 @@ Order response có field `paymentMethod`:
 }
 ```
 
+### Xem lịch sử đổi trạng thái order
+
+```http
+GET /api/orders/:orderId/status-logs
+```
+
+Auth: JWT của staff/cashier/admin. FE dùng endpoint này cho drawer/modal audit trail trong chi tiết order.
+
+Response `data`:
+
+```json
+[
+  {
+    "id": "log-id",
+    "orderId": "order-id",
+    "oldStatus": 3,
+    "newStatus": 4,
+    "changedBy": "cashier-user-id",
+    "reason": "CASH_PAYMENT",
+    "createdAt": "2026-07-06T10:30:00.000Z",
+    "changedByUser": {
+      "id": "cashier-user-id",
+      "fullName": "Nguyen Van A",
+      "email": "cashier@example.com",
+      "role": "CASHIER"
+    }
+  }
+]
+```
+
+Field notes:
+
+| Field           | Mô tả                                                                                                                                     |
+| --------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| `oldStatus`     | Status trước khi đổi, có thể `null` nếu log đầu tiên không có status cũ                                                                   |
+| `newStatus`     | Status sau khi đổi, dùng mapping ở mục 8                                                                                                  |
+| `changedBy`     | User id hoặc actor hệ thống, ví dụ `system` cho MoMo IPN                                                                                  |
+| `changedByUser` | Thông tin user nếu `changedBy` match được `users.id`, ngược lại `null`                                                                    |
+| `reason`        | Nguồn thay đổi: `MANUAL`, `PAYMENT`, `INITIAL_PAYMENT`, `CASH_PAYMENT`, `MOMO_PAYMENT`, `COMPLETE`, `CANCEL`, `REFUND` hoặc lý do hủy đơn |
+| `createdAt`     | Thời điểm đổi status                                                                                                                      |
+
+Lưu ý: event socket `order:status-changed` vẫn chỉ gửi payload `order`. Khi FE đang mở lịch sử status của order đó, nên refetch `GET /api/orders/:orderId/status-logs` sau khi nhận event.
+
 ### Thu tiền theo đơn hàng
 
 Màn `Thu chi` không tạo phiếu thu rời cho đơn bán hàng. Với đơn chọn `paymentMethod = CASH`, FE gọi API thu tiền trên chính order:

@@ -220,10 +220,14 @@ export class CartService {
       throw new BadRequestException('Could not create order from cart');
     }
 
-    if (paymentMethod === PAYMENT_METHOD.CASH || paymentMethod === PAYMENT_METHOD.MOMO) {
+    if (
+      paymentMethod === PAYMENT_METHOD.CASH ||
+      paymentMethod === PAYMENT_METHOD.MOMO
+    ) {
       const waitingOrder = await this.orderService.updateStatus(
         order.id,
         ORDER_STATUS.PENDING_PAYMENT,
+        userId,
       );
       await this.clearCart(cartWithItems.id);
 
@@ -252,6 +256,7 @@ export class CartService {
     const preparingOrder = await this.orderService.updateStatus(
       order.id,
       ORDER_STATUS.PREPARING,
+      userId,
     );
     await this.clearCart(cartWithItems.id);
 

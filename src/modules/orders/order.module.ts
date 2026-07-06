@@ -3,7 +3,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { OrderService } from './order.service';
 import { OrderController } from './order.controller';
 import { OrderNumberService } from './order-number.service';
-import { Order } from 'src/entities';
+import { Order, OrderStatusLog } from 'src/entities';
 import { CustomerModule } from '../customer/customer.module';
 import { CouponModule } from '../coupon/coupon.module';
 import { OrderItemModule } from '../order-item/order-item.module';
@@ -14,7 +14,7 @@ import { StockVoucherModule } from '../stock-voucher/stock-voucher.module';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Order]),
+    TypeOrmModule.forFeature([Order, OrderStatusLog]),
     OrderItemModule,
     PaymentModule,
     WalletModule,

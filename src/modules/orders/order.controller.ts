@@ -111,6 +111,14 @@ export class OrderController {
     );
   }
 
+  @ApiOperation({ summary: 'Get order status logs' })
+  @ApiParam({ name: 'id', description: 'Order ID' })
+  @ApiResponse({ status: 200, description: 'Order status logs' })
+  @Get(':id/status-logs')
+  async getStatusLogs(@Param('id') id: string) {
+    return this.orderService.getStatusLogs(id);
+  }
+
   @ApiOperation({ summary: 'Get order with items and payments' })
   @ApiParam({ name: 'id', description: 'Order ID' })
   @ApiResponse({ status: 200, description: 'Order details with items' })
@@ -122,8 +130,11 @@ export class OrderController {
   @ApiOperation({ summary: 'Create new order' })
   @ApiResponse({ status: 201, description: 'Order created' })
   @Post()
-  async createOrder(@Body() createOrderDto: any) {
-    return this.orderService.createOrder(createOrderDto);
+  async createOrder(@Body() createOrderDto: any, @Req() req: any) {
+    return this.orderService.createOrder({
+      ...createOrderDto,
+      createdBy: createOrderDto.createdBy ?? req.user?.userId,
+    });
   }
 
   @ApiOperation({ summary: 'Add item to order' })
@@ -166,8 +177,12 @@ export class OrderController {
   @ApiParam({ name: 'id', description: 'Order ID' })
   @ApiResponse({ status: 200, description: 'Order status set to pending' })
   @Put(':id/pending')
-  async setPending(@Param('id') id: string) {
-    return this.orderService.updateStatus(id, ORDER_STATUS.PENDING);
+  async setPending(@Param('id') id: string, @Req() req: any) {
+    return this.orderService.updateStatus(
+      id,
+      ORDER_STATUS.PENDING,
+      req.user?.userId,
+    );
   }
 
   @ApiOperation({ summary: 'Set order status to ready for pickup' })
@@ -177,16 +192,20 @@ export class OrderController {
     description: 'Order status set to ready for pickup',
   })
   @Put(':id/ready-to-pickup')
-  async setReadyToPickup(@Param('id') id: string) {
-    return this.orderService.updateStatus(id, ORDER_STATUS.READY_TO_PICKUP);
+  async setReadyToPickup(@Param('id') id: string, @Req() req: any) {
+    return this.orderService.updateStatus(
+      id,
+      ORDER_STATUS.READY_TO_PICKUP,
+      req.user?.userId,
+    );
   }
 
   @ApiOperation({ summary: 'Set order status to done (complete)' })
   @ApiParam({ name: 'id', description: 'Order ID' })
   @ApiResponse({ status: 200, description: 'Order completed' })
   @Put(':id/done')
-  async setDone(@Param('id') id: string) {
-    return this.orderService.completeOrder(id);
+  async setDone(@Param('id') id: string, @Req() req: any) {
+    return this.orderService.completeOrder(id, req.user?.userId);
   }
 
   @ApiOperation({ summary: 'Student confirms they received their order' })
@@ -208,8 +227,8 @@ export class OrderController {
     description: 'Order marked as received by cashier',
   })
   @Put(':id/received')
-  async confirmReceivedByCashier(@Param('id') id: string) {
-    return this.orderService.confirmReceivedByCashier(id);
+  async confirmReceivedByCashier(@Param('id') id: string, @Req() req: any) {
+    return this.orderService.confirmReceivedByCashier(id, req.user?.userId);
   }
 
   @ApiOperation({ summary: 'Cancel order with refund info' })
@@ -217,8 +236,12 @@ export class OrderController {
   @ApiBody({ type: CancelOrderDto })
   @ApiResponse({ status: 200, description: 'Order cancelled with refund info' })
   @Put(':id/cancel')
-  async cancelOrder(@Param('id') id: string, @Body() dto: CancelOrderDto) {
-    return this.orderService.cancelOrder(id, dto);
+  async cancelOrder(
+    @Param('id') id: string,
+    @Body() dto: CancelOrderDto,
+    @Req() req: any,
+  ) {
+    return this.orderService.cancelOrder(id, dto, req.user?.userId);
   }
 
   @ApiOperation({ summary: 'Remove/delete order' })

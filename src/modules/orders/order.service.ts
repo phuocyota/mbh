@@ -4,8 +4,8 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, Repository } from 'typeorm';
-import { Order } from 'src/entities';
+import { DataSource, In, Repository } from 'typeorm';
+import { Order, OrderStatusLog } from 'src/entities';
 import { ERROR_MESSAGES } from '../../common/constant/error-messages.constant';
 import { OrderNumberService } from './order-number.service';
 import { CouponService } from '../coupon/coupon.service';
@@ -32,6 +32,9 @@ export class OrderService {
   constructor(
     @InjectRepository(Order)
     private orderRepository: Repository<Order>,
+    @InjectRepository(OrderStatusLog)
+    private orderStatusLogRepository: Repository<OrderStatusLog>,
+    private dataSource: DataSource,
     private orderNumberService: OrderNumberService,
     private orderItemService: OrderItemService,
     private paymentService: PaymentService,
@@ -124,16 +127,22 @@ export class OrderService {
 
       const paidAmount = Number(initialPayment.amount);
       const isPaid = paidAmount >= totalAmount;
-      await this.orderRepository.update(savedOrder.id, {
-        paymentStatus: isPaid
-          ? ORDER_PAYMENT_STATUS.PAID
-          : ORDER_PAYMENT_STATUS.PARTIAL,
-        paymentMethod: initialPayment.method,
-        paidAmount,
-        changeAmount: paidAmount - totalAmount,
-        status: isPaid ? ORDER_STATUS.PREPARING : ORDER_STATUS.DRAFT,
-        paidAt: isPaid ? new Date() : undefined,
-      });
+      await this.updateOrderWithStatusLog(
+        savedOrder,
+        {
+          paymentStatus: isPaid
+            ? ORDER_PAYMENT_STATUS.PAID
+            : ORDER_PAYMENT_STATUS.PARTIAL,
+          paymentMethod: initialPayment.method,
+          paidAmount,
+          changeAmount: paidAmount - totalAmount,
+          status: isPaid ? ORDER_STATUS.PREPARING : ORDER_STATUS.DRAFT,
+          paidAt: isPaid ? new Date() : undefined,
+          updatedBy: initialPayment.createdBy,
+        },
+        initialPayment.createdBy,
+        'INITIAL_PAYMENT',
+      );
 
       if (isPaid) {
         const paidOrder = await this.getOrderWithItems(savedOrder.id);
@@ -180,6 +189,35 @@ export class OrderService {
     };
   }
 
+  private async updateOrderWithStatusLog(
+    order: Order,
+    updateData: Partial<Order>,
+    changedBy?: string | null,
+    reason?: string,
+  ) {
+    const newStatus = updateData.status;
+    const shouldLogStatusChange =
+      newStatus !== undefined && Number(order.status) !== Number(newStatus);
+
+    await this.dataSource.transaction(async (manager) => {
+      await manager.update(Order, order.id, updateData);
+
+      if (shouldLogStatusChange) {
+        await manager.save(
+          OrderStatusLog,
+          manager.create(OrderStatusLog, {
+            orderId: order.id,
+            oldStatus: order.status,
+            newStatus: Number(newStatus),
+            changedBy: changedBy ?? null,
+            reason: reason ?? null,
+            createdBy: changedBy ?? undefined,
+          }),
+        );
+      }
+    });
+  }
+
   async findOrderByIdOrThrow(orderId: string): Promise<Order> {
     const order = await this.orderRepository.findOne({
       where: { id: orderId },
@@ -201,11 +239,16 @@ export class OrderService {
   ): Promise<void> {
     const order = await this.findOrderByIdOrThrow(orderId);
 
-    await this.orderRepository.update(order.id, {
-      paymentStatus: ORDER_PAYMENT_STATUS.REFUNDED,
-      status: isFullRefund ? ORDER_STATUS.REFUNDED : order.status,
+    await this.updateOrderWithStatusLog(
+      order,
+      {
+        paymentStatus: ORDER_PAYMENT_STATUS.REFUNDED,
+        status: isFullRefund ? ORDER_STATUS.REFUNDED : order.status,
+        updatedBy,
+      },
       updatedBy,
-    });
+      'REFUND',
+    );
 
     const updatedOrder = await this.getOrderWithItems(order.id);
     this.socketService.emitOrderRefunded(updatedOrder);
@@ -304,6 +347,7 @@ export class OrderService {
       paymentMethod: paymentDto.method,
       status: isPaid ? ORDER_STATUS.PREPARING : ORDER_STATUS.DRAFT,
       paidAt: isPaid ? new Date() : undefined,
+      updatedBy: paymentDto.createdBy,
     };
 
     if (couponId) {
@@ -311,7 +355,12 @@ export class OrderService {
       updateData.couponDiscount = couponDiscount;
     }
 
-    await this.orderRepository.update(orderId, updateData);
+    await this.updateOrderWithStatusLog(
+      order,
+      updateData,
+      paymentDto.createdBy,
+      'PAYMENT',
+    );
 
     const updatedOrder = await this.getOrderWithItems(orderId);
     if (isPaid) {
@@ -332,7 +381,7 @@ export class OrderService {
     return payment;
   }
 
-  async completeOrder(orderId: string) {
+  async completeOrder(orderId: string, changedBy?: string) {
     const order = await this.findOrderByIdOrThrow(orderId);
 
     if (order.paymentStatus !== ORDER_PAYMENT_STATUS.PAID) {
@@ -341,10 +390,16 @@ export class OrderService {
       );
     }
 
-    await this.orderRepository.update(orderId, {
-      status: ORDER_STATUS.DONE,
-      completedAt: new Date(),
-    });
+    await this.updateOrderWithStatusLog(
+      order,
+      {
+        status: ORDER_STATUS.DONE,
+        completedAt: new Date(),
+        updatedBy: changedBy,
+      },
+      changedBy,
+      'COMPLETE',
+    );
 
     const updatedOrder = await this.getOrderWithItems(orderId);
     this.socketService.emitOrderCompleted(updatedOrder);
@@ -364,11 +419,11 @@ export class OrderService {
       throw new BadRequestException('Order does not belong to this customer');
     }
 
-    return this.completeOrder(orderId);
+    return this.completeOrder(orderId, userId);
   }
 
-  async confirmReceivedByCashier(orderId: string) {
-    return this.completeOrder(orderId);
+  async confirmReceivedByCashier(orderId: string, userId?: string) {
+    return this.completeOrder(orderId, userId);
   }
 
   async getOrderWithItems(orderId: string) {
@@ -376,6 +431,50 @@ export class OrderService {
       where: { id: orderId },
       relations: ['items', 'payments', 'customer'],
     });
+  }
+
+  async getStatusLogs(orderId: string) {
+    await this.findOrderByIdOrThrow(orderId);
+
+    const rows = await this.orderStatusLogRepository
+      .createQueryBuilder('log')
+      .leftJoin(
+        'users',
+        'changedByUser',
+        'CAST(changedByUser.id AS text) = log.changed_by',
+      )
+      .select('log.id', 'id')
+      .addSelect('log.orderId', 'orderId')
+      .addSelect('log.oldStatus', 'oldStatus')
+      .addSelect('log.newStatus', 'newStatus')
+      .addSelect('log.changedBy', 'changedBy')
+      .addSelect('log.reason', 'reason')
+      .addSelect('log.createdAt', 'createdAt')
+      .addSelect('changedByUser.id', 'changedByUserId')
+      .addSelect('changedByUser.fullName', 'changedByUserFullName')
+      .addSelect('changedByUser.email', 'changedByUserEmail')
+      .addSelect('changedByUser.role', 'changedByUserRole')
+      .where('log.orderId = :orderId', { orderId })
+      .orderBy('log.createdAt', 'DESC')
+      .getRawMany();
+
+    return rows.map((row) => ({
+      id: row.id,
+      orderId: row.orderId,
+      oldStatus: row.oldStatus,
+      newStatus: row.newStatus,
+      changedBy: row.changedBy,
+      reason: row.reason,
+      createdAt: row.createdAt,
+      changedByUser: row.changedByUserId
+        ? {
+            id: row.changedByUserId,
+            fullName: row.changedByUserFullName,
+            email: row.changedByUserEmail,
+            role: row.changedByUserRole,
+          }
+        : null,
+    }));
   }
 
   async findAll(
@@ -710,15 +809,22 @@ export class OrderService {
       orderId: orderId,
       method: PAYMENT_METHOD.CASH,
       amount: Number(paymentDto.amount),
+      createdBy: paymentDto.createdBy,
     });
 
     // Update order: set paymentStatus to PAID and status to READY_TO_PICKUP
-    await this.orderRepository.update(orderId, {
-      paymentStatus: ORDER_PAYMENT_STATUS.PAID,
-      status: ORDER_STATUS.READY_TO_PICKUP,
-      paidAmount: paymentDto.amount,
-      paidAt: new Date(),
-    });
+    await this.updateOrderWithStatusLog(
+      order,
+      {
+        paymentStatus: ORDER_PAYMENT_STATUS.PAID,
+        status: ORDER_STATUS.READY_TO_PICKUP,
+        paidAmount: paymentDto.amount,
+        paidAt: new Date(),
+        updatedBy: paymentDto.createdBy,
+      },
+      paymentDto.createdBy,
+      'CASH_PAYMENT',
+    );
 
     const updatedOrder = await this.getOrderWithItems(orderId);
     await this.stockVoucherService.createExportFromOrder(
@@ -770,15 +876,22 @@ export class OrderService {
       method: PAYMENT_METHOD.MOMO,
       amount: Number(paymentDto.amount),
       transactionCode: paymentDto.transId,
+      createdBy: paymentDto.createdBy,
     });
 
     // Update order: set paymentStatus to PAID and status to READY_TO_PICKUP
-    await this.orderRepository.update(orderId, {
-      paymentStatus: ORDER_PAYMENT_STATUS.PAID,
-      status: ORDER_STATUS.READY_TO_PICKUP,
-      paidAmount: paymentDto.amount,
-      paidAt: new Date(),
-    });
+    await this.updateOrderWithStatusLog(
+      order,
+      {
+        paymentStatus: ORDER_PAYMENT_STATUS.PAID,
+        status: ORDER_STATUS.READY_TO_PICKUP,
+        paidAmount: paymentDto.amount,
+        paidAt: new Date(),
+        updatedBy: paymentDto.createdBy,
+      },
+      paymentDto.createdBy,
+      'MOMO_PAYMENT',
+    );
 
     const updatedOrder = await this.getOrderWithItems(orderId);
 
@@ -796,18 +909,29 @@ export class OrderService {
     return updatedOrder;
   }
 
-  async updateStatus(orderId: string, status: string | number) {
-    await this.findOrderByIdOrThrow(orderId);
+  async updateStatus(
+    orderId: string,
+    status: string | number,
+    changedBy?: string,
+    reason?: string,
+  ) {
+    const order = await this.findOrderByIdOrThrow(orderId);
     const resolvedStatus = resolveOrderStatus(status);
 
     if (resolvedStatus === undefined) {
       throw new BadRequestException(`Invalid order status: ${status}`);
     }
 
-    await this.orderRepository.update(orderId, {
-      status: resolvedStatus,
-      updatedAt: new Date(),
-    });
+    await this.updateOrderWithStatusLog(
+      order,
+      {
+        status: resolvedStatus,
+        updatedAt: new Date(),
+        updatedBy: changedBy,
+      },
+      changedBy,
+      reason ?? 'MANUAL',
+    );
 
     const updatedOrder = await this.getOrderWithItems(orderId);
     if (resolvedStatus === ORDER_STATUS.PREPARING) {
@@ -823,6 +947,7 @@ export class OrderService {
   async cancelOrder(
     orderId: string,
     dto?: { reason?: string; isRefunded?: boolean },
+    changedBy?: string,
   ) {
     const order = await this.findOrderByIdOrThrow(orderId);
 
@@ -837,10 +962,16 @@ export class OrderService {
       );
     }
 
-    await this.orderRepository.update(orderId, {
-      status: ORDER_STATUS.CANCELLED,
-      cancelledAt: new Date(),
-    });
+    await this.updateOrderWithStatusLog(
+      order,
+      {
+        status: ORDER_STATUS.CANCELLED,
+        cancelledAt: new Date(),
+        updatedBy: changedBy,
+      },
+      changedBy,
+      dto?.reason ?? 'CANCEL',
+    );
 
     // Return order with cancel info (for FE compatibility)
     const updatedOrder = await this.getOrderWithItems(orderId);
