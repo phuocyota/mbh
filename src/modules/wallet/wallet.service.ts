@@ -106,7 +106,7 @@ export class WalletService extends BaseService<Wallet> {
   async topup(
     customerId: string,
     amount: number,
-    createdBy: string,
+    createdBy?: string,
     note?: string,
   ): Promise<TopupResult> {
     if (amount <= 0) {

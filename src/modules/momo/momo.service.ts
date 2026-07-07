@@ -45,7 +45,10 @@ export class MomoService {
     this.notifyUrl = this.configService.get<string>('MOMO_NOTIFY_URL') || '';
   }
 
-  async createPayment(orderId: string): Promise<MomoPaymentUrlResponse> {
+  async createPayment(
+    orderId: string,
+    createdBy?: string,
+  ): Promise<MomoPaymentUrlResponse> {
     this.assertReady();
     const order = await this.orderService.findOrderByIdOrThrow(orderId);
 
@@ -61,7 +64,7 @@ export class MomoService {
     const redirectUrl = this.returnUrl;
     const ipnUrl = this.notifyUrl;
     const requestType = 'captureWallet';
-    const extraData = '';
+    const extraData = this.createExtraData(createdBy);
     const orderGroupId = '';
     const autoCapture = true;
     const lang = 'vi';
@@ -106,6 +109,7 @@ export class MomoService {
   async createTopupPayment(
     customerId: string,
     amount: number,
+    createdBy?: string,
   ): Promise<MomoPaymentUrlResponse> {
     this.assertReady();
     amount = this.normalizeAmount(amount);
@@ -114,7 +118,7 @@ export class MomoService {
     const redirectUrl = this.returnUrl;
     const ipnUrl = this.notifyUrl;
     const requestType = 'captureWallet';
-    const extraData = '';
+    const extraData = this.createExtraData(createdBy);
     const orderGroupId = '';
     const autoCapture = true;
     const lang = 'vi';
@@ -226,6 +230,7 @@ export class MomoService {
     }
 
     const paidAmount = this.normalizeAmount(amount);
+    const createdBy = this.extractCreatedBy(extraData);
 
     if (Number(resultCode) === 0) {
       if (String(orderId).startsWith('TOPUP-')) {
@@ -240,7 +245,7 @@ export class MomoService {
         await this.walletService.topup(
           customerId,
           paidAmount,
-          'system',
+          createdBy,
           `Nap tien qua MoMo (GD: ${transId})`,
         );
       } else {
@@ -248,7 +253,7 @@ export class MomoService {
         await this.orderService.receiveMomoPayment(originalOrderId, {
           amount: paidAmount,
           transId: String(transId),
-          createdBy: 'system',
+          createdBy,
         });
       }
     } else {
@@ -289,6 +294,40 @@ export class MomoService {
       .createHmac('sha256', this.secretKey)
       .update(rawSignature)
       .digest('hex');
+  }
+
+  private createExtraData(createdBy?: string): string {
+    if (!createdBy) {
+      return '';
+    }
+
+    return Buffer.from(JSON.stringify({ createdBy })).toString('base64');
+  }
+
+  private extractCreatedBy(extraData?: string): string | undefined {
+    if (!extraData) {
+      return undefined;
+    }
+
+    try {
+      const decoded = JSON.parse(
+        Buffer.from(String(extraData), 'base64').toString('utf8'),
+      );
+      const createdBy = decoded?.createdBy;
+
+      return this.isUuid(createdBy) ? createdBy : undefined;
+    } catch {
+      return undefined;
+    }
+  }
+
+  private isUuid(value: unknown): value is string {
+    return (
+      typeof value === 'string' &&
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+        value,
+      )
+    );
   }
 
   private isValidSignature(
