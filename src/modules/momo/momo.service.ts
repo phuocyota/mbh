@@ -190,7 +190,8 @@ export class MomoService {
       payUrl: responseData.payUrl,
       deeplink: responseData.deeplink,
       qrCode: responseData.qrCode,
-      qrData: responseData.qrCode || responseData.deeplink || responseData.payUrl,
+      qrData:
+        responseData.qrCode || responseData.deeplink || responseData.payUrl,
     };
   }
 
@@ -226,7 +227,7 @@ export class MomoService {
 
     const paidAmount = this.normalizeAmount(amount);
 
-    if (resultCode === 0) {
+    if (Number(resultCode) === 0) {
       if (String(orderId).startsWith('TOPUP-')) {
         const customerId = this.extractTopupCustomerId(orderId);
         const existingTopup = await this.walletService.findMomoTopupByTransId(

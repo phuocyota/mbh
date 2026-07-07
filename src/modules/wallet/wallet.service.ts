@@ -152,18 +152,6 @@ export class WalletService extends BaseService<Wallet> {
 
       const balanceBefore = Number(wallet.balance);
       const topupAmount = Number(amount);
-      const outstandingAdvance = Math.max(0, -balanceBefore);
-      if (outstandingAdvance <= 0) {
-        throw new BadRequestException(
-          'Customer has no advance amount to repay',
-        );
-      }
-      if (topupAmount > outstandingAdvance) {
-        throw new BadRequestException(
-          'Topup amount cannot exceed the outstanding advance amount',
-        );
-      }
-
       const balanceAfter = balanceBefore + topupAmount;
 
       wallet.balance = balanceAfter;
