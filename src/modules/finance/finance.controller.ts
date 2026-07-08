@@ -68,7 +68,6 @@ export class FinanceController {
   @Get('summary')
   @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: 'Get income/expense summary by branch' })
-  @ApiQuery({ name: 'branchId', required: false })
   @ApiQuery({ name: 'from', required: false })
   @ApiQuery({ name: 'to', required: false })
   @ApiQuery({
@@ -78,12 +77,11 @@ export class FinanceController {
   })
   summary(
     @Req() req: any,
-    @Query('branchId') branchId?: string,
     @Query('from') from?: string,
     @Query('to') to?: string,
     @Query('voucherType') voucherType?: string,
   ) {
-    return this.financeService.summary(req.user?.branchId || branchId, {
+    return this.financeService.summary(req.user?.branchId, {
       from,
       to,
       voucherType,

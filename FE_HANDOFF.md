@@ -917,12 +917,14 @@ Màn `Quản lý tiền` / tab `Thu chi` lấy dữ liệu phiếu thu/chi từ 
 GET /api/finance/receipts/received
 GET /api/finance/receipts/paid
 GET /api/finance/transfers
-GET /api/finance/summary?branchId=branch-id
-GET /api/finance/summary?branchId=branch-id&from=2026-07-01&to=2026-07-08
-GET /api/finance/summary?branchId=branch-id&voucherType=RECEIVED
-GET /api/finance/summary?branchId=branch-id&voucherType=PAID
-GET /api/finance/summary?branchId=branch-id&voucherType=TRANSFER
+GET /api/finance/summary
+GET /api/finance/summary?from=2026-07-01&to=2026-07-08
+GET /api/finance/summary?voucherType=RECEIVED
+GET /api/finance/summary?voucherType=PAID
+GET /api/finance/summary?voucherType=TRANSFER
 ```
+
+API summary tu lay `branchId` tu JWT token, FE khong can truyen `branchId`.
 
 `voucherType` optional, nhan `RECEIVED`/`PT` cho phieu thu, `PAID`/`PC` cho phieu chi, `TRANSFER`/`CQ` cho chuyen quy.
 
