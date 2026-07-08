@@ -113,6 +113,8 @@ export class WalletService extends BaseService<Wallet> {
       throw new BadRequestException('Số tiền nạp phải lớn hơn 0');
     }
 
+    const auditUserId = this.toUuidOrNull(createdBy);
+
     return this.walletRepository.manager.transaction(async (manager) => {
       const customerRepository = manager.getRepository(Customer);
       const walletRepository = manager.getRepository(Wallet);
@@ -141,7 +143,7 @@ export class WalletService extends BaseService<Wallet> {
           customerId,
           balance: 0,
           status: COMMON_STATUS.ACTIVE,
-          createdBy,
+          createdBy: auditUserId,
         });
         wallet = await walletRepository.save(wallet);
       }
@@ -155,7 +157,7 @@ export class WalletService extends BaseService<Wallet> {
       const balanceAfter = balanceBefore + topupAmount;
 
       wallet.balance = balanceAfter;
-      wallet.updatedBy = createdBy;
+      wallet.updatedBy = auditUserId;
       await walletRepository.save(wallet);
       await this.restoreDebtLimitForRecoveredDebt(
         manager,
@@ -183,7 +185,7 @@ export class WalletService extends BaseService<Wallet> {
         refType: WALLET_TRANSACTION_REF_TYPE.MANUAL,
         reasonCode: DEFERRED_PAYMENT_REASON_CODE,
         note,
-        createdBy,
+        createdBy: auditUserId,
       });
       const savedTx = await walletTransactionRepository.save(tx);
 
@@ -371,5 +373,18 @@ export class WalletService extends BaseService<Wallet> {
         note: `Nap tien qua MoMo (GD: ${transId})`,
       },
     });
+  }
+
+  private toUuidOrNull(value?: string): string | null {
+    if (
+      typeof value === 'string' &&
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+        value,
+      )
+    ) {
+      return value;
+    }
+
+    return null;
   }
 }

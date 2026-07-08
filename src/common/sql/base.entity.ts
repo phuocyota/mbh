@@ -21,8 +21,8 @@ export abstract class BaseEntity {
   updatedAt: Date;
 
   @Column({ name: 'created_by', nullable: true })
-  createdBy?: string;
+  createdBy?: string | null;
 
   @Column({ name: 'updated_by', nullable: true })
-  updatedBy?: string;
+  updatedBy?: string | null;
 }

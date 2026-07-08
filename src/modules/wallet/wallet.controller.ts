@@ -11,6 +11,7 @@ import {
   HttpStatus,
   UseGuards,
   Req,
+  UnauthorizedException,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -31,6 +32,15 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 @Controller('wallets')
 export class WalletController {
   constructor(private walletService: WalletService) {}
+
+  private getAuthenticatedUserId(req: any): string {
+    const userId = req.user?.userId;
+    if (!userId) {
+      throw new UnauthorizedException('Missing authenticated user');
+    }
+
+    return userId;
+  }
 
   @Get()
   @UseGuards(JwtAuthGuard)
@@ -64,7 +74,7 @@ export class WalletController {
   })
   @ApiResponse({ status: 200, description: 'Nạp tiền thành công' })
   async topup(@Body() dto: TopupWalletDto, @Req() req: any) {
-    const userId = req.user?.userId || 'system';
+    const userId = this.getAuthenticatedUserId(req);
     return this.walletService.topup(
       dto.customerId,
       dto.amount,

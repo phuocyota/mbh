@@ -47,7 +47,7 @@ export class MomoService {
 
   async createPayment(
     orderId: string,
-    createdBy?: string,
+    createdBy: string,
   ): Promise<MomoPaymentUrlResponse> {
     this.assertReady();
     const order = await this.orderService.findOrderByIdOrThrow(orderId);
@@ -109,7 +109,7 @@ export class MomoService {
   async createTopupPayment(
     customerId: string,
     amount: number,
-    createdBy?: string,
+    createdBy: string,
   ): Promise<MomoPaymentUrlResponse> {
     this.assertReady();
     amount = this.normalizeAmount(amount);
@@ -296,12 +296,14 @@ export class MomoService {
       .digest('hex');
   }
 
-  private createExtraData(createdBy?: string): string {
-    if (!createdBy) {
-      return '';
+  private createExtraData(createdBy: string): string {
+    if (!this.isUuid(createdBy)) {
+      throw new BadRequestException('Invalid authenticated user');
     }
 
-    return Buffer.from(JSON.stringify({ createdBy })).toString('base64');
+    return Buffer.from(JSON.stringify({ createdBy }), 'utf8').toString(
+      'base64url',
+    );
   }
 
   private extractCreatedBy(extraData?: string): string | undefined {
@@ -310,14 +312,21 @@ export class MomoService {
     }
 
     try {
-      const decoded = JSON.parse(
-        Buffer.from(String(extraData), 'base64').toString('utf8'),
-      );
+      const decoded = JSON.parse(this.decodeExtraData(extraData));
       const createdBy = decoded?.createdBy;
 
       return this.isUuid(createdBy) ? createdBy : undefined;
     } catch {
       return undefined;
+    }
+  }
+
+  private decodeExtraData(extraData: string): string {
+    const encoded = String(extraData).trim();
+    try {
+      return Buffer.from(encoded, 'base64url').toString('utf8');
+    } catch {
+      return Buffer.from(encoded, 'base64').toString('utf8');
     }
   }
 

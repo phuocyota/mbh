@@ -9,6 +9,7 @@ import {
   HttpCode,
   HttpStatus,
   Param,
+  UnauthorizedException,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -26,6 +27,15 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 export class MomoController {
   constructor(private readonly momoService: MomoService) {}
 
+  private getAuthenticatedUserId(req: any): string {
+    const userId = req.user?.userId;
+    if (!userId) {
+      throw new UnauthorizedException('Missing authenticated user');
+    }
+
+    return userId;
+  }
+
   @Post('create/:orderId')
   @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: 'Create MoMo payment URL for an order' })
@@ -33,7 +43,10 @@ export class MomoController {
   @ApiResponse({ status: 201, description: 'Payment URL created' })
   @HttpCode(HttpStatus.CREATED)
   async createPayment(@Param('orderId') orderId: string, @Req() req: any) {
-    return this.momoService.createPayment(orderId, req.user?.userId);
+    return this.momoService.createPayment(
+      orderId,
+      this.getAuthenticatedUserId(req),
+    );
   }
 
   @Post('topup')
@@ -49,7 +62,7 @@ export class MomoController {
     return this.momoService.createTopupPayment(
       customerId,
       amount,
-      req.user?.userId,
+      this.getAuthenticatedUserId(req),
     );
   }
 
