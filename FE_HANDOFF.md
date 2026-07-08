@@ -952,6 +952,101 @@ Ví dụ item phiếu thu order:
 }
 ```
 
+### Cap nhat API Thu chi theo `money_vouchers`
+
+Man `Quan ly tien` / tab `Thu chi` dung API list chinh:
+
+```http
+GET /api/finance/money-vouchers?page=1&size=50
+GET /api/finance/money-vouchers?page=1&size=50&voucherType=RECEIVED
+GET /api/finance/money-vouchers?page=1&size=50&voucherType=PAID
+GET /api/finance/money-vouchers?page=1&size=50&from=2026-07-01&to=2026-07-08&search=PT178
+```
+
+Query:
+
+- `page`, `size`: phan trang.
+- `from`, `to`: loc theo `money_vouchers.createdAt`.
+- `voucherType`: `RECEIVED`/`PT` cho phieu thu, `PAID`/`PC` cho phieu chi.
+- `search`: tim theo so phieu, dien giai, tham chieu don hang, khach hang, nha cung cap.
+- `branchId`: optional; neu JWT co `branchId` thi BE uu tien branch trong token. Filter branch qua `money_vouchers.fundId -> funds.branchId`.
+
+Response item dung cho bang Thu chi:
+
+```ts
+type MoneyVoucherListItem = {
+  id: string;
+  code: string;
+  voucherNumber: string;
+  createdAt: string;
+  time: string;
+  reference: null | { type?: string; id?: string; code?: string };
+  object: null | {
+    type: 'CUSTOMER' | 'SUPPLIER';
+    id: string;
+    code?: string;
+    name?: string;
+  };
+  amount: number;
+  paymentForm: 'CASH' | 'BANK' | string | null;
+  voucherType: 'RECEIVED' | 'PAID';
+  type: 'RECEIPT' | 'PAYMENT';
+  purpose?: string;
+  debitAccountCode?: string;
+  creditAccountCode?: string;
+  refType?: string;
+  refId?: string;
+  orderId?: string;
+  supplierId?: string;
+  customerId?: string;
+  note?: string;
+  description?: string;
+};
+```
+
+Vi du:
+
+```json
+{
+  "id": "voucher-id",
+  "code": "PT1782893498119",
+  "voucherNumber": "PT1782893498119",
+  "createdAt": "2026-07-08T03:20:00.000Z",
+  "time": "2026-07-08T03:20:00.000Z",
+  "reference": {
+    "type": "ORDER",
+    "id": "order-id",
+    "code": "ORD1782893498031"
+  },
+  "object": {
+    "type": "CUSTOMER",
+    "id": "customer-id",
+    "code": "CUS001",
+    "name": "Nguyen Van A"
+  },
+  "amount": 15000,
+  "paymentForm": "CASH",
+  "voucherType": "RECEIVED",
+  "type": "RECEIPT",
+  "purpose": "STOCK_EXPORT",
+  "debitAccountCode": "1111",
+  "creditAccountCode": "5111",
+  "orderId": "order-id",
+  "note": "Xuat kho theo don hang ORD1782893498031",
+  "description": "Xuat kho theo don hang ORD1782893498031"
+}
+```
+
+`GET /api/finance/summary` cung da tong hop tu `money_vouchers`. `summary.balances.cash` dung cho card ton quy tien mat, `summary.balances.deposit` dung cho card ton quy tien gui.
+
+API cu van con de tuong thich, nhung man Thu chi moi khong nen bam vao cac API nay:
+
+```http
+GET /api/finance/details
+GET /api/finance/receipts/received
+GET /api/finance/receipts/paid
+```
+
 ## 6. Confirm Customer Received Order
 
 Có 2 hướng xác nhận.
