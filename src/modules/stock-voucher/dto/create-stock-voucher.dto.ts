@@ -58,6 +58,19 @@ export class CreateStockVoucherDto {
   @IsString()
   toType?: string;
 
+  @ApiProperty({ required: false, description: 'Business source/destination ID. IMPORT: source, EXPORT: destination.' })
+  @IsOptional()
+  @IsUUID()
+  sourceId?: string;
+
+  @ApiProperty({
+    required: false,
+    description: 'Business source/destination type. Examples: SUPPLIER, CUSTOMER, BRANCH, VENDOR.',
+  })
+  @IsOptional()
+  @IsString()
+  sourceType?: string;
+
   @ApiProperty({ required: false, description: 'Reference ID (e.g. order ID)' })
   @IsOptional()
   @IsUUID()

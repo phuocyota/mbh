@@ -149,8 +149,8 @@ describe('StockVoucherService', () => {
 
       const dto = {
         branchId: 'branch-id-1',
-        toId: 'supplier-id-1',
-        toType: 'supplier',
+        sourceId: 'supplier-id-1',
+        sourceType: 'SUPPLIER',
         fundId: 'fund-id-1',
         paymentStatus: 'PAID',
         note: 'Import note',
@@ -169,8 +169,10 @@ describe('StockVoucherService', () => {
       expect(mockRepositories.StockReceiptImport.create).toHaveBeenCalledWith(
         expect.objectContaining({
           branchId: 'branch-id-1',
-          toId: 'supplier-id-1',
-          toType: 'supplier',
+          fromId: 'supplier-id-1',
+          fromType: 'SUPPLIER',
+          toId: 'branch-id-1',
+          toType: 'BRANCH',
           totalAmount: 500,
           status: 'COMPLETED',
         }),
@@ -182,9 +184,9 @@ describe('StockVoucherService', () => {
           quantity: 5,
           receiptType: 'IMPORT',
           fromId: 'supplier-id-1',
-          toId: 'stock-id-1',
+          toId: 'branch-id-1',
           fromType: 'SUPPLIER',
-          toType: 'STOCK',
+          toType: 'BRANCH',
           importId: 'import-id',
         }),
       );
@@ -198,8 +200,8 @@ describe('StockVoucherService', () => {
     it('should record supplier debt and not create a payment voucher for unpaid supplier imports', async () => {
       const dto = {
         branchId: 'branch-id-1',
-        toId: 'supplier-id-1',
-        toType: 'supplier',
+        sourceId: 'supplier-id-1',
+        sourceType: 'SUPPLIER',
         paymentStatus: 'DEBT',
         note: 'Import debt note',
         items: [
@@ -216,8 +218,10 @@ describe('StockVoucherService', () => {
       expect(mockFinanceService.createMoneyVoucher).not.toHaveBeenCalled();
       expect(mockRepositories.StockReceiptImport.create).toHaveBeenCalledWith(
         expect.objectContaining({
-          toId: 'supplier-id-1',
-          toType: 'supplier',
+          fromId: 'supplier-id-1',
+          fromType: 'SUPPLIER',
+          toId: 'branch-id-1',
+          toType: 'BRANCH',
         }),
       );
       expect(mockSupplierService.recordPurchaseDebt).toHaveBeenCalledWith(
@@ -243,6 +247,8 @@ describe('StockVoucherService', () => {
 
       const dto = {
         branchId: 'branch-id-2',
+        sourceId: 'customer-id-1',
+        sourceType: 'CUSTOMER',
         referenceId: 'order-id-1',
         referenceType: 'order',
         fundId: 'fund-id-2',
@@ -275,10 +281,10 @@ describe('StockVoucherService', () => {
           productId: 'product-id-2',
           quantity: 2,
           receiptType: 'EXPORT',
-          fromId: 'stock-id-1',
-          toId: 'order-id-1',
-          fromType: 'STOCK',
-          toType: 'VENDOR',
+          fromId: 'branch-id-2',
+          toId: 'customer-id-1',
+          fromType: 'BRANCH',
+          toType: 'CUSTOMER',
           exportId: 'export-id',
         }),
       );

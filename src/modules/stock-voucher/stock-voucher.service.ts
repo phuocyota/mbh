@@ -128,8 +128,8 @@ export class StockVoucherService {
       {
         branchId: order.branchId,
         type: 'EXPORT',
-        toId: order.customerId,
-        toType: order.customerId ? 'customer' : undefined,
+        sourceId: order.customerId,
+        sourceType: order.customerId ? 'CUSTOMER' : undefined,
         referenceId: order.id,
         referenceType: 'order',
         fundId: isCustomerAdvanceOffset ? undefined : payment?.fundId,
@@ -229,7 +229,15 @@ export class StockVoucherService {
   }
 
   private isSupplierImport(dto: CreateStockVoucherDto) {
-    return dto.toType === 'supplier' && !!dto.toId;
+    return this.getSourceType(dto) === 'SUPPLIER' && !!this.getSourceId(dto);
+  }
+
+  private getSourceId(dto: CreateStockVoucherDto) {
+    return dto.sourceId || dto.toId || null;
+  }
+
+  private getSourceType(dto: CreateStockVoucherDto) {
+    return (dto.sourceType || dto.toType || '').toUpperCase() || null;
   }
 
   private isPaidSupplierImport(dto: CreateStockVoucherDto) {
@@ -308,6 +316,8 @@ export class StockVoucherService {
       }, 0);
 
       const branchId = dto.branchId || DEFAULT_BRANCH_ID;
+      const sourceId = this.getSourceId(dto);
+      const sourceType = this.getSourceType(dto);
       let branchStock: Stock | null = null;
       let fromStock: Stock | null = null;
       let toStock: Stock | null = null;
@@ -336,6 +346,7 @@ export class StockVoucherService {
         : null;
       const fundId = dto.fundId || undefined;
       const paymentStatus = isPaidSupplierImport ? 'PAID' : (isSupplierImport ? 'DEBT' : undefined);
+      const supplierId = sourceType === 'SUPPLIER' && sourceId ? sourceId : undefined;
 
       let headerReceipt: StockReceiptImport | StockReceiptExport | StockReceiptTransfer;
 
@@ -345,8 +356,10 @@ export class StockVoucherService {
           importRepo.create({
             code,
             branchId,
-            toId: dto.toId,
-            toType: dto.toType,
+            fromId: sourceId || undefined,
+            fromType: sourceType || undefined,
+            toId: branchId,
+            toType: 'BRANCH',
             referenceId: dto.referenceId,
             referenceType: dto.referenceType,
             reasonCode: reasonCode || undefined,
@@ -362,8 +375,8 @@ export class StockVoucherService {
           exportRepo.create({
             code,
             branchId,
-            toId: dto.toId,
-            toType: dto.toType,
+            toId: sourceId || undefined,
+            toType: sourceType || undefined,
             referenceId: dto.referenceId,
             referenceType: dto.referenceType,
             reasonCode: reasonCode || undefined,
@@ -400,32 +413,23 @@ export class StockVoucherService {
         let toType = 'STOCK';
 
         if (type === 'IMPORT') {
-          if (dto.fromBranchId) {
-            const sourceStock = await this.getOrCreateBranchStock(
-              stockRepo,
-              dto.fromBranchId,
-            );
-            fromId = sourceStock.id;
-            fromType = 'STOCK';
-          } else {
-            fromId = dto.toId || null;
-            fromType = dto.toType?.toUpperCase() || 'VENDOR';
+          fromId = sourceId;
+          fromType = sourceType || 'SUPPLIER';
+          if (sourceType === 'BRANCH' && sourceId) {
+            await this.getOrCreateBranchStock(stockRepo, sourceId);
           }
-          toId = branchStock!.id;
-          toType = 'STOCK';
+          toId = branchId;
+          toType = 'BRANCH';
         } else if (type === 'EXPORT') {
-          fromId = branchStock!.id;
-          fromType = 'STOCK';
-          if (dto.toBranchId) {
-            const destinationStock = await this.getOrCreateBranchStock(
-              stockRepo,
-              dto.toBranchId,
-            );
-            toId = destinationStock.id;
-            toType = 'STOCK';
+          fromId = branchId;
+          fromType = 'BRANCH';
+          if (sourceType === 'BRANCH' && sourceId) {
+            await this.getOrCreateBranchStock(stockRepo, sourceId);
+            toId = sourceId;
+            toType = 'BRANCH';
           } else {
-            toId = dto.toId || dto.referenceId || null;
-            toType = dto.toType?.toUpperCase() || 'VENDOR';
+            toId = sourceId || dto.referenceId || null;
+            toType = sourceType || 'CUSTOMER';
           }
         } else if (type === 'TRANSFER') {
           fromId = fromStock!.id;
@@ -452,9 +456,9 @@ export class StockVoucherService {
 
         if (dtoItem.productId) {
           if (type === 'IMPORT') {
-            await this.updateStockItemQuantity(stockItemRepo, toId!, dtoItem.productId, quantity);
+            await this.updateStockItemQuantity(stockItemRepo, branchStock!.id, dtoItem.productId, quantity);
           } else if (type === 'EXPORT') {
-            await this.updateStockItemQuantity(stockItemRepo, fromId!, dtoItem.productId, -quantity);
+            await this.updateStockItemQuantity(stockItemRepo, branchStock!.id, dtoItem.productId, -quantity);
           } else if (type === 'TRANSFER') {
             await this.updateStockItemQuantity(stockItemRepo, fromId!, dtoItem.productId, -quantity);
             await this.updateStockItemQuantity(stockItemRepo, toId!, dtoItem.productId, quantity);
@@ -463,12 +467,16 @@ export class StockVoucherService {
       }
 
       if (isSupplierImport && totalAmount > 0) {
+        if (!supplierId) {
+          throw new BadRequestException('Supplier sourceId is required for supplier import');
+        }
+
         if (isPaidSupplierImport) {
-          await this.supplierService.recordPurchase(dto.toId!, totalAmount, trx);
+          await this.supplierService.recordPurchase(supplierId, totalAmount, trx);
         } else {
           await this.supplierService.recordPurchaseDebt(
             {
-              supplierId: dto.toId!,
+              supplierId,
               amount: totalAmount,
               refType: ACCOUNTING_SOURCE_TYPE.STOCK_VOUCHER,
               refId: headerReceipt.id,
@@ -495,7 +503,7 @@ export class StockVoucherService {
             fundId,
             amount: totalAmount,
             orderId: dto.referenceType === 'order' ? dto.referenceId : undefined,
-            supplierId: dto.toType === 'supplier' ? dto.toId : undefined,
+            supplierId: type === 'IMPORT' ? supplierId : undefined,
             purpose:
               type === 'IMPORT'
                 ? ACCOUNTING_PURPOSE.STOCK_IMPORT
