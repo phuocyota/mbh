@@ -16,8 +16,10 @@ import {
 export interface MomoPaymentUrlResponse {
   payUrl: string;
   deeplink?: string;
+  deeplinkMiniApp?: string;
+  qrCodeUrl?: string;
   qrCode?: string;
-  qrData: string;
+  qrData?: string;
 }
 
 @Injectable()
@@ -193,12 +195,15 @@ export class MomoService {
   }
 
   private toPaymentUrlResponse(responseData: any): MomoPaymentUrlResponse {
+    const qrCodeUrl = responseData.qrCodeUrl || responseData.qrCode;
+
     return {
       payUrl: responseData.payUrl,
       deeplink: responseData.deeplink,
-      qrCode: responseData.qrCode,
-      qrData:
-        responseData.qrCode || responseData.deeplink || responseData.payUrl,
+      deeplinkMiniApp: responseData.deeplinkMiniApp,
+      qrCodeUrl,
+      qrCode: qrCodeUrl,
+      qrData: qrCodeUrl,
     };
   }
 
