@@ -85,11 +85,12 @@ export class MomoPaymentResultController {
   @ApiResponse({ status: 200, description: 'Payment result processed' })
   async processPaymentResult(@Query() resultData: any) {
     await this.momoService.processIpn(resultData);
+    const success = Number(resultData?.resultCode) === 0;
+
     return {
-      success: Number(resultData?.resultCode) === 0,
-      orderId: resultData?.orderId,
-      transId: resultData?.transId,
-      message: resultData?.message,
+      success,
+      status: success ? 'SUCCESS' : 'FAILED',
+      message: success ? 'Payment successful' : 'Payment failed',
     };
   }
 }
