@@ -922,11 +922,15 @@ GET /api/finance/summary?from=2026-07-01&to=2026-07-08
 GET /api/finance/summary?voucherType=RECEIVED
 GET /api/finance/summary?voucherType=PAID
 GET /api/finance/summary?voucherType=TRANSFER
+GET /api/finance/details?page=1&size=50
+GET /api/finance/details?from=2026-07-01&to=2026-07-08&voucherType=RECEIVED&search=PT178
 ```
 
 API summary tu lay `branchId` tu JWT token, FE khong can truyen `branchId`.
+API details cung tu lay `branchId` tu JWT token, FE khong can truyen `branchId`.
 
 `voucherType` optional, nhan `RECEIVED`/`PT` cho phieu thu, `PAID`/`PC` cho phieu chi, `TRANSFER`/`CQ` cho chuyen quy.
+`summary.balances.cash` dung cho card ton quy tien mat, `summary.balances.deposit` dung cho card ton quy tien gui.
 
 Phiếu thu phát sinh từ đơn hàng sẽ có `orderId` và relation `order`; FE dùng các field này làm tham chiếu đơn hàng thay vì parse chuỗi `note`.
 

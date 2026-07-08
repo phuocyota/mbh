@@ -29,6 +29,24 @@ describe('FinanceService', () => {
         credit: 200,
         name: 'Quỹ Tiền Mặt',
       }),
+      find: jest.fn().mockResolvedValue([
+        {
+          id: 'fund-id-1',
+          branchId: 'branch-id-1',
+          code: 'TM',
+          name: 'Tien mat',
+          accountCode: '1111',
+          balance: -460000,
+        },
+        {
+          id: 'fund-id-2',
+          branchId: 'branch-id-1',
+          code: 'NH',
+          name: 'Tien gui ngan hang',
+          accountCode: '1121',
+          balance: 0,
+        },
+      ]),
       save: jest.fn((entity) => Promise.resolve(entity)),
     },
     MoneyVoucher: {
@@ -226,6 +244,13 @@ describe('FinanceService', () => {
         transferInCount: 1,
         transferOutCount: 1,
       });
+      expect(result.balances).toEqual(
+        expect.objectContaining({
+          cash: -460000,
+          deposit: 0,
+          total: -460000,
+        }),
+      );
       expect(result.breakdown).toEqual([
         {
           type: 'RECEIVED',

@@ -37,6 +37,7 @@ type FinanceSummaryRange = {
   from?: string;
   to?: string;
   voucherType?: string;
+  search?: string;
 };
 
 type FinanceSummaryVoucherType = 'RECEIVED' | 'PAID' | 'TRANSFER';
@@ -191,7 +192,7 @@ export class FinanceService {
       .orderBy('detail.type', 'ASC')
       .addOrderBy('detail.category', 'ASC');
 
-    const [totals, breakdownRows] = await Promise.all([
+    const [totals, breakdownRows, funds] = await Promise.all([
       totalsQuery.getRawOne<{
         totalReceived: string | number;
         totalPaid: string | number;
@@ -208,6 +209,10 @@ export class FinanceService {
         count: string | number;
         amount: string | number;
       }>(),
+      this.fundRepository.find({
+        where: { branchId },
+        order: { name: 'ASC' },
+      }),
     ]);
 
     const totalReceived = Number(totals?.totalReceived || 0);
@@ -234,6 +239,7 @@ export class FinanceService {
         transferInCount: Number(totals?.transferInCount || 0),
         transferOutCount: Number(totals?.transferOutCount || 0),
       },
+      balances: this.buildFundBalanceSummary(funds),
       breakdown: breakdownRows.map((row) => ({
         type: row.type,
         category: row.category,
@@ -652,22 +658,66 @@ export class FinanceService {
     page?: number | string,
     size?: number | string,
     branchId?: string,
+    filters: FinanceSummaryRange = {},
   ) {
+    if (!branchId) {
+      throw new BadRequestException('branchId is required');
+    }
+
     const pagination = normalizePagination(page, size);
+    const { from, to } = this.resolveSummaryRange(filters);
+    const voucherType = this.normalizeSummaryVoucherType(filters.voucherType);
     const query = this.fundDetailRepository
       .createQueryBuilder('detail')
       .leftJoinAndSelect('detail.fund', 'fund')
+      .leftJoinAndSelect('detail.receivedReceipt', 'receivedReceipt')
+      .leftJoinAndSelect('receivedReceipt.order', 'receivedOrder')
+      .leftJoinAndSelect('detail.paidReceipt', 'paidReceipt')
+      .leftJoinAndSelect('paidReceipt.order', 'paidOrder')
+      .leftJoinAndSelect('detail.transferReceipt', 'transferReceipt')
       .orderBy('detail.createdAt', 'DESC')
       .skip(pagination.skip)
       .take(pagination.size);
 
-    if (branchId) {
-      query.andWhere('fund.branchId = :branchId', { branchId });
+    query.andWhere('fund.branchId = :branchId', { branchId });
+
+    if (from) {
+      query.andWhere('detail.createdAt >= :from', { from });
+    }
+
+    if (to) {
+      query.andWhere('detail.createdAt <= :to', { to });
+    }
+
+    this.applySummaryVoucherTypeFilter(query, voucherType, 'TRANSFER');
+
+    const search = filters.search?.trim();
+    if (search) {
+      query.andWhere(
+        `(
+          receivedReceipt.code ILIKE :search
+          OR paidReceipt.code ILIKE :search
+          OR transferReceipt.code ILIKE :search
+          OR fund.name ILIKE :search
+          OR detail.category ILIKE :search
+          OR detail.note ILIKE :search
+          OR receivedOrder.orderCode ILIKE :search
+          OR paidOrder.orderCode ILIKE :search
+        )`,
+        { search: `%${search}%` },
+      );
     }
 
     const [data, total] = await query.getManyAndCount();
 
-    return toPaginationResponse(data, total, pagination.page, pagination.size);
+    return {
+      ...toPaginationResponse(data, total, pagination.page, pagination.size),
+      branchId,
+      from: from?.toISOString() || null,
+      to: to?.toISOString() || null,
+      voucherType,
+      search: search || null,
+    };
   }
 
   private mapAccountingRule<T>(callback: () => T): T {
@@ -729,6 +779,27 @@ export class FinanceService {
     }
 
     return resolved;
+  }
+
+  private buildFundBalanceSummary(funds: Fund[]) {
+    const fundBalances = funds.map((fund) => ({
+      id: fund.id,
+      code: fund.code,
+      name: fund.name,
+      accountCode: fund.accountCode,
+      balance: Number(fund.balance || 0),
+    }));
+
+    return {
+      cash: fundBalances
+        .filter((fund) => fund.accountCode?.startsWith('111'))
+        .reduce((sum, fund) => sum + fund.balance, 0),
+      deposit: fundBalances
+        .filter((fund) => fund.accountCode?.startsWith('112'))
+        .reduce((sum, fund) => sum + fund.balance, 0),
+      total: fundBalances.reduce((sum, fund) => sum + fund.balance, 0),
+      funds: fundBalances,
+    };
   }
 
   private applySummaryVoucherTypeFilter(

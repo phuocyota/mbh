@@ -154,17 +154,33 @@ export class FinanceController {
   @Get('details')
   @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: 'Get all fund details' })
-  @ApiQuery({ name: 'branchId', required: false })
+  @ApiQuery({ name: 'from', required: false })
+  @ApiQuery({ name: 'to', required: false })
+  @ApiQuery({
+    name: 'voucherType',
+    required: false,
+    enum: ['RECEIVED', 'PAID', 'TRANSFER', 'PT', 'PC', 'CQ'],
+  })
+  @ApiQuery({ name: 'search', required: false })
   findDetails(
     @Req() req: any,
-    @Query('branchId') branchId?: string,
     @Query('page') page?: string,
     @Query('size') size?: string,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+    @Query('voucherType') voucherType?: string,
+    @Query('search') search?: string,
   ) {
     return this.financeService.findDetails(
       page,
       size,
-      req.user?.branchId || branchId,
+      req.user?.branchId,
+      {
+        from,
+        to,
+        voucherType,
+        search,
+      },
     );
   }
 
