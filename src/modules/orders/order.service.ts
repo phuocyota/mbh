@@ -840,7 +840,12 @@ export class OrderService {
 
   async receiveMomoPayment(
     orderId: string,
-    paymentDto: { amount: number; transId: string; createdBy?: string },
+    paymentDto: {
+      amount: number;
+      transId: string;
+      createdBy?: string;
+      fundId?: string;
+    },
   ) {
     const order = await this.findOrderByIdOrThrow(orderId);
 
@@ -885,6 +890,7 @@ export class OrderService {
       {
         paymentStatus: ORDER_PAYMENT_STATUS.PAID,
         status: ORDER_STATUS.READY_TO_PICKUP,
+        paymentMethod: PAYMENT_METHOD.MOMO,
         paidAmount: paymentDto.amount,
         paidAt: new Date(),
         updatedBy: paymentDto.createdBy,
@@ -897,7 +903,9 @@ export class OrderService {
 
     // Create stock voucher (same as cash)
     await this.stockVoucherService.createExportFromOrder(updatedOrder, {
+      method: PAYMENT_METHOD.MOMO,
       amount: paymentDto.amount,
+      fundId: paymentDto.fundId,
       createdBy: paymentDto.createdBy,
     } as any);
 

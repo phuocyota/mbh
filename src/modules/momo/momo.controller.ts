@@ -25,7 +25,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
 @ApiTags('MoMo Payment')
 @ApiBearerAuth()
-@Controller('momo')
+@Controller(['momo', 'api/momo'])
 export class MomoController {
   constructor(private readonly momoService: MomoService) {}
 

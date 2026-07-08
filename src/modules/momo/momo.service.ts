@@ -30,6 +30,7 @@ export class MomoService {
   private readonly secretKey: string;
   private readonly returnUrl: string;
   private readonly notifyUrl: string;
+  private readonly fundId: string;
 
   constructor(
     private configService: ConfigService,
@@ -43,6 +44,7 @@ export class MomoService {
     this.secretKey = this.configService.get<string>('MOMO_SECRET_KEY') || '';
     this.returnUrl = this.configService.get<string>('MOMO_RETURN_URL') || '';
     this.notifyUrl = this.configService.get<string>('MOMO_NOTIFY_URL') || '';
+    this.fundId = this.configService.get<string>('MOMO_FUND_ID') || '';
   }
 
   async createPayment(
@@ -58,6 +60,7 @@ export class MomoService {
     if (order.status !== ORDER_STATUS.PENDING_PAYMENT) {
       throw new BadRequestException('Order status must be PENDING_PAYMENT');
     }
+    this.assertOrderPaymentReady();
 
     const amount = this.normalizeAmount(order.totalAmount);
     const orderInfo = `Thanh toan don hang ${order.orderCode}`;
@@ -249,11 +252,13 @@ export class MomoService {
           `Nap tien qua MoMo (GD: ${transId})`,
         );
       } else {
+        this.assertOrderPaymentReady();
         const originalOrderId = this.extractOrderId(orderId);
         await this.orderService.receiveMomoPayment(originalOrderId, {
           amount: paidAmount,
           transId: String(transId),
           createdBy,
+          fundId: this.fundId,
         });
       }
     } else {
@@ -277,6 +282,12 @@ export class MomoService {
       throw new InternalServerErrorException(
         `Missing MoMo config: ${missingConfigs.join(', ')}`,
       );
+    }
+  }
+
+  private assertOrderPaymentReady(): void {
+    if (!this.fundId) {
+      throw new InternalServerErrorException('Missing MoMo config: MOMO_FUND_ID');
     }
   }
 
