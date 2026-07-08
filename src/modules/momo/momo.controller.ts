@@ -10,7 +10,9 @@ import {
   HttpStatus,
   Param,
   UnauthorizedException,
+  Res,
 } from '@nestjs/common';
+import type { Response } from 'express';
 import {
   ApiTags,
   ApiOperation,
@@ -82,15 +84,21 @@ export class MomoPaymentResultController {
 
   @Get()
   @ApiOperation({ summary: 'MoMo redirect result endpoint' })
-  @ApiResponse({ status: 200, description: 'Payment result processed' })
-  async processPaymentResult(@Query() resultData: any) {
+  @ApiResponse({ status: 302, description: 'Redirect to frontend result page' })
+  async processPaymentResult(@Query() resultData: any, @Res() res: Response) {
     await this.momoService.processIpn(resultData);
     const success = Number(resultData?.resultCode) === 0;
+    const frontendResultUrl =
+      process.env.MOMO_FE_RETURN_URL || 'http://localhost:5171/payment-result';
+    const redirectUrl = new URL(frontendResultUrl);
 
-    return {
-      success,
-      status: success ? 'SUCCESS' : 'FAILED',
-      message: success ? 'Payment successful' : 'Payment failed',
-    };
+    redirectUrl.searchParams.set('success', String(success));
+    redirectUrl.searchParams.set('status', success ? 'SUCCESS' : 'FAILED');
+    redirectUrl.searchParams.set(
+      'message',
+      success ? 'Payment successful' : 'Payment failed',
+    );
+
+    return res.redirect(HttpStatus.FOUND, redirectUrl.toString());
   }
 }
