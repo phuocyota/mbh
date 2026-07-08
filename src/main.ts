@@ -36,6 +36,7 @@ async function bootstrap() {
       }
     },
     credentials: true,
+    maxAge: 86400,
   });
 
   // Global validation
