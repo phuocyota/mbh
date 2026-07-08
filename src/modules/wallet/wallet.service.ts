@@ -375,7 +375,7 @@ export class WalletService extends BaseService<Wallet> {
     });
   }
 
-  private toUuidOrNull(value?: string): string | null {
+  private toUuidOrNull(value?: string): string | undefined {
     if (
       typeof value === 'string' &&
       /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
@@ -385,6 +385,6 @@ export class WalletService extends BaseService<Wallet> {
       return value;
     }
 
-    return null;
+    return undefined;
   }
 }
