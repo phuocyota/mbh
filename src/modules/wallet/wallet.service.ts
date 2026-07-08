@@ -12,6 +12,7 @@ import { StockFundReceiptReason } from '../../entities/stock-fund-receipt-reason
 import { BaseService } from '../../common/sql/base.service';
 import { ERROR_MESSAGES } from '../../common/constant/error-messages.constant';
 import { CustomerService } from '../customer/customer.service';
+import { FinanceService } from '../finance/finance.service';
 import {
   COMMON_STATUS,
   WALLET_TRANSACTION_REF_TYPE,
@@ -21,6 +22,11 @@ import {
   normalizePagination,
   toPaginationResponse,
 } from '../../common/dto/pagination.dto';
+import {
+  ACCOUNTING_PURPOSE,
+  ACCOUNTING_SOURCE_TYPE,
+  MONEY_VOUCHER_TYPE,
+} from '../../../packages/accounting/src/index.js';
 
 const DEFERRED_PAYMENT_REASON_CODE = 'TT_TRA_CHAM';
 
@@ -41,6 +47,7 @@ export class WalletService extends BaseService<Wallet> {
     @InjectRepository(WalletTransaction)
     private walletTransactionRepository: Repository<WalletTransaction>,
     private customerService: CustomerService,
+    private financeService: FinanceService,
   ) {
     super(walletRepository);
   }
@@ -108,6 +115,7 @@ export class WalletService extends BaseService<Wallet> {
     amount: number,
     createdBy?: string,
     note?: string,
+    fundId?: string,
   ): Promise<TopupResult> {
     if (amount <= 0) {
       throw new BadRequestException('Số tiền nạp phải lớn hơn 0');
@@ -159,7 +167,7 @@ export class WalletService extends BaseService<Wallet> {
       wallet.balance = balanceAfter;
       wallet.updatedBy = auditUserId;
       await walletRepository.save(wallet);
-      await this.restoreDebtLimitForRecoveredDebt(
+      const recoveredDebtAmount = await this.restoreDebtLimitForRecoveredDebt(
         manager,
         customerId,
         balanceBefore,
@@ -188,6 +196,30 @@ export class WalletService extends BaseService<Wallet> {
         createdBy: auditUserId,
       });
       const savedTx = await walletTransactionRepository.save(tx);
+
+      if (recoveredDebtAmount > 0) {
+        if (!fundId) {
+          throw new BadRequestException(
+            'fundId is required when topup collects customer debt',
+          );
+        }
+
+        await this.financeService.createMoneyVoucher(
+          {
+            type: MONEY_VOUCHER_TYPE.RECEIPT,
+            fundId,
+            amount: recoveredDebtAmount,
+            customerId,
+            purpose: ACCOUNTING_PURPOSE.CUSTOMER_DEBT_COLLECTION,
+            refType: ACCOUNTING_SOURCE_TYPE.WALLET_TRANSACTION,
+            refId: savedTx.id,
+            note:
+              note ||
+              `Thu tien cong no khach hang ${customer.customerCode || customer.fullName}`,
+          },
+          manager,
+        );
+      }
 
       return {
         walletId: wallet.id,
@@ -328,7 +360,7 @@ export class WalletService extends BaseService<Wallet> {
     customerId: string,
     balanceBefore: number,
     balanceAfter: number,
-  ): Promise<void> {
+  ): Promise<number> {
     // When topup/refund reduces a negative wallet balance, restore that amount
     // back to the customer's remaining debt allowance.
     const debtBefore = Math.max(0, -balanceBefore);
@@ -336,12 +368,14 @@ export class WalletService extends BaseService<Wallet> {
     const debtDecrease = debtBefore - debtAfter;
 
     if (debtDecrease <= 0) {
-      return;
+      return 0;
     }
 
     await manager
       .getRepository(Customer)
       .increment({ id: customerId }, 'debtLimit', debtDecrease);
+
+    return debtDecrease;
   }
 
   /**

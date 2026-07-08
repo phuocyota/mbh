@@ -52,16 +52,25 @@ export class FinanceController {
   @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: 'Get all money vouchers' })
   @ApiQuery({ name: 'branchId', required: false })
+  @ApiQuery({ name: 'from', required: false })
+  @ApiQuery({ name: 'to', required: false })
+  @ApiQuery({ name: 'voucherType', required: false })
+  @ApiQuery({ name: 'search', required: false })
   findMoneyVouchers(
     @Req() req: any,
     @Query('branchId') branchId?: string,
     @Query('page') page?: string,
     @Query('size') size?: string,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+    @Query('voucherType') voucherType?: string,
+    @Query('search') search?: string,
   ) {
     return this.financeService.findMoneyVouchers(
       page,
       size,
       req.user?.branchId || branchId,
+      { from, to, voucherType, search },
     );
   }
 
@@ -70,6 +79,7 @@ export class FinanceController {
   @ApiOperation({ summary: 'Get income/expense summary by branch' })
   @ApiQuery({ name: 'from', required: false })
   @ApiQuery({ name: 'to', required: false })
+  @ApiQuery({ name: 'search', required: false })
   @ApiQuery({
     name: 'voucherType',
     required: false,
@@ -80,11 +90,13 @@ export class FinanceController {
     @Query('from') from?: string,
     @Query('to') to?: string,
     @Query('voucherType') voucherType?: string,
+    @Query('search') search?: string,
   ) {
     return this.financeService.summary(req.user?.branchId, {
       from,
       to,
       voucherType,
+      search,
     });
   }
 

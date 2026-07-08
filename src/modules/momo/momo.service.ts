@@ -255,6 +255,7 @@ export class MomoService {
           paidAmount,
           createdBy,
           `Nap tien qua MoMo (GD: ${transId})`,
+          this.fundId,
         );
       } else {
         this.assertOrderPaymentReady();

@@ -80,6 +80,7 @@ export class WalletController {
       dto.amount,
       userId,
       dto.note,
+      dto.fundId,
     );
   }
 

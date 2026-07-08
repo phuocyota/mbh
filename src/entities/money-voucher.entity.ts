@@ -3,6 +3,7 @@ import { BaseEntity } from '../common/sql/base.entity';
 import { Fund } from './fund.entity';
 import { Order } from './order.entity';
 import { Supplier } from './supplier.entity';
+import { Customer } from './customer.entity';
 
 @Entity('money_vouchers')
 export class MoneyVoucher extends BaseEntity {
@@ -23,6 +24,9 @@ export class MoneyVoucher extends BaseEntity {
 
   @Column('uuid', { name: 'supplier_id', nullable: true })
   supplierId: string;
+
+  @Column('uuid', { name: 'customer_id', nullable: true })
+  customerId: string;
 
   @Column('varchar', { nullable: true })
   purpose: string;
@@ -53,4 +57,8 @@ export class MoneyVoucher extends BaseEntity {
   @ManyToOne(() => Supplier)
   @JoinColumn({ name: 'supplier_id' })
   supplier: Supplier;
+
+  @ManyToOne(() => Customer)
+  @JoinColumn({ name: 'customer_id' })
+  customer: Customer;
 }

@@ -12,6 +12,7 @@ import {
   FundReceiptPaid,
   FundReceiptTransfer,
   FundDetail,
+  StockFundReceiptReason,
 } from '../../entities';
 import { MONEY_VOUCHER_TYPE } from '../../../packages/accounting/src/index.js';
 
@@ -53,6 +54,7 @@ describe('FinanceService', () => {
       create: jest.fn((data) => ({ id: 'voucher-id-1', ...data })),
       save: jest.fn((entity) => Promise.resolve({ id: 'voucher-id-1', ...entity })),
       findOne: jest.fn().mockResolvedValue({ id: 'voucher-id-1' }),
+      createQueryBuilder: jest.fn(),
     },
     FundTransaction: {
       create: jest.fn((data) => ({ id: 'tx-id-1', ...data })),
@@ -83,6 +85,9 @@ describe('FinanceService', () => {
       create: jest.fn((data) => ({ id: 'detail-id-1', ...data })),
       save: jest.fn((entity) => Promise.resolve(entity)),
       createQueryBuilder: jest.fn(),
+    },
+    StockFundReceiptReason: {
+      findOne: jest.fn().mockResolvedValue(null),
     },
   };
 
@@ -140,6 +145,10 @@ describe('FinanceService', () => {
           useValue: mockRepositories.FundDetail,
         },
         {
+          provide: getRepositoryToken(StockFundReceiptReason),
+          useValue: mockRepositories.StockFundReceiptReason,
+        },
+        {
           provide: DataSource,
           useValue: mockDataSource,
         },
@@ -173,8 +182,7 @@ describe('FinanceService', () => {
 
     it('should aggregate received, paid and transfer totals by branch', async () => {
       const baseQueryBuilder = {
-        innerJoin: jest.fn().mockReturnThis(),
-        where: jest.fn().mockReturnThis(),
+        leftJoinAndSelect: jest.fn().mockReturnThis(),
         andWhere: jest.fn().mockReturnThis(),
         clone: jest.fn(),
       };
@@ -183,20 +191,16 @@ describe('FinanceService', () => {
         totalPaid: '350',
         receivedCount: '3',
         paidCount: '2',
-        transferIn: '200',
-        transferOut: '50',
-        transferInCount: '1',
-        transferOutCount: '1',
       });
       const breakdownQueryBuilder = createSummaryQueryBuilder([
         {
-          type: 'RECEIVED',
+          type: 'RECEIPT',
           category: 'ORDER_PAYMENT',
           count: '3',
           amount: '1000',
         },
         {
-          type: 'PAID',
+          type: 'PAYMENT',
           category: 'STOCK_IMPORT',
           count: '2',
           amount: '350',
@@ -206,7 +210,7 @@ describe('FinanceService', () => {
       baseQueryBuilder.clone
         .mockReturnValueOnce(totalsQueryBuilder)
         .mockReturnValueOnce(breakdownQueryBuilder);
-      mockRepositories.FundDetail.createQueryBuilder.mockReturnValue(
+      mockRepositories.MoneyVoucher.createQueryBuilder.mockReturnValue(
         baseQueryBuilder,
       );
 
@@ -215,19 +219,19 @@ describe('FinanceService', () => {
         to: '2026-07-08',
       });
 
-      expect(mockRepositories.FundDetail.createQueryBuilder).toHaveBeenCalledWith(
-        'detail',
+      expect(mockRepositories.MoneyVoucher.createQueryBuilder).toHaveBeenCalledWith(
+        'voucher',
       );
-      expect(baseQueryBuilder.where).toHaveBeenCalledWith(
+      expect(baseQueryBuilder.andWhere).toHaveBeenCalledWith(
         'fund.branchId = :branchId',
         { branchId: 'branch-id-1' },
       );
       expect(baseQueryBuilder.andWhere).toHaveBeenCalledWith(
-        'detail.createdAt >= :from',
+        'voucher.createdAt >= :from',
         { from: expect.any(Date) },
       );
       expect(baseQueryBuilder.andWhere).toHaveBeenCalledWith(
-        'detail.createdAt <= :to',
+        'voucher.createdAt <= :to',
         { to: expect.any(Date) },
       );
       expect(result.summary).toEqual({
@@ -238,11 +242,11 @@ describe('FinanceService', () => {
         paidCount: 2,
       });
       expect(result.transfers).toEqual({
-        transferIn: 200,
-        transferOut: 50,
-        netTransfer: 150,
-        transferInCount: 1,
-        transferOutCount: 1,
+        transferIn: 0,
+        transferOut: 0,
+        netTransfer: 0,
+        transferInCount: 0,
+        transferOutCount: 0,
       });
       expect(result.balances).toEqual(
         expect.objectContaining({
@@ -253,13 +257,13 @@ describe('FinanceService', () => {
       );
       expect(result.breakdown).toEqual([
         {
-          type: 'RECEIVED',
+          type: 'RECEIPT',
           category: 'ORDER_PAYMENT',
           count: 3,
           amount: 1000,
         },
         {
-          type: 'PAID',
+          type: 'PAYMENT',
           category: 'STOCK_IMPORT',
           count: 2,
           amount: 350,
@@ -269,8 +273,7 @@ describe('FinanceService', () => {
 
     it('should filter by voucher type alias', async () => {
       const baseQueryBuilder = {
-        innerJoin: jest.fn().mockReturnThis(),
-        where: jest.fn().mockReturnThis(),
+        leftJoinAndSelect: jest.fn().mockReturnThis(),
         andWhere: jest.fn().mockReturnThis(),
         clone: jest.fn(),
       };
@@ -279,14 +282,10 @@ describe('FinanceService', () => {
         totalPaid: '350',
         receivedCount: '0',
         paidCount: '2',
-        transferIn: '0',
-        transferOut: '0',
-        transferInCount: '0',
-        transferOutCount: '0',
       });
       const breakdownQueryBuilder = createSummaryQueryBuilder([
         {
-          type: 'PAID',
+          type: 'PAYMENT',
           category: 'STOCK_IMPORT',
           count: '2',
           amount: '350',
@@ -296,7 +295,7 @@ describe('FinanceService', () => {
       baseQueryBuilder.clone
         .mockReturnValueOnce(totalsQueryBuilder)
         .mockReturnValueOnce(breakdownQueryBuilder);
-      mockRepositories.FundDetail.createQueryBuilder.mockReturnValue(
+      mockRepositories.MoneyVoucher.createQueryBuilder.mockReturnValue(
         baseQueryBuilder,
       );
 
@@ -305,10 +304,9 @@ describe('FinanceService', () => {
       });
 
       expect(baseQueryBuilder.andWhere).toHaveBeenCalledWith(
-        'detail.type = :voucherType AND detail.category <> :transferCategory',
+        'voucher.type = :voucherType',
         {
-          voucherType: 'PAID',
-          transferCategory: 'TRANSFER',
+          voucherType: 'PAYMENT',
         },
       );
       expect(result.voucherType).toBe('PAID');
@@ -384,6 +382,46 @@ describe('FinanceService', () => {
       );
 
       expect(result).toBeDefined();
+    });
+
+    it('should use accounting reason formula and category for customer supplier debt offset receipt', async () => {
+      const dto = {
+        type: 'RECEIPT',
+        fundId: 'fund-id-1',
+        amount: 200,
+        purpose: 'CUSTOMER_SUPPLIER_DEBT_OFFSET',
+        reasonCode: 'BT_CN_KH_NCC',
+      };
+
+      mockRepositories.StockFundReceiptReason.findOne.mockResolvedValueOnce({
+        code: 'BT_CN_KH_NCC',
+        reason: 'Bu tru cong no khach hang va nha cung cap',
+        accountingFormula: '{331:-,131:+}',
+      });
+      mockRepositories.Fund.findOne.mockResolvedValueOnce({
+        id: 'fund-id-1',
+        branchId: 'branch-id-1',
+        accountCode: '1111',
+        balance: 1000,
+        debit: 500,
+        credit: 200,
+      });
+
+      await service.createMoneyVoucher(dto);
+
+      expect(mockRepositories.MoneyVoucher.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          debitAccountCode: '331',
+          creditAccountCode: '131',
+        }),
+      );
+      expect(mockRepositories.FundDetail.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'RECEIVED',
+          category: 'BT_CN_KH_NCC',
+          note: 'Bu tru cong no khach hang va nha cung cap',
+        }),
+      );
     });
   });
 

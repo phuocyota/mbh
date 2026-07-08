@@ -4,7 +4,13 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, EntityManager, FindOptionsWhere, In, Repository } from 'typeorm';
+import {
+  DataSource,
+  EntityManager,
+  FindOptionsWhere,
+  In,
+  Repository,
+} from 'typeorm';
 import {
   Debt,
   Fund,
@@ -15,6 +21,7 @@ import {
   FundReceiptPaid,
   FundReceiptTransfer,
   FundDetail,
+  StockFundReceiptReason,
 } from '../../entities';
 import { CreateFundDto } from './dto/create-fund.dto';
 import { CreateMoneyVoucherDto } from './dto/create-money-voucher.dto';
@@ -63,6 +70,8 @@ export class FinanceService {
     private fundReceiptTransferRepository: Repository<FundReceiptTransfer>,
     @InjectRepository(FundDetail)
     private fundDetailRepository: Repository<FundDetail>,
+    @InjectRepository(StockFundReceiptReason)
+    private stockFundReceiptReasonRepository: Repository<StockFundReceiptReason>,
     private dataSource: DataSource,
   ) {}
 
@@ -95,24 +104,93 @@ export class FinanceService {
     page?: number | string,
     size?: number | string,
     branchId?: string,
+    filters: FinanceSummaryRange = {},
   ) {
     const pagination = normalizePagination(page, size);
+    const { from, to } = this.resolveSummaryRange(filters);
+    const voucherType = this.normalizeSummaryVoucherType(filters.voucherType);
+    const query = this.buildMoneyVoucherQuery(branchId, from, to, voucherType, filters.search)
+      .orderBy('voucher.createdAt', 'DESC')
+      .skip(pagination.skip)
+      .take(pagination.size);
+
+    const [vouchers, total] = await query.getManyAndCount();
+
+    return {
+      ...toPaginationResponse(
+        vouchers.map((voucher) => this.toMoneyVoucherListItem(voucher)),
+        total,
+        pagination.page,
+        pagination.size,
+      ),
+      branchId: branchId || null,
+      from: from?.toISOString() || null,
+      to: to?.toISOString() || null,
+      voucherType,
+      search: filters.search?.trim() || null,
+    };
+  }
+
+  private buildMoneyVoucherQuery(
+    branchId?: string,
+    from?: Date | null,
+    to?: Date | null,
+    voucherType?: FinanceSummaryVoucherType | null,
+    search?: string,
+  ) {
     const query = this.moneyVoucherRepository
       .createQueryBuilder('voucher')
       .leftJoinAndSelect('voucher.fund', 'fund')
       .leftJoinAndSelect('voucher.order', 'order')
+      .leftJoinAndSelect('order.customer', 'orderCustomer')
       .leftJoinAndSelect('voucher.supplier', 'supplier')
-      .orderBy('voucher.createdAt', 'DESC')
-      .skip(pagination.skip)
-      .take(pagination.size);
+      .leftJoinAndSelect('voucher.customer', 'customer');
 
     if (branchId) {
       query.andWhere('fund.branchId = :branchId', { branchId });
     }
 
-    const [data, total] = await query.getManyAndCount();
+    if (from) {
+      query.andWhere('voucher.createdAt >= :from', { from });
+    }
 
-    return toPaginationResponse(data, total, pagination.page, pagination.size);
+    if (to) {
+      query.andWhere('voucher.createdAt <= :to', { to });
+    }
+
+    if (voucherType === 'RECEIVED') {
+      query.andWhere('voucher.type = :voucherType', {
+        voucherType: MONEY_VOUCHER_TYPE.RECEIPT,
+      });
+    } else if (voucherType === 'PAID') {
+      query.andWhere('voucher.type = :voucherType', {
+        voucherType: MONEY_VOUCHER_TYPE.PAYMENT,
+      });
+    } else if (voucherType === 'TRANSFER') {
+      query.andWhere('1 = 0');
+    }
+
+    const trimmedSearch = search?.trim();
+    if (trimmedSearch) {
+      query.andWhere(
+        `(
+          voucher.code ILIKE :search
+          OR voucher.purpose ILIKE :search
+          OR voucher.note ILIKE :search
+          OR voucher.refType ILIKE :search
+          OR order.orderCode ILIKE :search
+          OR supplier.code ILIKE :search
+          OR supplier.name ILIKE :search
+          OR customer.customerCode ILIKE :search
+          OR customer.fullName ILIKE :search
+          OR orderCustomer.customerCode ILIKE :search
+          OR orderCustomer.fullName ILIKE :search
+        )`,
+        { search: `%${trimmedSearch}%` },
+      );
+    }
+
+    return query;
   }
 
   async summary(branchId?: string, range: FinanceSummaryRange = {}) {
@@ -122,75 +200,47 @@ export class FinanceService {
 
     const { from, to } = this.resolveSummaryRange(range);
     const voucherType = this.normalizeSummaryVoucherType(range.voucherType);
-    const baseQuery = this.fundDetailRepository
-      .createQueryBuilder('detail')
-      .innerJoin('detail.fund', 'fund')
-      .where('fund.branchId = :branchId', { branchId });
-
-    if (from) {
-      baseQuery.andWhere('detail.createdAt >= :from', { from });
-    }
-
-    if (to) {
-      baseQuery.andWhere('detail.createdAt <= :to', { to });
-    }
-
-    const transferCategory = 'TRANSFER';
-    const receivedType = 'RECEIVED';
-    const paidType = 'PAID';
-
-    this.applySummaryVoucherTypeFilter(
-      baseQuery,
+    const baseQuery = this.buildMoneyVoucherQuery(
+      branchId,
+      from,
+      to,
       voucherType,
-      transferCategory,
+      range.search,
     );
+
+    const receiptType = MONEY_VOUCHER_TYPE.RECEIPT;
+    const paymentType = MONEY_VOUCHER_TYPE.PAYMENT;
 
     const totalsQuery = baseQuery
       .clone()
       .select(
-        `COALESCE(SUM(CASE WHEN detail.type = :receivedType AND detail.category <> :transferCategory THEN detail.amount ELSE 0 END), 0)`,
+        `COALESCE(SUM(CASE WHEN voucher.type = :receiptType THEN voucher.amount ELSE 0 END), 0)`,
         'totalReceived',
       )
       .addSelect(
-        `COALESCE(SUM(CASE WHEN detail.type = :paidType AND detail.category <> :transferCategory THEN detail.amount ELSE 0 END), 0)`,
+        `COALESCE(SUM(CASE WHEN voucher.type = :paymentType THEN voucher.amount ELSE 0 END), 0)`,
         'totalPaid',
       )
       .addSelect(
-        `COUNT(CASE WHEN detail.type = :receivedType AND detail.category <> :transferCategory THEN 1 END)`,
+        `COUNT(CASE WHEN voucher.type = :receiptType THEN 1 END)`,
         'receivedCount',
       )
       .addSelect(
-        `COUNT(CASE WHEN detail.type = :paidType AND detail.category <> :transferCategory THEN 1 END)`,
+        `COUNT(CASE WHEN voucher.type = :paymentType THEN 1 END)`,
         'paidCount',
       )
-      .addSelect(
-        `COALESCE(SUM(CASE WHEN detail.type = :receivedType AND detail.category = :transferCategory THEN detail.amount ELSE 0 END), 0)`,
-        'transferIn',
-      )
-      .addSelect(
-        `COALESCE(SUM(CASE WHEN detail.type = :paidType AND detail.category = :transferCategory THEN detail.amount ELSE 0 END), 0)`,
-        'transferOut',
-      )
-      .addSelect(
-        `COUNT(CASE WHEN detail.type = :receivedType AND detail.category = :transferCategory THEN 1 END)`,
-        'transferInCount',
-      )
-      .addSelect(
-        `COUNT(CASE WHEN detail.type = :paidType AND detail.category = :transferCategory THEN 1 END)`,
-        'transferOutCount',
-      )
-      .setParameters({ receivedType, paidType, transferCategory });
+      .setParameters({ receiptType, paymentType });
 
     const breakdownQuery = baseQuery
       .clone()
-      .select('detail.type', 'type')
-      .addSelect('detail.category', 'category')
-      .addSelect('COUNT(detail.id)', 'count')
-      .addSelect('COALESCE(SUM(detail.amount), 0)', 'amount')
-      .groupBy('detail.type')
-      .addGroupBy('detail.category')
-      .orderBy('detail.type', 'ASC')
-      .addOrderBy('detail.category', 'ASC');
+      .select('voucher.type', 'type')
+      .addSelect('voucher.purpose', 'category')
+      .addSelect('COUNT(voucher.id)', 'count')
+      .addSelect('COALESCE(SUM(voucher.amount), 0)', 'amount')
+      .groupBy('voucher.type')
+      .addGroupBy('voucher.purpose')
+      .orderBy('voucher.type', 'ASC')
+      .addOrderBy('voucher.purpose', 'ASC');
 
     const [totals, breakdownRows, funds] = await Promise.all([
       totalsQuery.getRawOne<{
@@ -198,10 +248,6 @@ export class FinanceService {
         totalPaid: string | number;
         receivedCount: string | number;
         paidCount: string | number;
-        transferIn: string | number;
-        transferOut: string | number;
-        transferInCount: string | number;
-        transferOutCount: string | number;
       }>(),
       breakdownQuery.getRawMany<{
         type: string;
@@ -217,8 +263,6 @@ export class FinanceService {
 
     const totalReceived = Number(totals?.totalReceived || 0);
     const totalPaid = Number(totals?.totalPaid || 0);
-    const transferIn = Number(totals?.transferIn || 0);
-    const transferOut = Number(totals?.transferOut || 0);
 
     return {
       branchId,
@@ -233,11 +277,11 @@ export class FinanceService {
         paidCount: Number(totals?.paidCount || 0),
       },
       transfers: {
-        transferIn,
-        transferOut,
-        netTransfer: transferIn - transferOut,
-        transferInCount: Number(totals?.transferInCount || 0),
-        transferOutCount: Number(totals?.transferOutCount || 0),
+        transferIn: 0,
+        transferOut: 0,
+        netTransfer: 0,
+        transferInCount: 0,
+        transferOutCount: 0,
       },
       balances: this.buildFundBalanceSummary(funds),
       breakdown: breakdownRows.map((row) => ({
@@ -277,19 +321,30 @@ export class FinanceService {
       const fundTransactionRepo = trx.getRepository(FundTransaction);
       const supplierRepo = trx.getRepository(Supplier);
       const debtRepo = trx.getRepository(Debt);
+      const reasonRepo = trx.getRepository(StockFundReceiptReason);
 
       const fund = await fundRepo.findOne({ where: { id: dto.fundId } });
       if (!fund) {
         throw new NotFoundException('Fund not found');
       }
 
+      const reason = dto.reasonCode
+        ? await reasonRepo.findOne({ where: { code: dto.reasonCode } })
+        : null;
+      if (dto.reasonCode && !reason) {
+        throw new NotFoundException('Accounting reason not found');
+      }
+
+      const reasonPosting = this.getReasonPosting(reason);
       const accountingEntry = this.mapAccountingRule(() =>
         resolveMoneyVoucherPosting({
           type,
           fundAccountCode: fund.accountCode,
           purpose: dto.purpose,
-          debitAccountCode: dto.debitAccountCode,
-          creditAccountCode: dto.creditAccountCode,
+          debitAccountCode:
+            dto.debitAccountCode || reasonPosting?.debitAccountCode,
+          creditAccountCode:
+            dto.creditAccountCode || reasonPosting?.creditAccountCode,
         }),
       );
       const amount = Number(dto.amount);
@@ -298,9 +353,10 @@ export class FinanceService {
         getFundBalanceAfterVoucher({ type, currentBalance, amount }),
       );
 
+      const { reasonCode: _reasonCode, ...moneyVoucherDto } = dto;
       const voucher = await voucherRepo.save(
         voucherRepo.create({
-          ...dto,
+          ...moneyVoucherDto,
           ...accountingEntry,
           type,
           code: createMoneyVoucherCode(type),
@@ -333,6 +389,8 @@ export class FinanceService {
       const receivedRepo = trx.getRepository(FundReceiptReceived);
       const paidRepo = trx.getRepository(FundReceiptPaid);
       const detailRepo = trx.getRepository(FundDetail);
+      const receiptNote = dto.note || reason?.reason || dto.purpose;
+      const detailCategory = dto.reasonCode || dto.purpose || 'OTHER';
 
       if (type === MONEY_VOUCHER_TYPE.RECEIPT) {
         const receivedReceipt = await receivedRepo.save(
@@ -342,7 +400,7 @@ export class FinanceService {
             amount,
             fundId: fund.id,
             orderId: dto.orderId,
-            note: dto.note || dto.purpose,
+            note: receiptNote,
             status: 'COMPLETED',
           }),
         );
@@ -351,10 +409,10 @@ export class FinanceService {
           detailRepo.create({
             amount,
             type: 'RECEIVED',
-            category: dto.purpose || 'OTHER',
+            category: detailCategory,
             fundId: fund.id,
             receivedId: receivedReceipt.id,
-            note: dto.note || dto.purpose,
+            note: receiptNote,
           }),
         );
       } else if (type === MONEY_VOUCHER_TYPE.PAYMENT) {
@@ -365,7 +423,7 @@ export class FinanceService {
             amount,
             fundId: fund.id,
             orderId: dto.orderId,
-            note: dto.note || dto.purpose,
+            note: receiptNote,
             status: 'COMPLETED',
           }),
         );
@@ -374,10 +432,10 @@ export class FinanceService {
           detailRepo.create({
             amount,
             type: 'PAID',
-            category: dto.purpose || 'OTHER',
+            category: detailCategory,
             fundId: fund.id,
             paidId: paidReceipt.id,
-            note: dto.note || dto.purpose,
+            note: receiptNote,
           }),
         );
       }
@@ -418,7 +476,7 @@ export class FinanceService {
 
       return voucherRepo.findOne({
         where: { id: voucher.id },
-        relations: ['fund', 'order', 'supplier'],
+        relations: ['fund', 'order', 'order.customer', 'supplier', 'customer'],
       });
     };
 
@@ -521,46 +579,104 @@ export class FinanceService {
     return this.dataSource.transaction(executor);
   }
 
+  private toMoneyVoucherListItem(voucher: MoneyVoucher) {
+    const order = voucher.order as any;
+    const supplier = voucher.supplier as any;
+    const directCustomer = voucher.customer as any;
+    const orderCustomer = order?.customer;
+    const customer = directCustomer || orderCustomer;
+    const object = supplier
+      ? {
+          type: 'SUPPLIER',
+          id: supplier.id,
+          code: supplier.code,
+          name: supplier.name,
+        }
+      : customer
+        ? {
+            type: 'CUSTOMER',
+            id: customer.id,
+            code: customer.customerCode,
+            name: customer.fullName,
+          }
+        : null;
+
+    return {
+      id: voucher.id,
+      code: voucher.code,
+      voucherNumber: voucher.code,
+      createdAt: voucher.createdAt,
+      time: voucher.createdAt,
+      reference: this.resolveVoucherReference(voucher),
+      object,
+      amount: Number(voucher.amount || 0),
+      paymentForm: this.resolvePaymentForm(voucher.fund),
+      fund: voucher.fund
+        ? {
+            id: voucher.fund.id,
+            code: voucher.fund.code,
+            name: voucher.fund.name,
+            accountCode: voucher.fund.accountCode,
+          }
+        : null,
+      type: voucher.type,
+      voucherType:
+        voucher.type === MONEY_VOUCHER_TYPE.RECEIPT ? 'RECEIVED' : 'PAID',
+      purpose: voucher.purpose,
+      debitAccountCode: voucher.debitAccountCode,
+      creditAccountCode: voucher.creditAccountCode,
+      refType: voucher.refType,
+      refId: voucher.refId,
+      orderId: voucher.orderId,
+      supplierId: voucher.supplierId,
+      customerId: voucher.customerId,
+      note: voucher.note,
+      description: voucher.note || voucher.purpose,
+    };
+  }
+
+  private resolveVoucherReference(voucher: MoneyVoucher) {
+    const order = voucher.order as any;
+    if (order?.orderCode) {
+      return {
+        type: 'ORDER',
+        id: order.id,
+        code: order.orderCode,
+      };
+    }
+
+    if (voucher.refType || voucher.refId) {
+      return {
+        type: voucher.refType,
+        id: voucher.refId,
+        code: voucher.refId,
+      };
+    }
+
+    return null;
+  }
+
+  private resolvePaymentForm(fund?: Fund | null) {
+    const accountCode = fund?.accountCode || '';
+    if (accountCode.startsWith('111')) {
+      return 'CASH';
+    }
+
+    if (accountCode.startsWith('112')) {
+      return 'BANK';
+    }
+
+    return fund?.name || null;
+  }
+
   async findReceiptsReceived(
     page?: number | string,
     size?: number | string,
     branchId?: string,
   ) {
-    const pagination = normalizePagination(page, size);
-    const baseQuery = this.fundReceiptReceivedRepository
-        .createQueryBuilder('receipt')
-        .select('receipt.id', 'id');
-
-    if (branchId) {
-      baseQuery.where('receipt.branchId = :branchId', { branchId });
-    }
-
-    const [idRows, total] = await Promise.all([
-      baseQuery
-        .clone()
-        .orderBy('receipt.createdAt', 'DESC')
-        .offset(pagination.skip)
-        .limit(pagination.size)
-        .getRawMany<{ id: string }>(),
-      baseQuery.clone().getCount(),
-    ]);
-
-    const ids = idRows.map((row) => row.id);
-    if (!ids.length) {
-      return toPaginationResponse([], total, pagination.page, pagination.size);
-    }
-
-    const receipts = await this.fundReceiptReceivedRepository.find({
-      where: { id: In(ids) },
-      relations: ['fund', 'order', 'details'],
-      order: { createdAt: 'DESC' },
+    return this.findMoneyVouchers(page, size, branchId, {
+      voucherType: 'RECEIVED',
     });
-    const receiptById = new Map(receipts.map((receipt) => [receipt.id, receipt]));
-    const data = ids
-      .map((id) => receiptById.get(id))
-      .filter((receipt): receipt is FundReceiptReceived => !!receipt);
-
-    return toPaginationResponse(data, total, pagination.page, pagination.size);
   }
 
   async findReceiptsPaid(
@@ -568,41 +684,9 @@ export class FinanceService {
     size?: number | string,
     branchId?: string,
   ) {
-    const pagination = normalizePagination(page, size);
-    const baseQuery = this.fundReceiptPaidRepository
-        .createQueryBuilder('receipt')
-        .select('receipt.id', 'id');
-
-    if (branchId) {
-      baseQuery.where('receipt.branchId = :branchId', { branchId });
-    }
-
-    const [idRows, total] = await Promise.all([
-      baseQuery
-        .clone()
-        .orderBy('receipt.createdAt', 'DESC')
-        .offset(pagination.skip)
-        .limit(pagination.size)
-        .getRawMany<{ id: string }>(),
-      baseQuery.clone().getCount(),
-    ]);
-
-    const ids = idRows.map((row) => row.id);
-    if (!ids.length) {
-      return toPaginationResponse([], total, pagination.page, pagination.size);
-    }
-
-    const receipts = await this.fundReceiptPaidRepository.find({
-      where: { id: In(ids) },
-      relations: ['fund', 'order', 'details'],
-      order: { createdAt: 'DESC' },
+    return this.findMoneyVouchers(page, size, branchId, {
+      voucherType: 'PAID',
     });
-    const receiptById = new Map(receipts.map((receipt) => [receipt.id, receipt]));
-    const data = ids
-      .map((id) => receiptById.get(id))
-      .filter((receipt): receipt is FundReceiptPaid => !!receipt);
-
-    return toPaginationResponse(data, total, pagination.page, pagination.size);
   }
 
   async findTransfers(
@@ -664,60 +748,7 @@ export class FinanceService {
       throw new BadRequestException('branchId is required');
     }
 
-    const pagination = normalizePagination(page, size);
-    const { from, to } = this.resolveSummaryRange(filters);
-    const voucherType = this.normalizeSummaryVoucherType(filters.voucherType);
-    const query = this.fundDetailRepository
-      .createQueryBuilder('detail')
-      .leftJoinAndSelect('detail.fund', 'fund')
-      .leftJoinAndSelect('detail.receivedReceipt', 'receivedReceipt')
-      .leftJoinAndSelect('receivedReceipt.order', 'receivedOrder')
-      .leftJoinAndSelect('detail.paidReceipt', 'paidReceipt')
-      .leftJoinAndSelect('paidReceipt.order', 'paidOrder')
-      .leftJoinAndSelect('detail.transferReceipt', 'transferReceipt')
-      .orderBy('detail.createdAt', 'DESC')
-      .skip(pagination.skip)
-      .take(pagination.size);
-
-    query.andWhere('fund.branchId = :branchId', { branchId });
-
-    if (from) {
-      query.andWhere('detail.createdAt >= :from', { from });
-    }
-
-    if (to) {
-      query.andWhere('detail.createdAt <= :to', { to });
-    }
-
-    this.applySummaryVoucherTypeFilter(query, voucherType, 'TRANSFER');
-
-    const search = filters.search?.trim();
-    if (search) {
-      query.andWhere(
-        `(
-          receivedReceipt.code ILIKE :search
-          OR paidReceipt.code ILIKE :search
-          OR transferReceipt.code ILIKE :search
-          OR fund.name ILIKE :search
-          OR detail.category ILIKE :search
-          OR detail.note ILIKE :search
-          OR receivedOrder.orderCode ILIKE :search
-          OR paidOrder.orderCode ILIKE :search
-        )`,
-        { search: `%${search}%` },
-      );
-    }
-
-    const [data, total] = await query.getManyAndCount();
-
-    return {
-      ...toPaginationResponse(data, total, pagination.page, pagination.size),
-      branchId,
-      from: from?.toISOString() || null,
-      to: to?.toISOString() || null,
-      voucherType,
-      search: search || null,
-    };
+    return this.findMoneyVouchers(page, size, branchId, filters);
   }
 
   private mapAccountingRule<T>(callback: () => T): T {
@@ -730,6 +761,50 @@ export class FinanceService {
 
       throw error;
     }
+  }
+
+  private getReasonPosting(reason: StockFundReceiptReason | null) {
+    if (!reason) {
+      return null;
+    }
+
+    const debitAccountCode = this.getFormulaAccount(
+      reason.accountingFormula,
+      '-',
+    );
+    const creditAccountCode = this.getFormulaAccount(
+      reason.accountingFormula,
+      '+',
+    );
+
+    if (!debitAccountCode || !creditAccountCode) {
+      throw new BadRequestException(
+        `Accounting formula is required for reason: ${reason.code}`,
+      );
+    }
+
+    return { debitAccountCode, creditAccountCode };
+  }
+
+  private getFormulaAccount(
+    formula: string | undefined | null,
+    sign: '+' | '-',
+  ) {
+    if (!formula) {
+      return undefined;
+    }
+
+    const entries = formula.replace(/[{}]/g, '').split(',');
+    for (const entry of entries) {
+      const [accountCode, entrySign] = entry
+        .split(':')
+        .map((part) => part.trim());
+      if (accountCode && entrySign === sign) {
+        return accountCode;
+      }
+    }
+
+    return undefined;
   }
 
   private resolveSummaryRange(range: FinanceSummaryRange) {

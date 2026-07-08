@@ -10,6 +10,7 @@ import {
   FundReceiptPaid,
   FundReceiptTransfer,
   FundDetail,
+  StockFundReceiptReason,
 } from '../../entities';
 import { FinanceController } from './finance.controller';
 import { FinanceService } from './finance.service';
@@ -26,6 +27,7 @@ import { FinanceService } from './finance.service';
       FundReceiptPaid,
       FundReceiptTransfer,
       FundDetail,
+      StockFundReceiptReason,
     ]),
   ],
   controllers: [FinanceController],

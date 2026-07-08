@@ -27,6 +27,16 @@ export class TopupWalletDto {
   amount: number;
 
   @ApiProperty({
+    description:
+      'Quy nhan tien. Bat buoc khi khoan nap dung de thu cong no vi am.',
+    example: 'f47ac10b-58cc-4372-a567-0e02b2c3d479',
+    required: false,
+  })
+  @IsOptional()
+  @IsUUID()
+  fundId?: string;
+
+  @ApiProperty({
     description: 'Ghi chú',
     example: 'Phụ huynh nạp tiền',
     required: false,

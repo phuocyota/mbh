@@ -28,10 +28,20 @@ export class CreateMoneyVoucherDto {
   @IsUUID()
   supplierId?: string;
 
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsUUID()
+  customerId?: string;
+
   @ApiProperty({ example: 'ORDER_PAYMENT', required: false })
   @IsOptional()
   @IsString()
   purpose?: string;
+
+  @ApiProperty({ example: 'BT_CN_KH_NCC', required: false })
+  @IsOptional()
+  @IsString()
+  reasonCode?: string;
 
   @ApiProperty({ required: false })
   @IsOptional()
@@ -57,4 +67,4 @@ export class CreateMoneyVoucherDto {
   @IsOptional()
   @IsString()
   note?: string;
-}
+}
