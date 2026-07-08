@@ -65,6 +65,31 @@ export class FinanceController {
     );
   }
 
+  @Get('summary')
+  @UseGuards(JwtAuthGuard)
+  @ApiOperation({ summary: 'Get income/expense summary by branch' })
+  @ApiQuery({ name: 'branchId', required: false })
+  @ApiQuery({ name: 'from', required: false })
+  @ApiQuery({ name: 'to', required: false })
+  @ApiQuery({
+    name: 'voucherType',
+    required: false,
+    enum: ['RECEIVED', 'PAID', 'TRANSFER', 'PT', 'PC', 'CQ'],
+  })
+  summary(
+    @Req() req: any,
+    @Query('branchId') branchId?: string,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+    @Query('voucherType') voucherType?: string,
+  ) {
+    return this.financeService.summary(req.user?.branchId || branchId, {
+      from,
+      to,
+      voucherType,
+    });
+  }
+
   @Post('receipts')
   @ApiOperation({ summary: 'Create receipt voucher' })
   createReceipt(@Body() dto: Omit<CreateMoneyVoucherDto, 'type'>) {

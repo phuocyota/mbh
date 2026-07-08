@@ -33,6 +33,14 @@ import {
 } from '../../../packages/accounting/src/index.js';
 import { normalizePagination, toPaginationResponse } from '../../common/dto/pagination.dto';
 
+type FinanceSummaryRange = {
+  from?: string;
+  to?: string;
+  voucherType?: string;
+};
+
+type FinanceSummaryVoucherType = 'RECEIVED' | 'PAID' | 'TRANSFER';
+
 @Injectable()
 export class FinanceService {
   constructor(
@@ -104,6 +112,135 @@ export class FinanceService {
     const [data, total] = await query.getManyAndCount();
 
     return toPaginationResponse(data, total, pagination.page, pagination.size);
+  }
+
+  async summary(branchId?: string, range: FinanceSummaryRange = {}) {
+    if (!branchId) {
+      throw new BadRequestException('branchId is required');
+    }
+
+    const { from, to } = this.resolveSummaryRange(range);
+    const voucherType = this.normalizeSummaryVoucherType(range.voucherType);
+    const baseQuery = this.fundDetailRepository
+      .createQueryBuilder('detail')
+      .innerJoin('detail.fund', 'fund')
+      .where('fund.branchId = :branchId', { branchId });
+
+    if (from) {
+      baseQuery.andWhere('detail.createdAt >= :from', { from });
+    }
+
+    if (to) {
+      baseQuery.andWhere('detail.createdAt <= :to', { to });
+    }
+
+    const transferCategory = 'TRANSFER';
+    const receivedType = 'RECEIVED';
+    const paidType = 'PAID';
+
+    this.applySummaryVoucherTypeFilter(
+      baseQuery,
+      voucherType,
+      transferCategory,
+    );
+
+    const totalsQuery = baseQuery
+      .clone()
+      .select(
+        `COALESCE(SUM(CASE WHEN detail.type = :receivedType AND detail.category <> :transferCategory THEN detail.amount ELSE 0 END), 0)`,
+        'totalReceived',
+      )
+      .addSelect(
+        `COALESCE(SUM(CASE WHEN detail.type = :paidType AND detail.category <> :transferCategory THEN detail.amount ELSE 0 END), 0)`,
+        'totalPaid',
+      )
+      .addSelect(
+        `COUNT(CASE WHEN detail.type = :receivedType AND detail.category <> :transferCategory THEN 1 END)`,
+        'receivedCount',
+      )
+      .addSelect(
+        `COUNT(CASE WHEN detail.type = :paidType AND detail.category <> :transferCategory THEN 1 END)`,
+        'paidCount',
+      )
+      .addSelect(
+        `COALESCE(SUM(CASE WHEN detail.type = :receivedType AND detail.category = :transferCategory THEN detail.amount ELSE 0 END), 0)`,
+        'transferIn',
+      )
+      .addSelect(
+        `COALESCE(SUM(CASE WHEN detail.type = :paidType AND detail.category = :transferCategory THEN detail.amount ELSE 0 END), 0)`,
+        'transferOut',
+      )
+      .addSelect(
+        `COUNT(CASE WHEN detail.type = :receivedType AND detail.category = :transferCategory THEN 1 END)`,
+        'transferInCount',
+      )
+      .addSelect(
+        `COUNT(CASE WHEN detail.type = :paidType AND detail.category = :transferCategory THEN 1 END)`,
+        'transferOutCount',
+      )
+      .setParameters({ receivedType, paidType, transferCategory });
+
+    const breakdownQuery = baseQuery
+      .clone()
+      .select('detail.type', 'type')
+      .addSelect('detail.category', 'category')
+      .addSelect('COUNT(detail.id)', 'count')
+      .addSelect('COALESCE(SUM(detail.amount), 0)', 'amount')
+      .groupBy('detail.type')
+      .addGroupBy('detail.category')
+      .orderBy('detail.type', 'ASC')
+      .addOrderBy('detail.category', 'ASC');
+
+    const [totals, breakdownRows] = await Promise.all([
+      totalsQuery.getRawOne<{
+        totalReceived: string | number;
+        totalPaid: string | number;
+        receivedCount: string | number;
+        paidCount: string | number;
+        transferIn: string | number;
+        transferOut: string | number;
+        transferInCount: string | number;
+        transferOutCount: string | number;
+      }>(),
+      breakdownQuery.getRawMany<{
+        type: string;
+        category: string;
+        count: string | number;
+        amount: string | number;
+      }>(),
+    ]);
+
+    const totalReceived = Number(totals?.totalReceived || 0);
+    const totalPaid = Number(totals?.totalPaid || 0);
+    const transferIn = Number(totals?.transferIn || 0);
+    const transferOut = Number(totals?.transferOut || 0);
+
+    return {
+      branchId,
+      from: from?.toISOString() || null,
+      to: to?.toISOString() || null,
+      voucherType,
+      summary: {
+        totalReceived,
+        totalPaid,
+        netAmount: totalReceived - totalPaid,
+        receivedCount: Number(totals?.receivedCount || 0),
+        paidCount: Number(totals?.paidCount || 0),
+      },
+      transfers: {
+        transferIn,
+        transferOut,
+        netTransfer: transferIn - transferOut,
+        transferInCount: Number(totals?.transferInCount || 0),
+        transferOutCount: Number(totals?.transferOutCount || 0),
+      },
+      breakdown: breakdownRows.map((row) => ({
+        type: row.type,
+        category: row.category,
+        count: Number(row.count || 0),
+        amount: Number(row.amount || 0),
+      })),
+    };
   }
 
   createReceipt(dto: Omit<CreateMoneyVoucherDto, 'type'>) {
@@ -543,5 +680,79 @@ export class FinanceService {
 
       throw error;
     }
+  }
+
+  private resolveSummaryRange(range: FinanceSummaryRange) {
+    const from = range.from ? new Date(range.from) : null;
+    if (from) {
+      if (Number.isNaN(from.getTime())) {
+        throw new BadRequestException('from must be a valid date');
+      }
+
+      from.setHours(0, 0, 0, 0);
+    }
+
+    const to = range.to ? new Date(range.to) : null;
+    if (to) {
+      if (Number.isNaN(to.getTime())) {
+        throw new BadRequestException('to must be a valid date');
+      }
+
+      to.setHours(23, 59, 59, 999);
+    }
+
+    return { from, to };
+  }
+
+  private normalizeSummaryVoucherType(
+    voucherType?: string,
+  ): FinanceSummaryVoucherType | null {
+    if (!voucherType) {
+      return null;
+    }
+
+    const normalized = voucherType.trim().toUpperCase();
+    const aliases: Record<string, FinanceSummaryVoucherType> = {
+      PT: 'RECEIVED',
+      RECEIVED: 'RECEIVED',
+      PC: 'PAID',
+      PAID: 'PAID',
+      CQ: 'TRANSFER',
+      TRANSFER: 'TRANSFER',
+    };
+    const resolved = aliases[normalized];
+
+    if (!resolved) {
+      throw new BadRequestException(
+        'voucherType must be one of RECEIVED, PAID, TRANSFER, PT, PC, CQ',
+      );
+    }
+
+    return resolved;
+  }
+
+  private applySummaryVoucherTypeFilter(
+    query: any,
+    voucherType: FinanceSummaryVoucherType | null,
+    transferCategory: string,
+  ) {
+    if (!voucherType) {
+      return;
+    }
+
+    if (voucherType === 'TRANSFER') {
+      query.andWhere('detail.category = :transferCategory', {
+        transferCategory,
+      });
+      return;
+    }
+
+    query.andWhere(
+      'detail.type = :voucherType AND detail.category <> :transferCategory',
+      {
+        voucherType,
+        transferCategory,
+      },
+    );
   }
 }

@@ -64,6 +64,7 @@ describe('FinanceService', () => {
     FundDetail: {
       create: jest.fn((data) => ({ id: 'detail-id-1', ...data })),
       save: jest.fn((entity) => Promise.resolve(entity)),
+      createQueryBuilder: jest.fn(),
     },
   };
 
@@ -132,6 +133,178 @@ describe('FinanceService', () => {
 
   it('should be defined', () => {
     expect(service).toBeDefined();
+  });
+
+  describe('summary', () => {
+    function createSummaryQueryBuilder(rawResult?: any) {
+      return {
+        innerJoin: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        select: jest.fn().mockReturnThis(),
+        addSelect: jest.fn().mockReturnThis(),
+        groupBy: jest.fn().mockReturnThis(),
+        addGroupBy: jest.fn().mockReturnThis(),
+        orderBy: jest.fn().mockReturnThis(),
+        addOrderBy: jest.fn().mockReturnThis(),
+        setParameters: jest.fn().mockReturnThis(),
+        getRawOne: jest.fn().mockResolvedValue(rawResult),
+        getRawMany: jest.fn().mockResolvedValue(rawResult),
+      };
+    }
+
+    it('should aggregate received, paid and transfer totals by branch', async () => {
+      const baseQueryBuilder = {
+        innerJoin: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        clone: jest.fn(),
+      };
+      const totalsQueryBuilder = createSummaryQueryBuilder({
+        totalReceived: '1000',
+        totalPaid: '350',
+        receivedCount: '3',
+        paidCount: '2',
+        transferIn: '200',
+        transferOut: '50',
+        transferInCount: '1',
+        transferOutCount: '1',
+      });
+      const breakdownQueryBuilder = createSummaryQueryBuilder([
+        {
+          type: 'RECEIVED',
+          category: 'ORDER_PAYMENT',
+          count: '3',
+          amount: '1000',
+        },
+        {
+          type: 'PAID',
+          category: 'STOCK_IMPORT',
+          count: '2',
+          amount: '350',
+        },
+      ]);
+
+      baseQueryBuilder.clone
+        .mockReturnValueOnce(totalsQueryBuilder)
+        .mockReturnValueOnce(breakdownQueryBuilder);
+      mockRepositories.FundDetail.createQueryBuilder.mockReturnValue(
+        baseQueryBuilder,
+      );
+
+      const result = await service.summary('branch-id-1', {
+        from: '2026-07-01',
+        to: '2026-07-08',
+      });
+
+      expect(mockRepositories.FundDetail.createQueryBuilder).toHaveBeenCalledWith(
+        'detail',
+      );
+      expect(baseQueryBuilder.where).toHaveBeenCalledWith(
+        'fund.branchId = :branchId',
+        { branchId: 'branch-id-1' },
+      );
+      expect(baseQueryBuilder.andWhere).toHaveBeenCalledWith(
+        'detail.createdAt >= :from',
+        { from: expect.any(Date) },
+      );
+      expect(baseQueryBuilder.andWhere).toHaveBeenCalledWith(
+        'detail.createdAt <= :to',
+        { to: expect.any(Date) },
+      );
+      expect(result.summary).toEqual({
+        totalReceived: 1000,
+        totalPaid: 350,
+        netAmount: 650,
+        receivedCount: 3,
+        paidCount: 2,
+      });
+      expect(result.transfers).toEqual({
+        transferIn: 200,
+        transferOut: 50,
+        netTransfer: 150,
+        transferInCount: 1,
+        transferOutCount: 1,
+      });
+      expect(result.breakdown).toEqual([
+        {
+          type: 'RECEIVED',
+          category: 'ORDER_PAYMENT',
+          count: 3,
+          amount: 1000,
+        },
+        {
+          type: 'PAID',
+          category: 'STOCK_IMPORT',
+          count: 2,
+          amount: 350,
+        },
+      ]);
+    });
+
+    it('should filter by voucher type alias', async () => {
+      const baseQueryBuilder = {
+        innerJoin: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        clone: jest.fn(),
+      };
+      const totalsQueryBuilder = createSummaryQueryBuilder({
+        totalReceived: '0',
+        totalPaid: '350',
+        receivedCount: '0',
+        paidCount: '2',
+        transferIn: '0',
+        transferOut: '0',
+        transferInCount: '0',
+        transferOutCount: '0',
+      });
+      const breakdownQueryBuilder = createSummaryQueryBuilder([
+        {
+          type: 'PAID',
+          category: 'STOCK_IMPORT',
+          count: '2',
+          amount: '350',
+        },
+      ]);
+
+      baseQueryBuilder.clone
+        .mockReturnValueOnce(totalsQueryBuilder)
+        .mockReturnValueOnce(breakdownQueryBuilder);
+      mockRepositories.FundDetail.createQueryBuilder.mockReturnValue(
+        baseQueryBuilder,
+      );
+
+      const result = await service.summary('branch-id-1', {
+        voucherType: 'PC',
+      });
+
+      expect(baseQueryBuilder.andWhere).toHaveBeenCalledWith(
+        'detail.type = :voucherType AND detail.category <> :transferCategory',
+        {
+          voucherType: 'PAID',
+          transferCategory: 'TRANSFER',
+        },
+      );
+      expect(result.voucherType).toBe('PAID');
+      expect(result.summary).toEqual({
+        totalReceived: 0,
+        totalPaid: 350,
+        netAmount: -350,
+        receivedCount: 0,
+        paidCount: 2,
+      });
+    });
+
+    it('should require branchId', async () => {
+      await expect(service.summary()).rejects.toThrow('branchId is required');
+    });
+
+    it('should reject invalid voucher type', async () => {
+      await expect(
+        service.summary('branch-id-1', { voucherType: 'OTHER' }),
+      ).rejects.toThrow('voucherType must be one of');
+    });
   });
 
   describe('createMoneyVoucher (Receipt)', () => {

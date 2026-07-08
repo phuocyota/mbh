@@ -917,7 +917,14 @@ Màn `Quản lý tiền` / tab `Thu chi` lấy dữ liệu phiếu thu/chi từ 
 GET /api/finance/receipts/received
 GET /api/finance/receipts/paid
 GET /api/finance/transfers
+GET /api/finance/summary?branchId=branch-id
+GET /api/finance/summary?branchId=branch-id&from=2026-07-01&to=2026-07-08
+GET /api/finance/summary?branchId=branch-id&voucherType=RECEIVED
+GET /api/finance/summary?branchId=branch-id&voucherType=PAID
+GET /api/finance/summary?branchId=branch-id&voucherType=TRANSFER
 ```
+
+`voucherType` optional, nhan `RECEIVED`/`PT` cho phieu thu, `PAID`/`PC` cho phieu chi, `TRANSFER`/`CQ` cho chuyen quy.
 
 Phiếu thu phát sinh từ đơn hàng sẽ có `orderId` và relation `order`; FE dùng các field này làm tham chiếu đơn hàng thay vì parse chuỗi `note`.
 
