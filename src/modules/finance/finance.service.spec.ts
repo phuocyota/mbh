@@ -346,7 +346,7 @@ describe('FinanceService', () => {
 
       expect(mockRepositories.Fund.save).toHaveBeenCalledWith(
         expect.objectContaining({
-          balance: 1200,
+          balance: 1000,
           debit: 700,
         }),
       );
@@ -435,7 +435,7 @@ describe('FinanceService', () => {
 
       expect(mockRepositories.Fund.save).toHaveBeenCalledWith(
         expect.objectContaining({
-          balance: 700,
+          balance: 1000,
           credit: 500,
         }),
       );
@@ -463,6 +463,39 @@ describe('FinanceService', () => {
       );
 
       expect(result).toBeDefined();
+    });
+
+    it('should create payment when fund balance is zero and post to credit', async () => {
+      const dto = {
+        type: 'PAYMENT',
+        fundId: 'fund-id-1',
+        amount: 300,
+        purpose: 'STOCK_IMPORT',
+        note: 'Import payment',
+      };
+
+      mockRepositories.Fund.findOne.mockResolvedValueOnce({
+        id: 'fund-id-1',
+        branchId: 'branch-id-1',
+        accountCode: '1111',
+        balance: 0,
+        debit: 0,
+        credit: 0,
+      });
+
+      await service.createMoneyVoucher(dto);
+
+      expect(mockRepositories.Fund.save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          balance: 0,
+          credit: 300,
+        }),
+      );
+      expect(mockRepositories.FundTransaction.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          balanceAfter: 0,
+        }),
+      );
     });
   });
 

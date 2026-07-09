@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { FindOptionsWhere, In, Repository } from 'typeorm';
+import { parseAccountingFormula } from '../../common/utils/accounting-formula.utils';
 import {
   Debt,
   Fund,
@@ -27,7 +28,6 @@ import {
   createMoneyVoucherCode,
   DEBT_TRANSACTION_TYPE,
   defaultAccountingSourceType,
-  getFundBalanceAfterVoucher,
   MONEY_VOUCHER_TYPE,
   normalizeMoneyVoucherType,
 } from '../../../packages/accounting/src/index.js';
@@ -333,10 +333,14 @@ export class FinanceService {
     }
 
     const amount = Number(dto.amount);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      throw new BadRequestException(
+        'Money voucher amount must be greater than 0',
+      );
+    }
+
     const currentBalance = Number(fund.balance || 0);
-    const nextBalance = this.mapAccountingRule(() =>
-      getFundBalanceAfterVoucher({ type, currentBalance, amount }),
-    );
+    const postingSide = this.resolveFundPostingSide(reason, fund, type);
 
     const voucher = await this.moneyVoucherRepository.save(
       this.moneyVoucherRepository.create({
@@ -354,10 +358,9 @@ export class FinanceService {
       }),
     );
 
-    fund.balance = nextBalance;
-    if (type === MONEY_VOUCHER_TYPE.RECEIPT) {
+    if (postingSide === 'debit') {
       fund.debit = Number(fund.debit || 0) + amount;
-    } else if (type === MONEY_VOUCHER_TYPE.PAYMENT) {
+    } else {
       fund.credit = Number(fund.credit || 0) + amount;
     }
     await this.fundRepository.save(fund);
@@ -367,7 +370,7 @@ export class FinanceService {
         fundId: fund.id,
         type,
         amount,
-        balanceAfter: nextBalance,
+        balanceAfter: currentBalance,
         refType: defaultAccountingSourceType(dto.refType),
         refId: voucher.id,
         orderId: dto.orderId,
@@ -731,6 +734,27 @@ export class FinanceService {
 
       throw error;
     }
+  }
+
+  private resolveFundPostingSide(
+    reason: StockFundReceiptReason | null,
+    fund: Fund,
+    type: string,
+  ): 'debit' | 'credit' {
+    const fundAccountCodes = [fund.accountCode, fund.code].filter(Boolean);
+    const formulaEntry = parseAccountingFormula(reason?.accountingFormula).find(
+      (entry) => fundAccountCodes.includes(entry.accountCode),
+    );
+
+    if (formulaEntry?.sign === '+') {
+      return 'credit';
+    }
+
+    if (formulaEntry?.sign === '-') {
+      return 'debit';
+    }
+
+    return type === MONEY_VOUCHER_TYPE.RECEIPT ? 'debit' : 'credit';
   }
 
   private resolveSummaryRange(range: FinanceSummaryRange) {
