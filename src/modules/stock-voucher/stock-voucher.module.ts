@@ -8,6 +8,8 @@ import {
   Stock,
   StockItem,
   StockFundReceiptReason,
+  MoneyVoucher,
+  FundReceiptPaid,
 } from '../../entities';
 import { FinanceModule } from '../finance/finance.module';
 import { SupplierModule } from '../supplier/supplier.module';
@@ -24,6 +26,8 @@ import { StockVoucherService } from './stock-voucher.service';
       Stock,
       StockItem,
       StockFundReceiptReason,
+      MoneyVoucher,
+      FundReceiptPaid,
     ]),
     FinanceModule,
     SupplierModule,

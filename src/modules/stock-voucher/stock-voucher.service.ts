@@ -3,7 +3,7 @@ import {
   Injectable,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, EntityManager, Repository } from 'typeorm';
+import { DataSource, EntityManager, In, Repository } from 'typeorm';
 import {
   StockReceiptDetail,
   StockReceiptImport,
@@ -12,6 +12,8 @@ import {
   Stock,
   StockItem,
   StockFundReceiptReason,
+  MoneyVoucher,
+  FundReceiptPaid,
 } from '../../entities';
 import { CreateStockVoucherDto } from './dto/create-stock-voucher.dto';
 import { FinanceService } from '../finance/finance.service';
@@ -45,6 +47,10 @@ export class StockVoucherService {
     private stockItemRepository: Repository<StockItem>,
     @InjectRepository(StockFundReceiptReason)
     private stockFundReceiptReasonRepository: Repository<StockFundReceiptReason>,
+    @InjectRepository(MoneyVoucher)
+    private moneyVoucherRepository: Repository<MoneyVoucher>,
+    @InjectRepository(FundReceiptPaid)
+    private fundReceiptPaidRepository: Repository<FundReceiptPaid>,
     private supplierService: SupplierService,
     private financeService: FinanceService,
     private dataSource: DataSource,
@@ -79,8 +85,9 @@ export class StockVoucherService {
     }
 
     const [data, total] = await query.getManyAndCount();
+    const hydratedData = await this.attachPaymentVouchers(data);
 
-    return toPaginationResponse(data, total, pagination.page, pagination.size);
+    return toPaginationResponse(hydratedData, total, pagination.page, pagination.size);
   }
 
   createImportVoucher(dto: Omit<CreateStockVoucherDto, 'type'>) {
@@ -291,6 +298,79 @@ export class StockVoucherService {
     await stockItemRepo.save(stockItem);
   }
 
+  private async attachPaymentVouchers(
+    details: StockReceiptDetail[],
+    manager?: EntityManager,
+  ) {
+    const importReceiptIds = [
+      ...new Set(
+        details
+          .map((detail) => detail.importReceipt?.id || detail.importId)
+          .filter((id): id is string => !!id),
+      ),
+    ];
+
+    if (!importReceiptIds.length) {
+      return details;
+    }
+
+    const moneyVoucherRepo = manager
+      ? manager.getRepository(MoneyVoucher)
+      : this.moneyVoucherRepository;
+    const paymentVouchers = await moneyVoucherRepo.find({
+      where: [
+        {
+          type: MONEY_VOUCHER_TYPE.PAYMENT,
+          refType: ACCOUNTING_SOURCE_TYPE.STOCK_VOUCHER,
+          refId: In(importReceiptIds),
+        },
+        {
+          type: MONEY_VOUCHER_TYPE.PAYMENT,
+          refType: ACCOUNTING_SOURCE_TYPE.STOCK_RECEIPT_DETAIL,
+          refId: In(importReceiptIds),
+        },
+      ],
+      relations: ['fund', 'supplier', 'customer', 'order'],
+    });
+    const voucherByReceiptId = new Map(
+      paymentVouchers.map((voucher) => [voucher.refId, voucher]),
+    );
+    const paidReceiptRepo = manager
+      ? manager.getRepository(FundReceiptPaid)
+      : this.fundReceiptPaidRepository;
+    const paymentVoucherIds = paymentVouchers.map((voucher) => voucher.id);
+    const paidReceipts = paymentVoucherIds.length
+      ? await paidReceiptRepo.find({
+          where: { moneyVoucherId: In(paymentVoucherIds) },
+          relations: ['fund', 'details'],
+        })
+      : [];
+    const paidReceiptByMoneyVoucherId = new Map(
+      paidReceipts.map((receipt) => [receipt.moneyVoucherId, receipt]),
+    );
+
+    return details.map((detail) => {
+      const importReceipt = detail.importReceipt;
+      if (!importReceipt) {
+        return detail;
+      }
+
+      const paymentVoucher = voucherByReceiptId.get(importReceipt.id);
+      if (!paymentVoucher) {
+        return detail;
+      }
+
+      (importReceipt as any).paymentVoucher = paymentVoucher;
+      (importReceipt as any).moneyVoucher = paymentVoucher;
+      const paidReceipt = paidReceiptByMoneyVoucherId.get(paymentVoucher.id);
+      if (paidReceipt) {
+        (importReceipt as any).paidReceipt = paidReceipt;
+        (importReceipt as any).paymentReceipt = paidReceipt;
+      }
+      return detail;
+    });
+  }
+
   async createVoucher(dto: CreateStockVoucherDto, manager?: EntityManager) {
     const executor = async (trx: EntityManager) => {
       const type = dto.type.toUpperCase();
@@ -492,7 +572,7 @@ export class StockVoucherService {
           (type === 'IMPORT' && isPaidSupplierImport))
       ) {
         const posting = this.getReasonPosting(reason, `${type} voucher`);
-        const moneyVoucher = await this.financeService.createMoneyVoucher(
+        await this.financeService.createMoneyVoucher(
           {
             type:
               type === 'IMPORT'
@@ -506,9 +586,10 @@ export class StockVoucherService {
               type === 'IMPORT'
                 ? ACCOUNTING_PURPOSE.STOCK_IMPORT
                 : ACCOUNTING_PURPOSE.STOCK_EXPORT,
-            refType: dto.referenceType === 'order'
-              ? ACCOUNTING_SOURCE_TYPE.ORDER
-              : ACCOUNTING_SOURCE_TYPE.STOCK_RECEIPT_DETAIL,
+            refType:
+              dto.referenceType === 'order'
+                ? ACCOUNTING_SOURCE_TYPE.ORDER
+                : ACCOUNTING_SOURCE_TYPE.STOCK_VOUCHER,
             refId: dto.referenceId || headerReceipt.id,
             note: dto.note,
             debitAccountCode: posting.debitAccountCode,
@@ -526,10 +607,12 @@ export class StockVoucherService {
             ? 'exportReceipt'
             : 'transferReceipt';
 
-      return detailRepo.find({
+      const result = await detailRepo.find({
         where: savedDetails.map((detail) => ({ id: detail.id })),
         relations: ['product', receiptRelation],
       });
+
+      return this.attachPaymentVouchers(result, trx);
     };
 
     if (manager) {

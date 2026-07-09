@@ -423,6 +423,7 @@ export class FinanceService {
             amount,
             fundId: fund.id,
             orderId: dto.orderId,
+            moneyVoucherId: voucher.id,
             note: receiptNote,
             status: 'COMPLETED',
           }),
