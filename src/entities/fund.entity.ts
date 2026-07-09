@@ -1,14 +1,15 @@
-import { Entity, Column, ManyToOne, JoinColumn } from 'typeorm';
+import { Entity, Column, ManyToOne, JoinColumn, Unique } from 'typeorm';
 import { BaseEntity } from '../common/sql/base.entity';
 import { Branch } from './branch.entity';
 import { DEFAULT_BRANCH_ID } from '../common/constant/default-branch.constant';
 
 @Entity('funds')
+@Unique('UQ_funds_code_branch_id', ['code', 'branchId'])
 export class Fund extends BaseEntity {
   @Column('uuid', { name: 'branch_id', default: DEFAULT_BRANCH_ID })
   branchId: string;
 
-  @Column('varchar', { unique: true })
+  @Column('varchar')
   code: string;
 
   @Column('varchar')

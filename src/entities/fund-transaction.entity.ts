@@ -16,12 +16,6 @@ export class FundTransaction extends BaseEntity {
   @Column('numeric', { precision: 15, scale: 2, name: 'balance_after' })
   balanceAfter: number;
 
-  @Column('varchar', { name: 'debit_account_code', nullable: true })
-  debitAccountCode: string;
-
-  @Column('varchar', { name: 'credit_account_code', nullable: true })
-  creditAccountCode: string;
-
   @Column('varchar', { name: 'ref_type', nullable: true })
   refType: string;
 

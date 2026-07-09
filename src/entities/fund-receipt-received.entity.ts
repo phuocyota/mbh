@@ -4,6 +4,7 @@ import { Branch } from './branch.entity';
 import { Fund } from './fund.entity';
 import { FundDetail } from './fund-detail.entity';
 import { Order } from './order.entity';
+import { MoneyVoucher } from './money-voucher.entity';
 import { DEFAULT_BRANCH_ID } from '../common/constant/default-branch.constant';
 
 @Entity('fund_receipt_received')
@@ -23,6 +24,9 @@ export class FundReceiptReceived extends BaseEntity {
   @Column('uuid', { name: 'order_id', nullable: true })
   orderId: string;
 
+  @Column('uuid', { name: 'money_voucher_id', nullable: true })
+  moneyVoucherId: string;
+
   @Column('varchar', { default: 'COMPLETED' })
   status: string; // DRAFT, COMPLETED, CANCELLED
 
@@ -40,6 +44,10 @@ export class FundReceiptReceived extends BaseEntity {
   @ManyToOne(() => Order, { nullable: true })
   @JoinColumn({ name: 'order_id' })
   order: Order;
+
+  @ManyToOne(() => MoneyVoucher, { nullable: true })
+  @JoinColumn({ name: 'money_voucher_id' })
+  moneyVoucher: MoneyVoucher;
 
   @OneToMany(() => FundDetail, (detail) => detail.receivedReceipt, { cascade: true })
   details: FundDetail[];

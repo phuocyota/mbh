@@ -182,10 +182,6 @@ export class OrderService {
         payment.transactionCode ||
         createOrderDto.transactionCode ||
         createOrderDto.transId,
-      debitAccountCode:
-        payment.debitAccountCode || createOrderDto.debitAccountCode,
-      creditAccountCode:
-        payment.creditAccountCode || createOrderDto.creditAccountCode,
     };
   }
 

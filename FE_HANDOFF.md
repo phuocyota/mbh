@@ -992,8 +992,6 @@ type MoneyVoucherListItem = {
   voucherType: 'RECEIVED' | 'PAID';
   type: 'RECEIPT' | 'PAYMENT';
   purpose?: string;
-  debitAccountCode?: string;
-  creditAccountCode?: string;
   refType?: string;
   refId?: string;
   orderId?: string;
@@ -1029,8 +1027,6 @@ Vi du:
   "voucherType": "RECEIVED",
   "type": "RECEIPT",
   "purpose": "STOCK_EXPORT",
-  "debitAccountCode": "1111",
-  "creditAccountCode": "5111",
   "orderId": "order-id",
   "note": "Xuat kho theo don hang ORD1782893498031",
   "description": "Xuat kho theo don hang ORD1782893498031"

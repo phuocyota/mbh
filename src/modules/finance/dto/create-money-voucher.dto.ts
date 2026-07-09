@@ -46,16 +46,6 @@ export class CreateMoneyVoucherDto {
   @ApiProperty({ required: false })
   @IsOptional()
   @IsString()
-  debitAccountCode?: string;
-
-  @ApiProperty({ required: false })
-  @IsOptional()
-  @IsString()
-  creditAccountCode?: string;
-
-  @ApiProperty({ required: false })
-  @IsOptional()
-  @IsString()
   refType?: string;
 
   @ApiProperty({ required: false })

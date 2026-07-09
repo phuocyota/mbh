@@ -205,21 +205,18 @@ export class WalletService extends BaseService<Wallet> {
           fundId,
         );
 
-        await this.financeService.createMoneyVoucher(
-          {
-            type: MONEY_VOUCHER_TYPE.RECEIPT,
-            fundId: resolvedFundId,
-            amount: recoveredDebtAmount,
-            customerId,
-            purpose: ACCOUNTING_PURPOSE.CUSTOMER_DEBT_COLLECTION,
-            refType: ACCOUNTING_SOURCE_TYPE.WALLET_TRANSACTION,
-            refId: savedTx.id,
-            note:
-              note ||
-              `Thu tien cong no khach hang ${customer.customerCode || customer.fullName}`,
-          },
-          manager,
-        );
+        await this.financeService.createMoneyVoucher({
+          type: MONEY_VOUCHER_TYPE.RECEIPT,
+          fundId: resolvedFundId,
+          amount: recoveredDebtAmount,
+          customerId,
+          purpose: ACCOUNTING_PURPOSE.CUSTOMER_DEBT_COLLECTION,
+          refType: ACCOUNTING_SOURCE_TYPE.WALLET_TRANSACTION,
+          refId: savedTx.id,
+          note:
+            note ||
+            `Thu tien cong no khach hang ${customer.customerCode || customer.fullName}`,
+        });
       }
 
       return {

@@ -1,9 +1,7 @@
-import {
-  BadRequestException,
-  Injectable,
-} from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, EntityManager, In, Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
+import { parseAccountingFormula } from '../../common/utils/accounting-formula.utils';
 import {
   StockReceiptDetail,
   StockReceiptImport,
@@ -12,12 +10,21 @@ import {
   Stock,
   StockItem,
   StockFundReceiptReason,
+  Fund,
   MoneyVoucher,
   FundReceiptPaid,
+  FundReceiptReceived,
 } from '../../entities';
 import { CreateStockVoucherDto } from './dto/create-stock-voucher.dto';
+import {
+  STOCK_PARTY_TYPE,
+  STOCK_PAYMENT_STATUS,
+  STOCK_VOUCHER_STATUS,
+  STOCK_VOUCHER_TYPE,
+} from './stock-voucher.constants';
 import { FinanceService } from '../finance/finance.service';
 import { SupplierService } from '../supplier/supplier.service';
+import { StockService } from '../stock/stock.service';
 import { DEFAULT_BRANCH_ID } from '../../common/constant/default-branch.constant';
 import { PAYMENT_METHOD } from '../../common/constant/constant';
 import {
@@ -25,7 +32,10 @@ import {
   ACCOUNTING_SOURCE_TYPE,
   MONEY_VOUCHER_TYPE,
 } from '../../../packages/accounting/src/index.js';
-import { normalizePagination, toPaginationResponse } from '../../common/dto/pagination.dto';
+import {
+  normalizePagination,
+  toPaginationResponse,
+} from '../../common/dto/pagination.dto';
 
 const DEFERRED_SALE_REASON_CODE = 'BH_TRA_CHAM';
 const SUPPLIER_IMPORT_REASON_CODE = 'NHNCC';
@@ -41,19 +51,21 @@ export class StockVoucherService {
     private stockReceiptExportRepository: Repository<StockReceiptExport>,
     @InjectRepository(StockReceiptTransfer)
     private stockReceiptTransferRepository: Repository<StockReceiptTransfer>,
-    @InjectRepository(Stock)
-    private stockRepository: Repository<Stock>,
-    @InjectRepository(StockItem)
-    private stockItemRepository: Repository<StockItem>,
     @InjectRepository(StockFundReceiptReason)
     private stockFundReceiptReasonRepository: Repository<StockFundReceiptReason>,
+    @InjectRepository(StockItem)
+    private stockItemRepository: Repository<StockItem>,
+    @InjectRepository(Fund)
+    private fundRepository: Repository<Fund>,
     @InjectRepository(MoneyVoucher)
     private moneyVoucherRepository: Repository<MoneyVoucher>,
     @InjectRepository(FundReceiptPaid)
     private fundReceiptPaidRepository: Repository<FundReceiptPaid>,
+    @InjectRepository(FundReceiptReceived)
+    private fundReceiptReceivedRepository: Repository<FundReceiptReceived>,
     private supplierService: SupplierService,
     private financeService: FinanceService,
-    private dataSource: DataSource,
+    private stockService: StockService,
   ) {}
 
   async findAll(
@@ -85,28 +97,26 @@ export class StockVoucherService {
     }
 
     const [data, total] = await query.getManyAndCount();
-    const hydratedData = await this.attachPaymentVouchers(data);
+    const hydratedData = await this.attachMoneyVouchers(data);
 
-    return toPaginationResponse(hydratedData, total, pagination.page, pagination.size);
+    return toPaginationResponse(
+      hydratedData,
+      total,
+      pagination.page,
+      pagination.size,
+    );
   }
 
   createImportVoucher(dto: Omit<CreateStockVoucherDto, 'type'>) {
-    return this.createVoucher({ ...dto, type: 'IMPORT' });
+    return this.createVoucher({ ...dto, type: STOCK_VOUCHER_TYPE.IMPORT });
   }
 
   createExportVoucher(dto: Omit<CreateStockVoucherDto, 'type'>) {
-    return this.createVoucher({ ...dto, type: 'EXPORT' });
+    return this.createVoucher({ ...dto, type: STOCK_VOUCHER_TYPE.EXPORT });
   }
 
-  async createExportFromOrder(
-    order: any,
-    payment: any,
-    manager?: EntityManager,
-  ) {
-    const exportRepo = manager
-      ? manager.getRepository(StockReceiptExport)
-      : this.stockReceiptExportRepository;
-    const existingExport = await exportRepo.findOne({
+  async createExportFromOrder(order: any, payment: any) {
+    const existingExport = await this.stockReceiptExportRepository.findOne({
       where: { referenceId: order.id, referenceType: 'order' },
     });
     if (existingExport) {
@@ -126,26 +136,26 @@ export class StockVoucherService {
       return null;
     }
 
-    const isCustomerAdvanceOffset = this.isCustomerAdvanceOffset(order, payment);
+    const isCustomerAdvanceOffset = this.isCustomerAdvanceOffset(
+      order,
+      payment,
+    );
     const reasonCode = isCustomerAdvanceOffset
       ? DEFERRED_SALE_REASON_CODE
       : this.getSalesReasonCode(payment?.method);
 
-    return this.createVoucher(
-      {
-        branchId: order.branchId,
-        type: 'EXPORT',
-        sourceId: order.customerId,
-        sourceType: order.customerId ? 'CUSTOMER' : undefined,
-        referenceId: order.id,
-        referenceType: 'order',
-        fundId: isCustomerAdvanceOffset ? undefined : payment?.fundId,
-        reasonCode,
-        note: `Xuất kho theo đơn hàng ${order.orderCode}`,
-        items,
-      },
-      manager,
-    );
+    return this.createVoucher({
+      branchId: order.branchId,
+      type: STOCK_VOUCHER_TYPE.EXPORT,
+      sourceId: order.customerId,
+      sourceType: order.customerId ? STOCK_PARTY_TYPE.CUSTOMER : undefined,
+      referenceId: order.id,
+      referenceType: 'order',
+      fundId: isCustomerAdvanceOffset ? undefined : payment?.fundId,
+      reasonCode,
+      note: `Xuất kho theo đơn hàng ${order.orderCode}`,
+      items,
+    });
   }
 
   private isCustomerAdvanceOffset(order: any, payment: any) {
@@ -177,66 +187,68 @@ export class StockVoucherService {
     return paymentMethod ? paymentMethodToReasonCode[paymentMethod] : undefined;
   }
 
-  private async resolveReceiptReason(
-    code: string | undefined,
-    manager?: EntityManager,
-  ) {
+  private async resolveReceiptReason(code: string | undefined) {
     if (!code) {
       return null;
     }
 
-    const reasonRepo = manager
-      ? manager.getRepository(StockFundReceiptReason)
-      : this.stockFundReceiptReasonRepository;
-
-    return reasonRepo.findOne({
+    return this.stockFundReceiptReasonRepository.findOne({
       where: { code },
     });
   }
 
-  private getFormulaAccount(
-    formula: string | undefined | null,
-    sign: '+' | '-',
+  private async resolveSupplierImportReason(
+    dto: CreateStockVoucherDto,
+    isDebt: boolean,
   ) {
-    if (!formula) {
-      return undefined;
-    }
+    const reasonCode = dto.reasonCode || SUPPLIER_IMPORT_REASON_CODE;
+    const reason = await this.stockFundReceiptReasonRepository.findOne({
+      where: {
+        code: reasonCode,
+        isDebt,
+        status: 'active',
+      },
+    });
 
-    const entries = formula.replace(/[{}]/g, '').split(',');
-    for (const entry of entries) {
-      const [accountCode, entrySign] = entry.split(':').map((part) => part.trim());
-      if (accountCode && entrySign === sign) {
-        return accountCode;
-      }
-    }
-
-    return undefined;
-  }
-
-  private getReasonPosting(
-    reason: StockFundReceiptReason | null,
-    context: string,
-  ) {
-    const debitAccountCode = this.getFormulaAccount(
-      reason?.accountingFormula,
-      '-',
-    );
-    const creditAccountCode = this.getFormulaAccount(
-      reason?.accountingFormula,
-      '+',
-    );
-
-    if (!reason || !debitAccountCode || !creditAccountCode) {
+    if (!reason) {
       throw new BadRequestException(
-        `Accounting formula is required for ${context}`,
+        `Active supplier import reason is not configured: code=${reasonCode}, isDebt=${isDebt}`,
       );
     }
 
-    return { debitAccountCode, creditAccountCode };
+    return reason;
   }
 
-  private isSupplierImport(dto: CreateStockVoucherDto) {
-    return this.getSourceType(dto) === 'SUPPLIER' && !!this.getSourceId(dto);
+  private async resolveFundFromReasonFormula(
+    reason: StockFundReceiptReason,
+    branchId: string,
+  ) {
+    const formulaEntries = parseAccountingFormula(reason.accountingFormula);
+    const accountCodes = [
+      ...new Set(formulaEntries.map((entry) => entry.accountCode)),
+    ];
+
+    if (accountCodes.length === 0) {
+      throw new BadRequestException(
+        `Accounting formula is required for reason: ${reason.code}`,
+      );
+    }
+
+    const funds = await this.fundRepository.find({
+      where: {
+        code: In(accountCodes),
+        branchId,
+        status: 'active',
+      },
+    });
+
+    if (funds.length !== 1) {
+      throw new BadRequestException(
+        `Exactly one active fund must match reason ${reason.code} in branch ${branchId}`,
+      );
+    }
+
+    return funds[0];
   }
 
   private getSourceId(dto: CreateStockVoucherDto) {
@@ -249,31 +261,21 @@ export class StockVoucherService {
 
   private isPaidSupplierImport(dto: CreateStockVoucherDto) {
     const paymentStatus = String(dto.paymentStatus || '').toUpperCase();
-    if (['DEBT', 'UNPAID', 'CREDIT'].includes(paymentStatus)) {
+    if (paymentStatus === STOCK_PAYMENT_STATUS.PAID) {
+      return true;
+    }
+
+    if (
+      [STOCK_PAYMENT_STATUS.UNPAID, STOCK_PAYMENT_STATUS.DEBT].includes(
+        paymentStatus as any,
+      )
+    ) {
       return false;
     }
 
-    return (
-      !!dto.fundId ||
-      dto.isPaid === true ||
-      ['PAID', 'PAID_NOW', 'IMMEDIATE', 'CASH'].includes(paymentStatus)
+    throw new BadRequestException(
+      'paymentStatus must be PAID, UNPAID or DEBT for supplier import',
     );
-  }
-
-  private async getOrCreateBranchStock(
-    stockRepo: Repository<Stock>,
-    branchId: string,
-  ): Promise<Stock> {
-    let stock = await stockRepo.findOne({ where: { branchId } });
-    if (!stock) {
-      stock = await stockRepo.save(
-        stockRepo.create({
-          name: `Kho Chi Nhánh`,
-          branchId,
-        }),
-      );
-    }
-    return stock;
   }
 
   private async updateStockItemQuantity(
@@ -298,10 +300,129 @@ export class StockVoucherService {
     await stockItemRepo.save(stockItem);
   }
 
-  private async attachPaymentVouchers(
-    details: StockReceiptDetail[],
-    manager?: EntityManager,
+  private async incrementStockItemsBulk(
+    stockItemRepo: Repository<StockItem>,
+    stockId: string,
+    items: Array<{ productId: string; quantity: number }>,
   ) {
+    if (items.length === 0) {
+      return;
+    }
+
+    await stockItemRepo
+      .createQueryBuilder()
+      .insert()
+      .into(StockItem)
+      .values(
+        items.map((item) => ({
+          stockId,
+          productId: item.productId,
+          quantity: item.quantity,
+        })),
+      )
+      .onConflict(
+        '("stock_id", "product_id") DO UPDATE SET "quantity" = "stock_items"."quantity" + EXCLUDED."quantity"',
+      )
+      .execute();
+  }
+
+  private async createSupplierImportVoucher(
+    dto: CreateStockVoucherDto,
+    params: {
+      branchId: string;
+      sourceId: string;
+      sourceType: string;
+    },
+  ) {
+    const { branchId, sourceId, sourceType } = params;
+    const totalAmount = dto.items.reduce((sum, item) => {
+      return sum + Number(item.quantity) * Number(item.unitPrice || 0);
+    }, 0);
+    const isPaid = this.isPaidSupplierImport(dto);
+    const reason = await this.resolveSupplierImportReason(dto, !isPaid);
+    const paymentStatus = isPaid
+      ? STOCK_PAYMENT_STATUS.PAID
+      : STOCK_PAYMENT_STATUS.DEBT;
+    const branchStock =
+      await this.stockService.getOrCreateBranchStock(branchId);
+    const resolvedFund = isPaid
+      ? await this.resolveFundFromReasonFormula(reason, branchId)
+      : null;
+
+    const headerReceipt = await this.stockReceiptImportRepository.save(
+      this.stockReceiptImportRepository.create({
+        code: `NK${Date.now()}`,
+        branchId,
+        fromId: sourceId,
+        fromType: sourceType,
+        referenceId: dto.referenceId,
+        referenceType: dto.referenceType,
+        reasonCode: reason.code,
+        paymentStatus,
+        totalAmount,
+        status: STOCK_VOUCHER_STATUS.COMPLETED,
+        note: dto.note,
+      }),
+    );
+
+    const detailEntities = this.stockReceiptDetailRepository.create(
+      dto.items.map((dtoItem) => ({
+        productId: dtoItem.productId,
+        quantity: Number(dtoItem.quantity),
+        receiptType: STOCK_VOUCHER_TYPE.IMPORT,
+        fromId: sourceId,
+        toId: branchId,
+        fromType: sourceType,
+        toType: STOCK_PARTY_TYPE.BRANCH,
+        importId: headerReceipt.id,
+      })),
+    );
+    const savedDetails =
+      await this.stockReceiptDetailRepository.save(detailEntities);
+
+    await this.incrementStockItemsBulk(
+      this.stockItemRepository,
+      branchStock.id,
+      dto.items.map((item) => ({
+        productId: item.productId,
+        quantity: Number(item.quantity),
+      })),
+    );
+
+    if (totalAmount > 0) {
+      if (isPaid) {
+        await this.supplierService.recordPurchase(sourceId, totalAmount);
+        await this.financeService.createMoneyVoucher({
+          type: MONEY_VOUCHER_TYPE.PAYMENT,
+          fundId: resolvedFund!.id,
+          amount: totalAmount,
+          supplierId: sourceId,
+          purpose: ACCOUNTING_PURPOSE.STOCK_IMPORT,
+          reasonCode: reason.code,
+          refType: ACCOUNTING_SOURCE_TYPE.STOCK_VOUCHER,
+          refId: headerReceipt.id,
+          note: dto.note,
+        });
+      } else {
+        await this.supplierService.recordPurchaseDebt({
+          supplierId: sourceId,
+          amount: totalAmount,
+          refType: ACCOUNTING_SOURCE_TYPE.STOCK_VOUCHER,
+          refId: headerReceipt.id,
+          note: dto.note,
+        });
+      }
+    }
+
+    const result = await this.stockReceiptDetailRepository.find({
+      where: savedDetails.map((detail) => ({ id: detail.id })),
+      relations: ['product', 'importReceipt'],
+    });
+
+    return this.attachMoneyVouchers(result);
+  }
+
+  private async attachMoneyVouchers(details: StockReceiptDetail[]) {
     const importReceiptIds = [
       ...new Set(
         details
@@ -309,38 +430,107 @@ export class StockVoucherService {
           .filter((id): id is string => !!id),
       ),
     ];
+    const exportReceiptIds = [
+      ...new Set(
+        details
+          .map((detail) => detail.exportReceipt?.id || detail.exportId)
+          .filter((id): id is string => !!id),
+      ),
+    ];
+    const exportOrderIds = [
+      ...new Set(
+        details
+          .map((detail) =>
+            detail.exportReceipt?.referenceType === 'order'
+              ? detail.exportReceipt.referenceId
+              : null,
+          )
+          .filter((id): id is string => !!id),
+      ),
+    ];
 
-    if (!importReceiptIds.length) {
+    if (
+      !importReceiptIds.length &&
+      !exportReceiptIds.length &&
+      !exportOrderIds.length
+    ) {
       return details;
     }
 
-    const moneyVoucherRepo = manager
-      ? manager.getRepository(MoneyVoucher)
-      : this.moneyVoucherRepository;
-    const paymentVouchers = await moneyVoucherRepo.find({
-      where: [
-        {
-          type: MONEY_VOUCHER_TYPE.PAYMENT,
-          refType: ACCOUNTING_SOURCE_TYPE.STOCK_VOUCHER,
-          refId: In(importReceiptIds),
-        },
-        {
-          type: MONEY_VOUCHER_TYPE.PAYMENT,
-          refType: ACCOUNTING_SOURCE_TYPE.STOCK_RECEIPT_DETAIL,
-          refId: In(importReceiptIds),
-        },
-      ],
-      relations: ['fund', 'supplier', 'customer', 'order'],
-    });
-    const voucherByReceiptId = new Map(
-      paymentVouchers.map((voucher) => [voucher.refId, voucher]),
+    const voucherWhere = [
+      ...(importReceiptIds.length
+        ? [
+            {
+              type: MONEY_VOUCHER_TYPE.PAYMENT,
+              refType: ACCOUNTING_SOURCE_TYPE.STOCK_VOUCHER,
+              refId: In(importReceiptIds),
+            },
+            {
+              type: MONEY_VOUCHER_TYPE.PAYMENT,
+              refType: ACCOUNTING_SOURCE_TYPE.STOCK_RECEIPT_DETAIL,
+              refId: In(importReceiptIds),
+            },
+          ]
+        : []),
+      ...(exportReceiptIds.length
+        ? [
+            {
+              type: MONEY_VOUCHER_TYPE.RECEIPT,
+              refType: ACCOUNTING_SOURCE_TYPE.STOCK_VOUCHER,
+              refId: In(exportReceiptIds),
+            },
+            {
+              type: MONEY_VOUCHER_TYPE.RECEIPT,
+              refType: ACCOUNTING_SOURCE_TYPE.STOCK_RECEIPT_DETAIL,
+              refId: In(exportReceiptIds),
+            },
+          ]
+        : []),
+      ...(exportOrderIds.length
+        ? [
+            {
+              type: MONEY_VOUCHER_TYPE.RECEIPT,
+              refType: ACCOUNTING_SOURCE_TYPE.ORDER,
+              refId: In(exportOrderIds),
+            },
+            {
+              type: MONEY_VOUCHER_TYPE.RECEIPT,
+              orderId: In(exportOrderIds),
+            },
+          ]
+        : []),
+    ];
+    const moneyVouchers = voucherWhere.length
+      ? await this.moneyVoucherRepository.find({
+          where: voucherWhere,
+          relations: ['fund', 'supplier', 'customer', 'order'],
+        })
+      : [];
+    const paymentVoucherByImportId = new Map(
+      moneyVouchers
+        .filter((voucher) => voucher.type === MONEY_VOUCHER_TYPE.PAYMENT)
+        .map((voucher) => [voucher.refId, voucher]),
     );
-    const paidReceiptRepo = manager
-      ? manager.getRepository(FundReceiptPaid)
-      : this.fundReceiptPaidRepository;
-    const paymentVoucherIds = paymentVouchers.map((voucher) => voucher.id);
+    const receiptVoucherByExportId = new Map(
+      moneyVouchers
+        .filter((voucher) => voucher.type === MONEY_VOUCHER_TYPE.RECEIPT)
+        .filter((voucher) => exportReceiptIds.includes(voucher.refId))
+        .map((voucher) => [voucher.refId, voucher]),
+    );
+    const receiptVoucherByOrderId = new Map(
+      moneyVouchers
+        .filter((voucher) => voucher.type === MONEY_VOUCHER_TYPE.RECEIPT)
+        .filter(
+          (voucher) =>
+            voucher.orderId || voucher.refType === ACCOUNTING_SOURCE_TYPE.ORDER,
+        )
+        .map((voucher) => [voucher.orderId || voucher.refId, voucher]),
+    );
+    const paymentVoucherIds = moneyVouchers
+      .filter((voucher) => voucher.type === MONEY_VOUCHER_TYPE.PAYMENT)
+      .map((voucher) => voucher.id);
     const paidReceipts = paymentVoucherIds.length
-      ? await paidReceiptRepo.find({
+      ? await this.fundReceiptPaidRepository.find({
           where: { moneyVoucherId: In(paymentVoucherIds) },
           relations: ['fund', 'details'],
         })
@@ -348,277 +538,281 @@ export class StockVoucherService {
     const paidReceiptByMoneyVoucherId = new Map(
       paidReceipts.map((receipt) => [receipt.moneyVoucherId, receipt]),
     );
+    const receiptVoucherIds = moneyVouchers
+      .filter((voucher) => voucher.type === MONEY_VOUCHER_TYPE.RECEIPT)
+      .map((voucher) => voucher.id);
+    const receivedReceipts = receiptVoucherIds.length
+      ? await this.fundReceiptReceivedRepository.find({
+          where: { moneyVoucherId: In(receiptVoucherIds) },
+          relations: ['fund', 'details'],
+        })
+      : [];
+    const receivedReceiptByMoneyVoucherId = new Map(
+      receivedReceipts.map((receipt) => [receipt.moneyVoucherId, receipt]),
+    );
 
     return details.map((detail) => {
       const importReceipt = detail.importReceipt;
-      if (!importReceipt) {
-        return detail;
+      if (importReceipt) {
+        const paymentVoucher = paymentVoucherByImportId.get(importReceipt.id);
+        if (paymentVoucher) {
+          (importReceipt as any).paymentVoucher = paymentVoucher;
+          (importReceipt as any).moneyVoucher = paymentVoucher;
+          const paidReceipt = paidReceiptByMoneyVoucherId.get(
+            paymentVoucher.id,
+          );
+          if (paidReceipt) {
+            (importReceipt as any).paidReceipt = paidReceipt;
+            (importReceipt as any).paymentReceipt = paidReceipt;
+          }
+        }
       }
 
-      const paymentVoucher = voucherByReceiptId.get(importReceipt.id);
-      if (!paymentVoucher) {
-        return detail;
+      const exportReceipt = detail.exportReceipt;
+      if (exportReceipt) {
+        const receiptVoucher =
+          receiptVoucherByExportId.get(exportReceipt.id) ||
+          (exportReceipt.referenceType === 'order'
+            ? receiptVoucherByOrderId.get(exportReceipt.referenceId)
+            : undefined);
+        if (receiptVoucher) {
+          (exportReceipt as any).receiptVoucher = receiptVoucher;
+          (exportReceipt as any).moneyVoucher = receiptVoucher;
+          const receivedReceipt = receivedReceiptByMoneyVoucherId.get(
+            receiptVoucher.id,
+          );
+          if (receivedReceipt) {
+            (exportReceipt as any).receivedReceipt = receivedReceipt;
+            (exportReceipt as any).paymentReceipt = receivedReceipt;
+          }
+        }
       }
 
-      (importReceipt as any).paymentVoucher = paymentVoucher;
-      (importReceipt as any).moneyVoucher = paymentVoucher;
-      const paidReceipt = paidReceiptByMoneyVoucherId.get(paymentVoucher.id);
-      if (paidReceipt) {
-        (importReceipt as any).paidReceipt = paidReceipt;
-        (importReceipt as any).paymentReceipt = paidReceipt;
-      }
       return detail;
     });
   }
 
-  async createVoucher(dto: CreateStockVoucherDto, manager?: EntityManager) {
-    const executor = async (trx: EntityManager) => {
-      const type = dto.type.toUpperCase();
-      if (!['IMPORT', 'EXPORT', 'TRANSFER'].includes(type)) {
-        throw new BadRequestException(
-          'Stock voucher type must be IMPORT, EXPORT or TRANSFER',
-        );
-      }
+  async createVoucher(dto: CreateStockVoucherDto) {
+    const type = dto.type.toUpperCase();
 
-      if (!dto.items || dto.items.length === 0) {
-        throw new BadRequestException('Stock voucher items are required');
-      }
+    const totalAmount = dto.items.reduce((sum, item) => {
+      return sum + Number(item.quantity) * Number(item.unitPrice || 0);
+    }, 0);
 
-      const detailRepo = trx.getRepository(StockReceiptDetail);
-      const importRepo = trx.getRepository(StockReceiptImport);
-      const exportRepo = trx.getRepository(StockReceiptExport);
-      const transferRepo = trx.getRepository(StockReceiptTransfer);
-      const stockRepo = trx.getRepository(Stock);
-      const stockItemRepo = trx.getRepository(StockItem);
-
-      const totalAmount = dto.items.reduce((sum, item) => {
-        return sum + Number(item.quantity) * Number(item.unitPrice || 0);
-      }, 0);
-
-      const branchId = dto.branchId || DEFAULT_BRANCH_ID;
-      const sourceId = this.getSourceId(dto);
-      const sourceType = this.getSourceType(dto);
-      let branchStock: Stock | null = null;
-      let fromStock: Stock | null = null;
-      let toStock: Stock | null = null;
-
-      if (type === 'IMPORT' || type === 'EXPORT') {
-        branchStock = await this.getOrCreateBranchStock(stockRepo, branchId);
-      } else if (type === 'TRANSFER') {
-        const fromBranchId = dto.fromBranchId || branchId;
-        const toBranchId = dto.toBranchId;
-        if (!toBranchId) {
-          throw new BadRequestException(
-            'Destination branch (toBranchId) is required for stock transfers',
-          );
-        }
-        fromStock = await this.getOrCreateBranchStock(stockRepo, fromBranchId);
-        toStock = await this.getOrCreateBranchStock(stockRepo, toBranchId);
-      }
-
-      const isSupplierImport = type === 'IMPORT' && this.isSupplierImport(dto);
-      const isPaidSupplierImport = isSupplierImport && this.isPaidSupplierImport(dto);
-      const reasonCode =
-        dto.reasonCode ||
-        (isPaidSupplierImport ? SUPPLIER_IMPORT_REASON_CODE : undefined);
-      const reason = reasonCode
-        ? await this.resolveReceiptReason(reasonCode, trx)
-        : null;
-      const fundId = dto.fundId || undefined;
-      const paymentStatus = isPaidSupplierImport ? 'PAID' : (isSupplierImport ? 'DEBT' : undefined);
-      const supplierId = sourceType === 'SUPPLIER' && sourceId ? sourceId : undefined;
-
-      let headerReceipt: StockReceiptImport | StockReceiptExport | StockReceiptTransfer;
-
-      if (type === 'IMPORT') {
-        const code = `NK${Date.now()}`;
-        headerReceipt = await importRepo.save(
-          importRepo.create({
-            code,
-            branchId,
-            fromId: sourceId || undefined,
-            fromType: sourceType || undefined,
-            referenceId: dto.referenceId,
-            referenceType: dto.referenceType,
-            reasonCode: reasonCode || undefined,
-            paymentStatus,
-            totalAmount,
-            status: 'COMPLETED',
-            note: dto.note,
-          }),
-        );
-      } else if (type === 'EXPORT') {
-        const code = `XK${Date.now()}`;
-        headerReceipt = await exportRepo.save(
-          exportRepo.create({
-            code,
-            branchId,
-            toId: sourceId || undefined,
-            toType: sourceType || undefined,
-            referenceId: dto.referenceId,
-            referenceType: dto.referenceType,
-            reasonCode: reasonCode || undefined,
-            totalAmount,
-            status: 'COMPLETED',
-            note: dto.note,
-          }),
-        );
-      } else {
-        const code = `CK${Date.now()}`;
-        headerReceipt = await transferRepo.save(
-          transferRepo.create({
-            code,
-            fromBranchId: dto.fromBranchId || branchId,
-            toBranchId: dto.toBranchId!,
-            status: 'COMPLETED',
-            receivedAt: new Date(),
-            totalAmount,
-            note: dto.note,
-          }),
-        );
-      }
-
-      const savedDetails: StockReceiptDetail[] = [];
-
-      for (const dtoItem of dto.items) {
-        const quantity = Number(dtoItem.quantity);
-        const unitPrice = Number(dtoItem.unitPrice || 0);
-        const total = quantity * unitPrice;
-
-        let fromId: string | null = null;
-        let toId: string | null = null;
-        let fromType = 'STOCK';
-        let toType = 'STOCK';
-
-        if (type === 'IMPORT') {
-          fromId = sourceId;
-          fromType = sourceType || 'SUPPLIER';
-          if (sourceType === 'BRANCH' && sourceId) {
-            await this.getOrCreateBranchStock(stockRepo, sourceId);
-          }
-          toId = branchId;
-          toType = 'BRANCH';
-        } else if (type === 'EXPORT') {
-          fromId = branchId;
-          fromType = 'BRANCH';
-          if (sourceType === 'BRANCH' && sourceId) {
-            await this.getOrCreateBranchStock(stockRepo, sourceId);
-            toId = sourceId;
-            toType = 'BRANCH';
-          } else {
-            toId = sourceId || dto.referenceId || null;
-            toType = sourceType || 'CUSTOMER';
-          }
-        } else if (type === 'TRANSFER') {
-          fromId = fromStock!.id;
-          fromType = 'STOCK';
-          toId = toStock!.id;
-          toType = 'STOCK';
-        }
-
-        const detailData = {
-          productId: dtoItem.productId,
-          quantity,
-          receiptType: type,
-          fromId,
-          toId,
-          fromType,
-          toType,
-          importId: type === 'IMPORT' ? headerReceipt.id : undefined,
-          exportId: type === 'EXPORT' ? headerReceipt.id : undefined,
-          transferId: type === 'TRANSFER' ? headerReceipt.id : undefined,
-        };
-
-        const detail = await detailRepo.save(detailRepo.create(detailData as any) as any);
-        savedDetails.push(detail);
-
-        if (dtoItem.productId) {
-          if (type === 'IMPORT') {
-            await this.updateStockItemQuantity(stockItemRepo, branchStock!.id, dtoItem.productId, quantity);
-          } else if (type === 'EXPORT') {
-            await this.updateStockItemQuantity(stockItemRepo, branchStock!.id, dtoItem.productId, -quantity);
-          } else if (type === 'TRANSFER') {
-            await this.updateStockItemQuantity(stockItemRepo, fromId!, dtoItem.productId, -quantity);
-            await this.updateStockItemQuantity(stockItemRepo, toId!, dtoItem.productId, quantity);
-          }
-        }
-      }
-
-      if (isSupplierImport && totalAmount > 0) {
-        if (!supplierId) {
-          throw new BadRequestException('Supplier sourceId is required for supplier import');
-        }
-
-        if (isPaidSupplierImport) {
-          await this.supplierService.recordPurchase(supplierId, totalAmount, trx);
-        } else {
-          await this.supplierService.recordPurchaseDebt(
-            {
-              supplierId,
-              amount: totalAmount,
-              refType: ACCOUNTING_SOURCE_TYPE.STOCK_VOUCHER,
-              refId: headerReceipt.id,
-              note: dto.note,
-            },
-            trx,
-          );
-        }
-      }
-
-      if (
-        fundId &&
-        totalAmount > 0 &&
-        (type === 'EXPORT' ||
-          (type === 'IMPORT' && isPaidSupplierImport))
-      ) {
-        const posting = this.getReasonPosting(reason, `${type} voucher`);
-        await this.financeService.createMoneyVoucher(
-          {
-            type:
-              type === 'IMPORT'
-                ? MONEY_VOUCHER_TYPE.PAYMENT
-                : MONEY_VOUCHER_TYPE.RECEIPT,
-            fundId,
-            amount: totalAmount,
-            orderId: dto.referenceType === 'order' ? dto.referenceId : undefined,
-            supplierId: type === 'IMPORT' ? supplierId : undefined,
-            purpose:
-              type === 'IMPORT'
-                ? ACCOUNTING_PURPOSE.STOCK_IMPORT
-                : ACCOUNTING_PURPOSE.STOCK_EXPORT,
-            refType:
-              dto.referenceType === 'order'
-                ? ACCOUNTING_SOURCE_TYPE.ORDER
-                : ACCOUNTING_SOURCE_TYPE.STOCK_VOUCHER,
-            refId: dto.referenceId || headerReceipt.id,
-            note: dto.note,
-            debitAccountCode: posting.debitAccountCode,
-            creditAccountCode: posting.creditAccountCode,
-          },
-          trx,
-        );
-
-      }
-
-      const receiptRelation =
-        type === 'IMPORT'
-          ? 'importReceipt'
-          : type === 'EXPORT'
-            ? 'exportReceipt'
-            : 'transferReceipt';
-
-      const result = await detailRepo.find({
-        where: savedDetails.map((detail) => ({ id: detail.id })),
-        relations: ['product', receiptRelation],
+    const branchId = dto.branchId || DEFAULT_BRANCH_ID;
+    const sourceId = this.getSourceId(dto);
+    const sourceType = this.getSourceType(dto);
+    if (
+      type === STOCK_VOUCHER_TYPE.IMPORT &&
+      sourceType === STOCK_PARTY_TYPE.SUPPLIER
+    ) {
+      return this.createSupplierImportVoucher(dto, {
+        branchId,
+        sourceId: sourceId!,
+        sourceType,
       });
-
-      return this.attachPaymentVouchers(result, trx);
-    };
-
-    if (manager) {
-      return executor(manager);
     }
 
-    return this.dataSource.transaction(executor);
+    let branchStock: Stock | null = null;
+    let fromStock: Stock | null = null;
+    let toStock: Stock | null = null;
+
+    if (
+      type === STOCK_VOUCHER_TYPE.IMPORT ||
+      type === STOCK_VOUCHER_TYPE.EXPORT
+    ) {
+      branchStock = await this.stockService.getOrCreateBranchStock(branchId);
+    } else if (type === STOCK_VOUCHER_TYPE.TRANSFER) {
+      if (!dto.fromBranchId || !dto.toBranchId) {
+        throw new BadRequestException(
+          'Both fromBranchId and toBranchId are required for stock transfers',
+        );
+      }
+      fromStock = await this.stockService.getOrCreateBranchStock(
+        dto.fromBranchId,
+      );
+      toStock = await this.stockService.getOrCreateBranchStock(dto.toBranchId);
+    }
+
+    const reason = dto.reasonCode
+      ? await this.resolveReceiptReason(dto.reasonCode)
+      : null;
+    const reasonCode = reason?.code || dto.reasonCode || undefined;
+    const fundId = dto.fundId || undefined;
+    const supplierId =
+      sourceType === STOCK_PARTY_TYPE.SUPPLIER && sourceId
+        ? sourceId
+        : undefined;
+
+    let headerReceipt:
+      | StockReceiptImport
+      | StockReceiptExport
+      | StockReceiptTransfer;
+
+    if (type === STOCK_VOUCHER_TYPE.IMPORT) {
+      const code = `NK${Date.now()}`;
+      headerReceipt = await this.stockReceiptImportRepository.save(
+        this.stockReceiptImportRepository.create({
+          code,
+          branchId,
+          fromId: sourceId || undefined,
+          fromType: sourceType || undefined,
+          referenceId: dto.referenceId,
+          referenceType: dto.referenceType,
+          reasonCode: reasonCode || undefined,
+          totalAmount,
+          status: STOCK_VOUCHER_STATUS.COMPLETED,
+          note: dto.note,
+        }),
+      );
+    } else if (type === STOCK_VOUCHER_TYPE.EXPORT) {
+      const code = `XK${Date.now()}`;
+      headerReceipt = await this.stockReceiptExportRepository.save(
+        this.stockReceiptExportRepository.create({
+          code,
+          branchId,
+          toId: sourceId || undefined,
+          toType: sourceType || undefined,
+          referenceId: dto.referenceId,
+          referenceType: dto.referenceType,
+          reasonCode: reasonCode || undefined,
+          totalAmount,
+          status: STOCK_VOUCHER_STATUS.COMPLETED,
+          note: dto.note,
+        }),
+      );
+    } else {
+      const code = `CK${Date.now()}`;
+      headerReceipt = await this.stockReceiptTransferRepository.save(
+        this.stockReceiptTransferRepository.create({
+          code,
+          fromBranchId: dto.fromBranchId!,
+          toBranchId: dto.toBranchId!,
+          status: STOCK_VOUCHER_STATUS.COMPLETED,
+          receivedAt: new Date(),
+          totalAmount,
+          note: dto.note,
+        }),
+      );
+    }
+
+    const savedDetails: StockReceiptDetail[] = [];
+
+    for (const dtoItem of dto.items) {
+      const quantity = Number(dtoItem.quantity);
+      let fromId: string | null = null;
+      let toId: string | null = null;
+      let fromType: string = STOCK_PARTY_TYPE.STOCK;
+      let toType: string = STOCK_PARTY_TYPE.STOCK;
+
+      if (type === STOCK_VOUCHER_TYPE.IMPORT) {
+        fromId = sourceId;
+        fromType = sourceType || STOCK_PARTY_TYPE.SUPPLIER;
+        if (sourceType === STOCK_PARTY_TYPE.BRANCH && sourceId) {
+          await this.stockService.getOrCreateBranchStock(sourceId);
+        }
+        toId = branchId;
+        toType = STOCK_PARTY_TYPE.BRANCH;
+      } else if (type === STOCK_VOUCHER_TYPE.EXPORT) {
+        fromId = branchId;
+        fromType = STOCK_PARTY_TYPE.BRANCH;
+        if (sourceType === STOCK_PARTY_TYPE.BRANCH && sourceId) {
+          await this.stockService.getOrCreateBranchStock(sourceId);
+          toId = sourceId;
+          toType = STOCK_PARTY_TYPE.BRANCH;
+        } else {
+          toId = sourceId || dto.referenceId || null;
+          toType = sourceType || STOCK_PARTY_TYPE.CUSTOMER;
+        }
+      } else if (type === STOCK_VOUCHER_TYPE.TRANSFER) {
+        fromId = fromStock!.id;
+        fromType = STOCK_PARTY_TYPE.STOCK;
+        toId = toStock!.id;
+        toType = STOCK_PARTY_TYPE.STOCK;
+      }
+
+      const detailData = {
+        productId: dtoItem.productId,
+        quantity,
+        receiptType: type,
+        fromId,
+        toId,
+        fromType,
+        toType,
+        importId:
+          type === STOCK_VOUCHER_TYPE.IMPORT ? headerReceipt.id : undefined,
+        exportId:
+          type === STOCK_VOUCHER_TYPE.EXPORT ? headerReceipt.id : undefined,
+        transferId:
+          type === STOCK_VOUCHER_TYPE.TRANSFER ? headerReceipt.id : undefined,
+      };
+
+      const detail = await this.stockReceiptDetailRepository.save(
+        this.stockReceiptDetailRepository.create(detailData),
+      );
+      savedDetails.push(detail);
+
+      if (dtoItem.productId) {
+        if (type === STOCK_VOUCHER_TYPE.IMPORT) {
+          await this.updateStockItemQuantity(
+            this.stockItemRepository,
+            branchStock!.id,
+            dtoItem.productId,
+            quantity,
+          );
+        } else if (type === STOCK_VOUCHER_TYPE.EXPORT) {
+          await this.updateStockItemQuantity(
+            this.stockItemRepository,
+            branchStock!.id,
+            dtoItem.productId,
+            -quantity,
+          );
+        } else if (type === STOCK_VOUCHER_TYPE.TRANSFER) {
+          await this.updateStockItemQuantity(
+            this.stockItemRepository,
+            fromId!,
+            dtoItem.productId,
+            -quantity,
+          );
+          await this.updateStockItemQuantity(
+            this.stockItemRepository,
+            toId!,
+            dtoItem.productId,
+            quantity,
+          );
+        }
+      }
+    }
+
+    if (fundId && totalAmount > 0 && type === STOCK_VOUCHER_TYPE.EXPORT) {
+      await this.financeService.createMoneyVoucher({
+        type: MONEY_VOUCHER_TYPE.RECEIPT,
+        fundId,
+        amount: totalAmount,
+        orderId: dto.referenceType === 'order' ? dto.referenceId : undefined,
+        purpose: ACCOUNTING_PURPOSE.STOCK_EXPORT,
+        reasonCode,
+        refType:
+          dto.referenceType === 'order'
+            ? ACCOUNTING_SOURCE_TYPE.ORDER
+            : ACCOUNTING_SOURCE_TYPE.STOCK_VOUCHER,
+        refId: dto.referenceId || headerReceipt.id,
+        note: dto.note,
+      });
+    }
+
+    const receiptRelation =
+      type === STOCK_VOUCHER_TYPE.IMPORT
+        ? 'importReceipt'
+        : type === STOCK_VOUCHER_TYPE.EXPORT
+          ? 'exportReceipt'
+          : 'transferReceipt';
+
+    const result = await this.stockReceiptDetailRepository.find({
+      where: savedDetails.map((detail) => ({ id: detail.id })),
+      relations: ['product', receiptRelation],
+    });
+
+    return this.attachMoneyVouchers(result);
   }
 }

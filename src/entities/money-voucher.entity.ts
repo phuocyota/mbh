@@ -31,12 +31,6 @@ export class MoneyVoucher extends BaseEntity {
   @Column('varchar', { nullable: true })
   purpose: string;
 
-  @Column('varchar', { name: 'debit_account_code', nullable: true })
-  debitAccountCode: string;
-
-  @Column('varchar', { name: 'credit_account_code', nullable: true })
-  creditAccountCode: string;
-
   @Column('varchar', { name: 'ref_type', nullable: true })
   refType: string;
 

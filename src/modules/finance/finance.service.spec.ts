@@ -1,7 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { FinanceService } from './finance.service';
 import { getRepositoryToken } from '@nestjs/typeorm';
-import { DataSource } from 'typeorm';
 import {
   Fund,
   FundTransaction,
@@ -52,7 +51,9 @@ describe('FinanceService', () => {
     },
     MoneyVoucher: {
       create: jest.fn((data) => ({ id: 'voucher-id-1', ...data })),
-      save: jest.fn((entity) => Promise.resolve({ id: 'voucher-id-1', ...entity })),
+      save: jest.fn((entity) =>
+        Promise.resolve({ id: 'voucher-id-1', ...entity }),
+      ),
       findOne: jest.fn().mockResolvedValue({ id: 'voucher-id-1' }),
       createQueryBuilder: jest.fn(),
     },
@@ -70,15 +71,21 @@ describe('FinanceService', () => {
     },
     FundReceiptReceived: {
       create: jest.fn((data) => ({ id: 'received-id-1', ...data })),
-      save: jest.fn((entity) => Promise.resolve({ id: 'received-id-1', ...entity })),
+      save: jest.fn((entity) =>
+        Promise.resolve({ id: 'received-id-1', ...entity }),
+      ),
     },
     FundReceiptPaid: {
       create: jest.fn((data) => ({ id: 'paid-id-1', ...data })),
-      save: jest.fn((entity) => Promise.resolve({ id: 'paid-id-1', ...entity })),
+      save: jest.fn((entity) =>
+        Promise.resolve({ id: 'paid-id-1', ...entity }),
+      ),
     },
     FundReceiptTransfer: {
       create: jest.fn((data) => ({ id: 'transfer-id-1', ...data })),
-      save: jest.fn((entity) => Promise.resolve({ id: 'transfer-id-1', ...entity })),
+      save: jest.fn((entity) =>
+        Promise.resolve({ id: 'transfer-id-1', ...entity }),
+      ),
       findOne: jest.fn().mockResolvedValue({ id: 'transfer-id-1' }),
     },
     FundDetail: {
@@ -89,17 +96,6 @@ describe('FinanceService', () => {
     StockFundReceiptReason: {
       findOne: jest.fn().mockResolvedValue(null),
     },
-  };
-
-  const mockEntityManager = {
-    getRepository: jest.fn().mockImplementation((entity) => {
-      const name = typeof entity === 'function' ? entity.name : entity;
-      return mockRepositories[name];
-    }),
-  };
-
-  const mockDataSource = {
-    transaction: jest.fn().mockImplementation((cb) => cb(mockEntityManager)),
   };
 
   beforeEach(async () => {
@@ -147,10 +143,6 @@ describe('FinanceService', () => {
         {
           provide: getRepositoryToken(StockFundReceiptReason),
           useValue: mockRepositories.StockFundReceiptReason,
-        },
-        {
-          provide: DataSource,
-          useValue: mockDataSource,
         },
       ],
     }).compile();
@@ -219,9 +211,9 @@ describe('FinanceService', () => {
         to: '2026-07-08',
       });
 
-      expect(mockRepositories.MoneyVoucher.createQueryBuilder).toHaveBeenCalledWith(
-        'voucher',
-      );
+      expect(
+        mockRepositories.MoneyVoucher.createQueryBuilder,
+      ).toHaveBeenCalledWith('voucher');
       expect(baseQueryBuilder.andWhere).toHaveBeenCalledWith(
         'fund.branchId = :branchId',
         { branchId: 'branch-id-1' },
@@ -409,12 +401,6 @@ describe('FinanceService', () => {
 
       await service.createMoneyVoucher(dto);
 
-      expect(mockRepositories.MoneyVoucher.create).toHaveBeenCalledWith(
-        expect.objectContaining({
-          debitAccountCode: '331',
-          creditAccountCode: '131',
-        }),
-      );
       expect(mockRepositories.FundDetail.create).toHaveBeenCalledWith(
         expect.objectContaining({
           type: 'RECEIVED',

@@ -14,6 +14,7 @@ import {
 } from '../../entities';
 import { CreateStockTransferDto } from './dto/create-stock-transfer.dto';
 import { StockVoucherService } from '../stock-voucher/stock-voucher.service';
+import { StockService } from '../stock/stock.service';
 import {
   normalizePagination,
   toPaginationResponse,
@@ -34,6 +35,7 @@ export class StockTransferService {
     private stockItemRepository: Repository<StockItem>,
     private dataSource: DataSource,
     private stockVoucherService: StockVoucherService,
+    private stockService: StockService,
   ) {}
 
   async findAll(
@@ -118,22 +120,6 @@ export class StockTransferService {
     return transfer;
   }
 
-  private async getOrCreateBranchStock(
-    stockRepo: Repository<Stock>,
-    branchId: string,
-  ): Promise<Stock> {
-    let stock = await stockRepo.findOne({ where: { branchId } });
-    if (!stock) {
-      stock = await stockRepo.save(
-        stockRepo.create({
-          name: `Kho Chi Nhánh`,
-          branchId,
-        }),
-      );
-    }
-    return stock;
-  }
-
   private async updateStockItemQuantity(
     stockItemRepo: Repository<StockItem>,
     stockId: string,
@@ -163,13 +149,13 @@ export class StockTransferService {
       const productRepo = trx.getRepository(Product);
       const stockRepo = trx.getRepository(Stock);
 
-      const fromStock = await this.getOrCreateBranchStock(
-        stockRepo,
+      const fromStock = await this.stockService.getOrCreateBranchStock(
         dto.fromBranchId,
+        trx,
       );
-      const toStock = await this.getOrCreateBranchStock(
-        stockRepo,
+      const toStock = await this.stockService.getOrCreateBranchStock(
         dto.toBranchId,
+        trx,
       );
 
       let totalAmount = 0;
@@ -232,27 +218,21 @@ export class StockTransferService {
         await detailRepo.save(detail);
       }
 
-      await this.stockVoucherService.createVoucher(
-        {
-          branchId: dto.fromBranchId,
-          toBranchId: dto.toBranchId,
-          type: 'EXPORT',
-          note: dto.note || `Xuất kho chuyển đến chi nhánh ${dto.toBranchId}`,
-          items: voucherItems,
-        },
-        trx,
-      );
+      await this.stockVoucherService.createVoucher({
+        branchId: dto.fromBranchId,
+        toBranchId: dto.toBranchId,
+        type: 'EXPORT',
+        note: dto.note || `Xuất kho chuyển đến chi nhánh ${dto.toBranchId}`,
+        items: voucherItems,
+      });
 
-      await this.stockVoucherService.createVoucher(
-        {
-          branchId: dto.toBranchId,
-          fromBranchId: dto.fromBranchId,
-          type: 'IMPORT',
-          note: dto.note || `Nhập kho chuyển từ chi nhánh ${dto.fromBranchId}`,
-          items: voucherItems,
-        },
-        trx,
-      );
+      await this.stockVoucherService.createVoucher({
+        branchId: dto.toBranchId,
+        fromBranchId: dto.fromBranchId,
+        type: 'IMPORT',
+        note: dto.note || `Nhập kho chuyển từ chi nhánh ${dto.fromBranchId}`,
+        items: voucherItems,
+      });
 
       return transferRepo.findOne({
         where: { id: savedTransfer.id },
@@ -282,13 +262,13 @@ export class StockTransferService {
         );
       }
 
-      const fromStock = await this.getOrCreateBranchStock(
-        stockRepo,
+      const fromStock = await this.stockService.getOrCreateBranchStock(
         transfer.fromBranchId,
+        trx,
       );
-      const toStock = await this.getOrCreateBranchStock(
-        stockRepo,
+      const toStock = await this.stockService.getOrCreateBranchStock(
         transfer.toBranchId,
+        trx,
       );
 
       for (const detail of transfer.details) {

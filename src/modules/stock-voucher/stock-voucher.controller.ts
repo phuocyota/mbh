@@ -3,6 +3,7 @@ import { ApiBearerAuth, ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger'
 import { CreateStockVoucherDto } from './dto/create-stock-voucher.dto';
 import { StockVoucherService } from './stock-voucher.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { STOCK_VOUCHER_TYPE } from './stock-voucher.constants';
 
 @ApiTags('Stock Vouchers')
 @ApiBearerAuth()
@@ -58,15 +59,15 @@ export class StockVoucherController {
   private createByType(dto: CreateStockVoucherDto) {
     const type = dto.type?.toUpperCase();
 
-    if (type === 'IMPORT') {
+    if (type === STOCK_VOUCHER_TYPE.IMPORT) {
       return this.stockVoucherService.createImportVoucher(dto);
     }
 
-    if (type === 'EXPORT') {
+    if (type === STOCK_VOUCHER_TYPE.EXPORT) {
       return this.stockVoucherService.createExportVoucher(dto);
     }
 
-    if (type === 'TRANSFER') {
+    if (type === STOCK_VOUCHER_TYPE.TRANSFER) {
       return this.stockVoucherService.createVoucher(dto);
     }
 

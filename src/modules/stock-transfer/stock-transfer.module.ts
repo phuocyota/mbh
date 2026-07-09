@@ -4,6 +4,7 @@ import { Product, StockReceiptTransfer, StockReceiptDetail, Stock, StockItem } f
 import { StockTransferController } from './stock-transfer.controller';
 import { StockTransferService } from './stock-transfer.service';
 import { StockVoucherModule } from '../stock-voucher/stock-voucher.module';
+import { StockModule } from '../stock/stock.module';
 
 @Module({
   imports: [
@@ -15,6 +16,7 @@ import { StockVoucherModule } from '../stock-voucher/stock-voucher.module';
       StockItem,
     ]),
     StockVoucherModule,
+    StockModule,
   ],
   controllers: [StockTransferController],
   providers: [StockTransferService],

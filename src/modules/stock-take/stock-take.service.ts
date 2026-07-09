@@ -4,6 +4,7 @@ import { DataSource, EntityManager, In, Repository } from 'typeorm';
 import { Product, StockTake, StockTakeItem, Stock, StockItem } from '../../entities';
 import { CreateStockTakeDto } from './dto/create-stock-take.dto';
 import { DEFAULT_BRANCH_ID } from '../../common/constant/default-branch.constant';
+import { StockService } from '../stock/stock.service';
 import { normalizePagination, toPaginationResponse } from '../../common/dto/pagination.dto';
 
 @Injectable()
@@ -20,6 +21,7 @@ export class StockTakeService {
     @InjectRepository(StockItem)
     private stockItemRepository: Repository<StockItem>,
     private dataSource: DataSource,
+    private stockService: StockService,
   ) {}
 
   async findAll(
@@ -83,21 +85,7 @@ export class StockTakeService {
     return stockTake;
   }
 
-  private async getOrCreateBranchStock(
-    stockRepo: Repository<Stock>,
-    branchId: string,
-  ): Promise<Stock> {
-    let stock = await stockRepo.findOne({ where: { branchId } });
-    if (!stock) {
-      stock = await stockRepo.save(
-        stockRepo.create({
-          name: `Kho Chi Nhánh`,
-          branchId,
-        }),
-      );
-    }
-    return stock;
-  }
+
 
   async createDraft(dto: CreateStockTakeDto) {
     return this.dataSource.transaction(async (trx) => {
@@ -108,7 +96,7 @@ export class StockTakeService {
       const stockItemRepo = trx.getRepository(StockItem);
 
       const branchId = dto.branchId || DEFAULT_BRANCH_ID;
-      const branchStock = await this.getOrCreateBranchStock(stockRepo, branchId);
+      const branchStock = await this.stockService.getOrCreateBranchStock(branchId, trx);
       const code = `KK${Date.now()}`;
 
       let totalDifferenceAmount = 0;
@@ -193,7 +181,7 @@ export class StockTakeService {
         throw new BadRequestException(`StockTake is already in ${stockTake.status} status`);
       }
 
-      const branchStock = await this.getOrCreateBranchStock(stockRepo, stockTake.branchId);
+      const branchStock = await this.stockService.getOrCreateBranchStock(stockTake.branchId, trx);
 
       for (const item of stockTake.items) {
         // Find or create StockItem for this branch
