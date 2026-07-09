@@ -82,6 +82,7 @@ describe('StockVoucherService', () => {
       findOne: jest.fn().mockResolvedValue(null),
     },
     Fund: {
+      findOne: jest.fn().mockResolvedValue(null),
       find: jest.fn().mockResolvedValue([]),
     },
     MoneyVoucher: {
@@ -266,11 +267,18 @@ describe('StockVoucherService', () => {
         },
       });
       expect(mockRepositories.Fund.find).toHaveBeenCalledWith({
-        where: {
-          code: expect.anything(),
-          branchId: 'branch-id-1',
-          status: 'active',
-        },
+        where: [
+          {
+            code: expect.anything(),
+            branchId: 'branch-id-1',
+            status: 'active',
+          },
+          {
+            accountCode: expect.anything(),
+            branchId: 'branch-id-1',
+            status: 'active',
+          },
+        ],
       });
       expect(mockRepositories.StockReceiptImport.save).toHaveBeenCalled();
       expect(mockRepositories.StockReceiptDetail.create).toHaveBeenCalledWith(
@@ -318,6 +326,59 @@ describe('StockVoucherService', () => {
       );
       expect(mockSupplierService.recordPurchaseDebt).not.toHaveBeenCalled();
       expect(result).toBeDefined();
+    });
+
+    it('should use request fundId for paid supplier import before resolving from reason formula', async () => {
+      mockRepositories.StockFundReceiptReason.findOne.mockResolvedValueOnce({
+        code: 'NHNCC',
+        isDebt: false,
+        accountingFormula: '{1561:-,1111:+,1331:-}',
+      });
+      mockRepositories.Fund.findOne.mockResolvedValueOnce({
+        id: 'fund-id-request',
+        branchId: 'branch-id-1',
+        status: 'active',
+      });
+      mockRepositories.StockReceiptDetail.find.mockResolvedValueOnce([
+        {
+          id: 'detail-id',
+          quantity: 5,
+          importId: 'import-id',
+          importReceipt: { id: 'import-id' },
+        },
+      ]);
+
+      const dto = {
+        branchId: 'branch-id-1',
+        sourceId: 'supplier-id-1',
+        sourceType: 'SUPPLIER',
+        paymentStatus: 'PAID',
+        fundId: 'fund-id-request',
+        items: [
+          {
+            productId: 'product-id-1',
+            quantity: 5,
+            unitPrice: 100,
+          },
+        ],
+      };
+
+      await service.createImportVoucher(dto as any);
+
+      expect(mockRepositories.Fund.findOne).toHaveBeenCalledWith({
+        where: {
+          id: 'fund-id-request',
+          branchId: 'branch-id-1',
+          status: 'active',
+        },
+      });
+      expect(mockRepositories.Fund.find).not.toHaveBeenCalled();
+      expect(mockFinanceService.createMoneyVoucher).toHaveBeenCalledWith(
+        expect.objectContaining({
+          fundId: 'fund-id-request',
+          reasonCode: 'NHNCC',
+        }),
+      );
     });
 
     it('should record supplier debt and not create a payment voucher for unpaid supplier imports', async () => {
@@ -424,13 +485,66 @@ describe('StockVoucherService', () => {
       expect(mockRepositories.StockReceiptImport.save).not.toHaveBeenCalled();
     });
 
-    it('should fail paid supplier imports when the reason does not match exactly one fund', async () => {
+    it('should use the only active branch fund when reason formula does not match a fund', async () => {
       mockRepositories.StockFundReceiptReason.findOne.mockResolvedValueOnce({
         code: 'NHNCC',
         isDebt: false,
         accountingFormula: '{1561:-,1111:+,1331:-}',
       });
-      mockRepositories.Fund.find.mockResolvedValueOnce([]);
+      mockRepositories.Fund.find
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([
+          {
+            id: 'branch-fund-id',
+            branchId: 'branch-id-1',
+            status: 'active',
+          },
+        ]);
+      mockRepositories.StockReceiptDetail.find.mockResolvedValueOnce([
+        {
+          id: 'detail-id',
+          quantity: 5,
+          importId: 'import-id',
+          importReceipt: { id: 'import-id' },
+        },
+      ]);
+
+      const dto = {
+        branchId: 'branch-id-1',
+        sourceId: 'supplier-id-1',
+        sourceType: 'SUPPLIER',
+        paymentStatus: 'PAID',
+        items: [
+          {
+            productId: 'product-id-1',
+            quantity: 5,
+            unitPrice: 100,
+          },
+        ],
+      };
+
+      await service.createImportVoucher(dto as any);
+
+      expect(mockFinanceService.createMoneyVoucher).toHaveBeenCalledWith(
+        expect.objectContaining({
+          fundId: 'branch-fund-id',
+          reasonCode: 'NHNCC',
+        }),
+      );
+    });
+
+    it('should require fundId when neither reason formula nor branch fund is unique', async () => {
+      mockRepositories.StockFundReceiptReason.findOne.mockResolvedValueOnce({
+        code: 'NHNCC',
+        isDebt: false,
+        accountingFormula: '{1561:-,1111:+,1331:-}',
+      });
+      mockRepositories.Fund.find
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([
+          { id: 'fund-id-1', branchId: 'branch-id-1', status: 'active' },
+          { id: 'fund-id-2', branchId: 'branch-id-1', status: 'active' },
+        ]);
 
       const dto = {
         branchId: 'branch-id-1',
@@ -447,7 +561,7 @@ describe('StockVoucherService', () => {
       };
 
       await expect(service.createImportVoucher(dto as any)).rejects.toThrow(
-        'Exactly one active fund must match reason NHNCC in branch branch-id-1',
+        'fundId is required for paid supplier import in branch branch-id-1',
       );
       expect(mockRepositories.StockReceiptImport.save).not.toHaveBeenCalled();
       expect(mockFinanceService.createMoneyVoucher).not.toHaveBeenCalled();

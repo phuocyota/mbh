@@ -219,13 +219,36 @@ export class StockVoucherService {
     return reason;
   }
 
-  private async resolveFundFromReasonFormula(
+  private async resolveSupplierImportFund(
     reason: StockFundReceiptReason,
     branchId: string,
+    fundId?: string,
   ) {
+    if (fundId) {
+      const fund = await this.fundRepository.findOne({
+        where: {
+          id: fundId,
+          branchId,
+          status: 'active',
+        },
+      });
+
+      if (!fund) {
+        throw new BadRequestException(
+          `Active fund ${fundId} was not found in branch ${branchId}`,
+        );
+      }
+
+      return fund;
+    }
+
     const formulaEntries = parseAccountingFormula(reason.accountingFormula);
     const accountCodes = [
-      ...new Set(formulaEntries.map((entry) => entry.accountCode)),
+      ...new Set(
+        formulaEntries
+          .filter((entry) => entry.sign === '+')
+          .map((entry) => entry.accountCode),
+      ),
     ];
 
     if (accountCodes.length === 0) {
@@ -235,20 +258,40 @@ export class StockVoucherService {
     }
 
     const funds = await this.fundRepository.find({
+      where: [
+        {
+          code: In(accountCodes),
+          branchId,
+          status: 'active',
+        },
+        {
+          accountCode: In(accountCodes),
+          branchId,
+          status: 'active',
+        },
+      ],
+    });
+    const uniqueFunds = [
+      ...new Map(funds.map((fund) => [fund.id, fund])).values(),
+    ];
+    if (uniqueFunds.length === 1) {
+      return uniqueFunds[0];
+    }
+
+    const branchFunds = await this.fundRepository.find({
       where: {
-        code: In(accountCodes),
         branchId,
         status: 'active',
       },
     });
 
-    if (funds.length !== 1) {
+    if (branchFunds.length !== 1) {
       throw new BadRequestException(
-        `Exactly one active fund must match reason ${reason.code} in branch ${branchId}`,
+        `fundId is required for paid supplier import in branch ${branchId}`,
       );
     }
 
-    return funds[0];
+    return branchFunds[0];
   }
 
   private getSourceId(dto: CreateStockVoucherDto) {
@@ -346,7 +389,7 @@ export class StockVoucherService {
     const branchStock =
       await this.stockService.getOrCreateBranchStock(branchId);
     const resolvedFund = isPaid
-      ? await this.resolveFundFromReasonFormula(reason, branchId)
+      ? await this.resolveSupplierImportFund(reason, branchId, dto.fundId)
       : null;
 
     const headerReceipt = await this.stockReceiptImportRepository.save(
