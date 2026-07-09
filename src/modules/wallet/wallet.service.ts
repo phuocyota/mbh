@@ -8,6 +8,7 @@ import { EntityManager, Repository } from 'typeorm';
 import { Wallet } from '../../entities/wallet.entity';
 import { WalletTransaction } from '../../entities/wallet-transaction.entity';
 import { Customer } from '../../entities/customer.entity';
+import { Fund } from '../../entities/fund.entity';
 import { StockFundReceiptReason } from '../../entities/stock-fund-receipt-reason.entity';
 import { BaseService } from '../../common/sql/base.service';
 import { ERROR_MESSAGES } from '../../common/constant/error-messages.constant';
@@ -198,16 +199,16 @@ export class WalletService extends BaseService<Wallet> {
       const savedTx = await walletTransactionRepository.save(tx);
 
       if (recoveredDebtAmount > 0) {
-        if (!fundId) {
-          throw new BadRequestException(
-            'fundId is required when topup collects customer debt',
-          );
-        }
+        const resolvedFundId = await this.resolveDebtCollectionFundId(
+          manager,
+          customerId,
+          fundId,
+        );
 
         await this.financeService.createMoneyVoucher(
           {
             type: MONEY_VOUCHER_TYPE.RECEIPT,
-            fundId,
+            fundId: resolvedFundId,
             amount: recoveredDebtAmount,
             customerId,
             purpose: ACCOUNTING_PURPOSE.CUSTOMER_DEBT_COLLECTION,
@@ -230,6 +231,59 @@ export class WalletService extends BaseService<Wallet> {
         transactionId: savedTx.id,
       };
     });
+  }
+
+  private async resolveDebtCollectionFundId(
+    manager: EntityManager,
+    customerId: string,
+    explicitFundId?: string,
+  ) {
+    if (explicitFundId) {
+      return explicitFundId;
+    }
+
+    const [customerBranch] = await manager.query(
+      `
+        SELECT u.branch_id
+        FROM customers c
+        LEFT JOIN users u ON u.id = c.user_id
+        WHERE c.id = $1
+        LIMIT 1
+      `,
+      [customerId],
+    );
+    const branchId = customerBranch?.branch_id;
+
+    if (!branchId) {
+      throw new BadRequestException(
+        'fundId is required when topup collects customer debt',
+      );
+    }
+
+    const fund = await manager
+      .getRepository(Fund)
+      .createQueryBuilder('fund')
+      .where('fund.branchId = :branchId', { branchId })
+      .andWhere('LOWER(fund.status) = :status', { status: 'active' })
+      .orderBy(
+        `CASE
+          WHEN fund.accountCode LIKE '112%' THEN 0
+          WHEN fund.code IN ('NH', '112', '1121') THEN 1
+          WHEN fund.accountCode LIKE '111%' THEN 2
+          ELSE 3
+        END`,
+        'ASC',
+      )
+      .addOrderBy('fund.code', 'ASC')
+      .getOne();
+
+    if (!fund) {
+      throw new BadRequestException(
+        'No active fund found for customer branch when topup collects customer debt',
+      );
+    }
+
+    return fund.id;
   }
 
   async chargeForOrder(customerId: string, amount: number, orderId: string) {
