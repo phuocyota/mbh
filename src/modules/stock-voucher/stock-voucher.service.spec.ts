@@ -171,8 +171,6 @@ describe('StockVoucherService', () => {
           branchId: 'branch-id-1',
           fromId: 'supplier-id-1',
           fromType: 'SUPPLIER',
-          toId: 'branch-id-1',
-          toType: 'BRANCH',
           totalAmount: 500,
           status: 'COMPLETED',
         }),
@@ -220,8 +218,6 @@ describe('StockVoucherService', () => {
         expect.objectContaining({
           fromId: 'supplier-id-1',
           fromType: 'SUPPLIER',
-          toId: 'branch-id-1',
-          toType: 'BRANCH',
         }),
       );
       expect(mockSupplierService.recordPurchaseDebt).toHaveBeenCalledWith(

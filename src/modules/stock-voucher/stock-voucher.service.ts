@@ -358,8 +358,6 @@ export class StockVoucherService {
             branchId,
             fromId: sourceId || undefined,
             fromType: sourceType || undefined,
-            toId: branchId,
-            toType: 'BRANCH',
             referenceId: dto.referenceId,
             referenceType: dto.referenceType,
             reasonCode: reasonCode || undefined,

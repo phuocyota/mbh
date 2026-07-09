@@ -18,12 +18,6 @@ export class StockReceiptImport extends BaseEntity {
   @Column('varchar', { name: 'from_type', nullable: true })
   fromType: string; // supplier, customer, branch, etc.
 
-  @Column('uuid', { name: 'to_id', nullable: true })
-  toId: string;
-
-  @Column('varchar', { name: 'to_type', nullable: true })
-  toType: string; // branch, stock, etc.
-
   @Column('uuid', { name: 'reference_id', nullable: true })
   referenceId: string;
 

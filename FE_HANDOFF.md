@@ -1047,6 +1047,125 @@ GET /api/finance/receipts/received
 GET /api/finance/receipts/paid
 ```
 
+### Stock Voucher API: sourceId/sourceType
+
+Man nhap/xuat/chuyen kho chi can gui doi tuong nghiep vu bang `sourceId` va `sourceType`. FE khong tu tinh `fromId`, `toId`, `fromType`, `toType`; BE se map theo loai phieu de tranh sai logic kho/ke toan.
+
+Endpoint:
+
+```http
+POST /api/stock-vouchers
+```
+
+Body chung:
+
+```ts
+type CreateStockVoucherBody = {
+  type: 'IMPORT' | 'EXPORT' | 'TRANSFER';
+  branchId?: string;
+  sourceId?: string;
+  sourceType?: 'SUPPLIER' | 'CUSTOMER' | 'BRANCH' | 'VENDOR' | string;
+  fromBranchId?: string;
+  toBranchId?: string;
+  referenceId?: string;
+  referenceType?: string;
+  fundId?: string;
+  reasonCode?: string;
+  paymentStatus?: 'PAID' | 'DEBT' | 'UNPAID' | string;
+  isPaid?: boolean;
+  note?: string;
+  items: Array<{
+    productId: string;
+    quantity: number;
+    unitPrice?: number;
+    note?: string;
+  }>;
+};
+```
+
+Mapping nghiep vu:
+
+| Loai phieu | FE gui | BE map detail |
+| --- | --- | --- |
+| `IMPORT` | `sourceId/sourceType` la nguon gui hang, vi du supplier/customer/branch | `from = source`, `to = branchId` |
+| `EXPORT` | `sourceId/sourceType` la noi/nguoi nhan hang, vi du customer/order target/branch | `from = branchId`, `to = source` |
+| `TRANSFER` | `fromBranchId`, `toBranchId` | `from = stock cua fromBranchId`, `to = stock cua toBranchId` |
+
+Vi du nhap hang tu nha cung cap:
+
+```json
+{
+  "type": "IMPORT",
+  "branchId": "4a3ce246-0adb-4b06-8065-71714eeab9c7",
+  "sourceId": "supplier-id",
+  "sourceType": "SUPPLIER",
+  "paymentStatus": "DEBT",
+  "items": [
+    {
+      "productId": "product-id",
+      "quantity": 10,
+      "unitPrice": 2000
+    }
+  ]
+}
+```
+
+BE se tao:
+
+- Header import: `fromId = sourceId`, `fromType = sourceType`; `branchId` la chi nhanh nhan hang.
+- Detail import: `fromId = sourceId`, `fromType = sourceType || SUPPLIER`, `toId = branchId`, `toType = BRANCH`.
+- Ton kho: cong vao stock noi bo cua `branchId`.
+- Neu `sourceType = SUPPLIER`, BE dung `sourceId` de ghi cong no/thanh toan nha cung cap.
+
+Vi du xuat hang cho khach:
+
+```json
+{
+  "type": "EXPORT",
+  "branchId": "4a3ce246-0adb-4b06-8065-71714eeab9c7",
+  "sourceId": "customer-id",
+  "sourceType": "CUSTOMER",
+  "referenceId": "order-id",
+  "referenceType": "order",
+  "items": [
+    {
+      "productId": "product-id",
+      "quantity": 2,
+      "unitPrice": 15000
+    }
+  ]
+}
+```
+
+BE se tao:
+
+- Header export: `toId = sourceId`, `toType = sourceType`.
+- Detail export: `fromId = branchId`, `fromType = BRANCH`, `toId = sourceId`, `toType = sourceType || CUSTOMER`.
+- Ton kho: tru tu stock noi bo cua `branchId`.
+
+Vi du chuyen kho giua chi nhanh:
+
+```json
+{
+  "type": "TRANSFER",
+  "fromBranchId": "source-branch-id",
+  "toBranchId": "target-branch-id",
+  "items": [
+    {
+      "productId": "product-id",
+      "quantity": 5
+    }
+  ]
+}
+```
+
+Luu y cho FE:
+
+- Khong gui `fromId`, `toId`, `fromType`, `toType`.
+- `toId/toType` trong request stock voucher la legacy fallback, khong dung cho man moi.
+- Voi `IMPORT` tu nha cung cap, bat buoc gui `sourceType = SUPPLIER` va `sourceId` neu can ghi cong no/thanh toan supplier.
+- Voi `EXPORT` phat sinh tu order, FE nen gui `sourceId = customerId`, `sourceType = CUSTOMER`, va `referenceId = orderId`, `referenceType = order`.
+
 ## 6. Confirm Customer Received Order
 
 Có 2 hướng xác nhận.
