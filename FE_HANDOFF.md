@@ -1054,8 +1054,12 @@ Man nhap/xuat/chuyen kho chi can gui doi tuong nghiep vu bang `sourceId` va `sou
 Endpoint:
 
 ```http
-POST /api/stock-vouchers
+POST /stock-vouchers
+POST /stock-vouchers/imports
+POST /stock-vouchers/exports
 ```
+
+FE nen gui `type` trong body. BE dispatch theo `type`: `IMPORT` dung logic import, `EXPORT` dung logic export, `TRANSFER` dung logic chuyen kho. Cac endpoint cu `/stock-vouchers/imports` va `/stock-vouchers/exports` van dung duoc; neu body co `type` thi BE uu tien dispatch theo `type`, neu khong co `type` thi default theo endpoint.
 
 Body chung:
 

@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post, Query, Req, UseGuards } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, Post, Query, Req, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
 import { CreateStockVoucherDto } from './dto/create-stock-voucher.dto';
 import { StockVoucherService } from './stock-voucher.service';
@@ -31,13 +31,47 @@ export class StockVoucherController {
 
   @Post('imports')
   @ApiOperation({ summary: 'Create stock import voucher and payment voucher' })
-  createImport(@Body() dto: Omit<CreateStockVoucherDto, 'type'>) {
+  createImport(@Body() dto: CreateStockVoucherDto) {
+    if (dto.type) {
+      return this.createByType(dto);
+    }
+
     return this.stockVoucherService.createImportVoucher(dto);
   }
 
   @Post('exports')
   @ApiOperation({ summary: 'Create stock export voucher and receipt voucher' })
-  createExport(@Body() dto: Omit<CreateStockVoucherDto, 'type'>) {
+  createExport(@Body() dto: CreateStockVoucherDto) {
+    if (dto.type) {
+      return this.createByType(dto);
+    }
+
     return this.stockVoucherService.createExportVoucher(dto);
+  }
+
+  @Post()
+  @ApiOperation({ summary: 'Create stock voucher by type' })
+  create(@Body() dto: CreateStockVoucherDto) {
+    return this.createByType(dto);
+  }
+
+  private createByType(dto: CreateStockVoucherDto) {
+    const type = dto.type?.toUpperCase();
+
+    if (type === 'IMPORT') {
+      return this.stockVoucherService.createImportVoucher(dto);
+    }
+
+    if (type === 'EXPORT') {
+      return this.stockVoucherService.createExportVoucher(dto);
+    }
+
+    if (type === 'TRANSFER') {
+      return this.stockVoucherService.createVoucher(dto);
+    }
+
+    throw new BadRequestException(
+      'type must be one of IMPORT, EXPORT, TRANSFER',
+    );
   }
 }
