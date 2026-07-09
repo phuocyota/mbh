@@ -519,14 +519,16 @@ export class StockVoucherService {
 
       }
 
+      const receiptRelation =
+        type === 'IMPORT'
+          ? 'importReceipt'
+          : type === 'EXPORT'
+            ? 'exportReceipt'
+            : 'transferReceipt';
+
       return detailRepo.find({
         where: savedDetails.map((detail) => ({ id: detail.id })),
-        relations: [
-          'product',
-          'importReceipt',
-          'exportReceipt',
-          'transferReceipt',
-        ],
+        relations: ['product', receiptRelation],
       });
     };
 
