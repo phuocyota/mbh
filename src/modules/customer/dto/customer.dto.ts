@@ -1,4 +1,4 @@
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { BaseDto } from '../../../common/dto/base.dto';
 
 export class CustomerDto extends BaseDto {
@@ -38,4 +38,11 @@ export class CustomerDto extends BaseDto {
     example: 50000,
   })
   debtLimit: number;
+
+  @ApiPropertyOptional({
+    description:
+      'Current debt derived from a negative wallet balance; returned when getDebt=true',
+    example: 25000,
+  })
+  debt?: number;
 }

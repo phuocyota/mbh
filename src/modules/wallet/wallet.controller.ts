@@ -24,7 +24,11 @@ import {
 import { WalletService } from './wallet.service';
 import { CreateWalletDto } from './dto/create-wallet.dto';
 import { WalletDto } from './dto/wallet.dto';
-import { TopupWalletDto, WalletBalanceDto } from './dto/topup-wallet.dto';
+import {
+  RepayCustomerDebtCashDto,
+  TopupWalletDto,
+  WalletBalanceDto,
+} from './dto/topup-wallet.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
 @ApiTags('Wallets')
@@ -76,6 +80,52 @@ export class WalletController {
   async topup(@Body() dto: TopupWalletDto, @Req() req: any) {
     const userId = this.getAuthenticatedUserId(req);
     return this.walletService.topup(
+      dto.customerId,
+      dto.amount,
+      userId,
+      dto.note,
+      dto.fundId,
+    );
+  }
+
+  @Post('debt-repayments/cash')
+  @UseGuards(JwtAuthGuard)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Khách hàng trả nợ bằng tiền mặt',
+    description:
+      'Chỉ áp dụng khi ví khách hàng đang âm. Ghi nhận giao dịch ví và tạo phiếu thu tiền mặt CUSTOMER_DEBT_COLLECTION.',
+  })
+  @ApiResponse({ status: 200, description: 'Trả nợ tiền mặt thành công' })
+  async repayDebtByCash(
+    @Body() dto: RepayCustomerDebtCashDto,
+    @Req() req: any,
+  ) {
+    const userId = this.getAuthenticatedUserId(req);
+    return this.walletService.repayDebtByCash(
+      dto.customerId,
+      dto.amount,
+      userId,
+      dto.note,
+      dto.fundId,
+    );
+  }
+
+  @Post('customer-debt/clearance')
+  @UseGuards(JwtAuthGuard)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Gạch nợ khách hàng bằng phiếu thu',
+    description:
+      'Tạo phiếu thu dùng reasonCode TNBHTS và giảm công nợ tương ứng trên ví khách hàng.',
+  })
+  @ApiResponse({ status: 200, description: 'Gạch nợ khách hàng thành công' })
+  async clearCustomerDebt(
+    @Body() dto: RepayCustomerDebtCashDto,
+    @Req() req: any,
+  ) {
+    const userId = this.getAuthenticatedUserId(req);
+    return this.walletService.repayDebtByCash(
       dto.customerId,
       dto.amount,
       userId,

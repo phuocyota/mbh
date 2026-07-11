@@ -30,6 +30,7 @@ import {
 } from '../../../packages/accounting/src/index.js';
 
 const DEFERRED_PAYMENT_REASON_CODE = 'TT_TRA_CHAM';
+const CUSTOMER_DEBT_CLEARANCE_REASON_CODE = 'TNBHTS';
 
 export interface TopupResult {
   walletId: string;
@@ -230,6 +231,119 @@ export class WalletService extends BaseService<Wallet> {
     });
   }
 
+  async repayDebtByCash(
+    customerId: string,
+    amount: number,
+    createdBy?: string,
+    note?: string,
+    fundId?: string,
+  ): Promise<TopupResult> {
+    const repaymentAmount = Number(amount);
+    if (!Number.isFinite(repaymentAmount) || repaymentAmount <= 0) {
+      throw new BadRequestException('Số tiền trả nợ phải lớn hơn 0');
+    }
+
+    const auditUserId = this.toUuidOrNull(createdBy);
+
+    return this.walletRepository.manager.transaction(async (manager) => {
+      const customerRepository = manager.getRepository(Customer);
+      const walletRepository = manager.getRepository(Wallet);
+      const walletTransactionRepository =
+        manager.getRepository(WalletTransaction);
+
+      const customer = await customerRepository.findOne({
+        where: { id: customerId },
+        lock: { mode: 'pessimistic_write' },
+      });
+
+      if (!customer) {
+        throw new NotFoundException(
+          ERROR_MESSAGES.NOT_FOUND_WITH_ID('Customer', customerId),
+        );
+      }
+
+      const wallet = await walletRepository.findOne({
+        where: { customerId },
+        lock: { mode: 'pessimistic_write' },
+      });
+
+      if (!wallet) {
+        throw new BadRequestException('Khách hàng chưa có ví để ghi nhận nợ');
+      }
+
+      if (wallet.status !== COMMON_STATUS.ACTIVE) {
+        throw new BadRequestException('Ví không ở trạng thái ACTIVE');
+      }
+
+      const balanceBefore = Number(wallet.balance);
+      const currentDebt = Math.max(0, -balanceBefore);
+      if (currentDebt <= 0) {
+        throw new BadRequestException('Khách hàng không có công nợ cần trả');
+      }
+
+      if (repaymentAmount > currentDebt) {
+        throw new BadRequestException('Số tiền trả nợ vượt quá công nợ hiện tại');
+      }
+
+      const balanceAfter = balanceBefore + repaymentAmount;
+      wallet.balance = balanceAfter;
+      wallet.updatedBy = auditUserId;
+      await walletRepository.save(wallet);
+
+      await this.restoreDebtLimitForRecoveredDebt(
+        manager,
+        customerId,
+        balanceBefore,
+        balanceAfter,
+      );
+
+      const tx = walletTransactionRepository.create({
+        walletId: wallet.id,
+        customerId,
+        type: WALLET_TRANSACTION_TYPE.TOPUP,
+        amount: repaymentAmount,
+        balanceBefore,
+        balanceAfter,
+        refType: WALLET_TRANSACTION_REF_TYPE.MANUAL,
+        reasonCode: CUSTOMER_DEBT_CLEARANCE_REASON_CODE,
+        note: note || 'Khách hàng trả nợ bằng tiền mặt',
+        createdBy: auditUserId,
+      });
+      const savedTx = await walletTransactionRepository.save(tx);
+
+      const resolvedFundId = await this.resolveCashDebtCollectionFundId(
+        manager,
+        customerId,
+        fundId,
+      );
+
+      await this.financeService.createMoneyVoucher({
+        type: MONEY_VOUCHER_TYPE.RECEIPT,
+        fundId: resolvedFundId,
+        amount: repaymentAmount,
+        customerId,
+        purpose: ACCOUNTING_PURPOSE.CUSTOMER_DEBT_COLLECTION,
+        reasonCode: CUSTOMER_DEBT_CLEARANCE_REASON_CODE,
+        refType: ACCOUNTING_SOURCE_TYPE.WALLET_TRANSACTION,
+        refId: savedTx.id,
+        note:
+          note ||
+          `Thu tiền mặt công nợ khách hàng ${
+            customer.customerCode || customer.fullName
+          }`,
+      });
+
+      return {
+        walletId: wallet.id,
+        customerId,
+        amount: repaymentAmount,
+        balanceBefore,
+        balanceAfter,
+        transactionId: savedTx.id,
+      };
+    });
+  }
+
   private async resolveDebtCollectionFundId(
     manager: EntityManager,
     customerId: string,
@@ -277,6 +391,68 @@ export class WalletService extends BaseService<Wallet> {
     if (!fund) {
       throw new BadRequestException(
         'No active fund found for customer branch when topup collects customer debt',
+      );
+    }
+
+    return fund.id;
+  }
+
+  private async resolveCashDebtCollectionFundId(
+    manager: EntityManager,
+    customerId: string,
+    explicitFundId?: string,
+  ) {
+    const fundRepository = manager.getRepository(Fund);
+
+    if (explicitFundId) {
+      const fund = await fundRepository.findOne({
+        where: { id: explicitFundId },
+      });
+
+      if (!fund) {
+        throw new NotFoundException('Cash fund not found');
+      }
+
+      if (!fund.accountCode?.startsWith('111')) {
+        throw new BadRequestException('fundId phải là quỹ tiền mặt');
+      }
+
+      if (String(fund.status).toLowerCase() !== 'active') {
+        throw new BadRequestException('Quỹ tiền mặt không ở trạng thái active');
+      }
+
+      return fund.id;
+    }
+
+    const [customerBranch] = await manager.query(
+      `
+        SELECT u.branch_id
+        FROM customers c
+        LEFT JOIN users u ON u.id = c.user_id
+        WHERE c.id = $1
+        LIMIT 1
+      `,
+      [customerId],
+    );
+    const branchId = customerBranch?.branch_id;
+
+    if (!branchId) {
+      throw new BadRequestException(
+        'fundId is required when customer branch cannot be resolved',
+      );
+    }
+
+    const fund = await fundRepository
+      .createQueryBuilder('fund')
+      .where('fund.branchId = :branchId', { branchId })
+      .andWhere('LOWER(fund.status) = :status', { status: 'active' })
+      .andWhere('fund.accountCode LIKE :cashAccount', { cashAccount: '111%' })
+      .orderBy('fund.code', 'ASC')
+      .getOne();
+
+    if (!fund) {
+      throw new BadRequestException(
+        'No active cash fund found for customer branch',
       );
     }
 

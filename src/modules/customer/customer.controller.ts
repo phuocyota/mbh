@@ -35,6 +35,13 @@ export class CustomerController {
   @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: 'Get all customers' })
   @ApiQuery({ name: 'branchId', required: false })
+  @ApiQuery({
+    name: 'getDebt',
+    required: false,
+    type: Boolean,
+    description:
+      'Include the current customer debt derived from wallet balance',
+  })
   @ApiResponse({
     status: 200,
     description: 'List of customers',
@@ -45,11 +52,13 @@ export class CustomerController {
     @Query('branchId') branchId?: string,
     @Query('page') page?: string,
     @Query('size') size?: string,
+    @Query('getDebt') getDebt?: string,
   ) {
     return this.customerService.findAll(
       page,
       size,
       req.user?.branchId || branchId,
+      getDebt === 'true',
     );
   }
 

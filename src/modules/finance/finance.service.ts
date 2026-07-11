@@ -743,7 +743,12 @@ export class FinanceService {
   ): 'debit' | 'credit' {
     const fundAccountCodes = [fund.accountCode, fund.code].filter(Boolean);
     const formulaEntry = parseAccountingFormula(reason?.accountingFormula).find(
-      (entry) => fundAccountCodes.includes(entry.accountCode),
+      (entry) =>
+        fundAccountCodes.some(
+          (accountCode) =>
+            accountCode === entry.accountCode ||
+            accountCode.startsWith(entry.accountCode),
+        ),
     );
 
     if (formulaEntry?.sign === '+') {

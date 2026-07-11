@@ -35,7 +35,7 @@ export class CustomerService extends BaseService<Customer> {
     return 'Customer';
   }
 
-  async findAll(page?: any, size?: any, branchId?: string) {
+  async findAll(page?: any, size?: any, branchId?: string, getDebt = false) {
     const pagination = normalizePagination(page, size);
     const qb = this.customerRepository
       .createQueryBuilder('customer')
@@ -44,12 +44,29 @@ export class CustomerService extends BaseService<Customer> {
       .skip(pagination.skip)
       .take(pagination.size);
 
+    if (getDebt) {
+      qb.leftJoinAndSelect('customer.wallet', 'wallet');
+    }
+
     if (branchId) {
       qb.andWhere('customerUser.branch_id = :branchId', { branchId });
     }
 
     const [data, total] = await qb.getManyAndCount();
-    return toPaginationResponse(data, total, pagination.page, pagination.size);
+    const responseData: Customer[] = getDebt
+      ? data.map((customer) => {
+          const debt = Math.max(0, -Number(customer.wallet?.balance || 0));
+          delete (customer as Partial<Customer>).wallet;
+          return Object.assign(customer, { debt });
+        })
+      : data;
+
+    return toPaginationResponse(
+      responseData,
+      total,
+      pagination.page,
+      pagination.size,
+    );
   }
 
   async findByUserId(userId: string): Promise<Customer | null> {
