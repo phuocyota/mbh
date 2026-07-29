@@ -215,7 +215,7 @@ Phiếu nhập hàng là chứng từ ghi nhận việc mua hoặc tiếp nhận
   - FE gửi `paymentStatus = PAID`.
   - BE tự lấy lý do `code = NHNCC`, `is_debt = false`, `status = active` từ `stock_fund_receipt_reason`.
   - Parse `accounting_formula` dạng `{accountCode:sign}`; `+` là ghi Có, `-` là ghi Nợ.
-  - BE lấy toàn bộ `accountCode` trong công thức và tìm đúng một quỹ active trong `funds` theo `code IN accountCodes` và `branchId` của phiếu nhập.
+  - `FinanceService` lấy các tài khoản dấu `+` (vế ghi Có của phiếu chi) trong công thức và resolve đúng một quỹ active theo `branchId`; StockVoucher không tự chọn quỹ.
   - Tạo chứng từ chi tiền (`money_vouchers` loại `PAYMENT` và `fund_receipt_paid`) và không tạo nợ còn lại.
 - Khi thanh toán công nợ sau nhập hàng, hệ thống phải giảm `debts` tương ứng và lưu liên kết đến phiếu nhập gốc.
 
@@ -228,8 +228,9 @@ Phiếu nhập hàng là chứng từ ghi nhận việc mua hoặc tiếp nhận
   - Có tài khoản tiền mặt/ngân hàng được resolve từ `accounting_formula` của reason `NHNCC` và `branchId`.
 - Khi thanh toán công nợ sau:
   - Nợ tài khoản phải trả nhà cung cấp.
-  - Có tài khoản tiền mặt/ngân hàng theo `fundId`.
-- Các tài khoản hạch toán phải lấy từ cấu hình kế toán của sản phẩm, kho, quỹ hoặc công thức hạch toán đã cấu hình trong `packages/accounting`.
+  - Có tài khoản tiền mặt/ngân hàng được resolve từ `accounting_formula` của lý do thanh toán; không tự chọn theo `fundId`.
+- Mọi nghiệp vụ tạo biến động quỹ phải có lý do kế toán active, `is_debt = false`. Phiếu thu dùng các tài khoản dấu `-`, phiếu chi dùng tài khoản dấu `+`; `fundId` nếu còn xuất hiện trong contract cũ chỉ là hint và phải được kiểm tra lại bằng công thức.
+- Mapping từ dữ kiện nghiệp vụ (`paymentMethod`, `paymentStatus`, có nợ/không nợ) sang `reasonCode` thuộc trách nhiệm BE và có thể hard-code. Sau khi chọn được lý do, tài khoản và quỹ tuyệt đối phải resolve từ `accounting_formula`, không hard-code tiếp `fundCode/fundId`.
 
 #### 7.8. API nghiệp vụ kỳ vọng
 - `POST /stock-vouchers/imports`: Tạo phiếu nhập hàng, có thể tạo nháp hoặc tạo và hoàn tất tùy `status/action`.
@@ -427,7 +428,7 @@ Dưới đây là bảng tổng hợp tất cả các endpoint API được đă
 | `GET` | `/finance/receipts/paid` | `findReceiptsPaid` | Get all received receipts (PT) |
 | `GET` | `/finance/transfers` | `findTransfers` | Get all paid receipts (PC) |
 | `GET` | `/finance/details` | `` | Get all fund transfers (CQ) |
-| `POST` | `/finance/transfers` | `createTransfer` | Get all fund details |
+| ~~`POST`~~ | ~~`/finance/transfers`~~ | Đã vô hiệu hóa | Không còn nghiệp vụ tạo chuyển quỹ |
 
 ### Module: INVENTORY-ITEM (Prefix: `inventory-items`)
 

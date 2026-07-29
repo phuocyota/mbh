@@ -25,6 +25,7 @@ import { WalletService } from './wallet.service';
 import { CreateWalletDto } from './dto/create-wallet.dto';
 import { WalletDto } from './dto/wallet.dto';
 import {
+  ClearCustomerDebtDto,
   RepayCustomerDebtCashDto,
   TopupWalletDto,
   WalletBalanceDto,
@@ -85,6 +86,7 @@ export class WalletController {
       userId,
       dto.note,
       dto.fundId,
+      dto.paymentMethod || 'CASH',
     );
   }
 
@@ -117,20 +119,18 @@ export class WalletController {
   @ApiOperation({
     summary: 'Gạch nợ khách hàng bằng phiếu thu',
     description:
-      'Tạo phiếu thu dùng reasonCode TNBHTS và giảm công nợ tương ứng trên ví khách hàng.',
+      'Tạo phiếu thu dùng lý do TNBHTS hoặc TNBHTS_BANK theo phương thức thanh toán và giảm công nợ tương ứng trên ví khách hàng.',
   })
   @ApiResponse({ status: 200, description: 'Gạch nợ khách hàng thành công' })
-  async clearCustomerDebt(
-    @Body() dto: RepayCustomerDebtCashDto,
-    @Req() req: any,
-  ) {
+  async clearCustomerDebt(@Body() dto: ClearCustomerDebtDto, @Req() req: any) {
     const userId = this.getAuthenticatedUserId(req);
-    return this.walletService.repayDebtByCash(
+    return this.walletService.clearCustomerDebt(
       dto.customerId,
       dto.amount,
       userId,
       dto.note,
       dto.fundId,
+      dto.paymentMethod || 'CASH',
     );
   }
 

@@ -16,7 +16,6 @@ import {
 import { FinanceService } from './finance.service';
 import { CreateFundDto } from './dto/create-fund.dto';
 import { CreateMoneyVoucherDto } from './dto/create-money-voucher.dto';
-import { CreateTransferDto } from './dto/create-transfer.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
 @ApiTags('Finance')
@@ -101,15 +100,29 @@ export class FinanceController {
   }
 
   @Post('receipts')
+  @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: 'Create receipt voucher' })
-  createReceipt(@Body() dto: Omit<CreateMoneyVoucherDto, 'type'>) {
-    return this.financeService.createReceipt(dto);
+  createReceipt(
+    @Body() dto: Omit<CreateMoneyVoucherDto, 'type'>,
+    @Req() req: any,
+  ) {
+    return this.financeService.createReceipt({
+      ...dto,
+      branchId: req.user?.branchId || dto.branchId,
+    });
   }
 
   @Post('payments')
+  @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: 'Create payment voucher' })
-  createPayment(@Body() dto: Omit<CreateMoneyVoucherDto, 'type'>) {
-    return this.financeService.createPayment(dto);
+  createPayment(
+    @Body() dto: Omit<CreateMoneyVoucherDto, 'type'>,
+    @Req() req: any,
+  ) {
+    return this.financeService.createPayment({
+      ...dto,
+      branchId: req.user?.branchId || dto.branchId,
+    });
   }
 
   @Get('receipts/received')
@@ -183,22 +196,14 @@ export class FinanceController {
     @Query('voucherType') voucherType?: string,
     @Query('search') search?: string,
   ) {
-    return this.financeService.findDetails(
-      page,
-      size,
-      req.user?.branchId,
-      {
-        from,
-        to,
-        voucherType,
-        search,
-      },
-    );
+    return this.financeService.findDetails(page, size, req.user?.branchId, {
+      from,
+      to,
+      voucherType,
+      search,
+    });
   }
 
-  @Post('transfers')
-  @ApiOperation({ summary: 'Create fund transfer (CQ)' })
-  createTransfer(@Body() dto: CreateTransferDto) {
-    return this.financeService.createTransfer(dto);
-  }
+  // Nghiệp vụ tạo chuyển quỹ hiện không còn được sử dụng.
+  // Giữ các API GET để đọc dữ liệu lịch sử, không expose POST /finance/transfers.
 }

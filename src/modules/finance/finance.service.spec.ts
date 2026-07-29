@@ -13,8 +13,6 @@ import {
   FundDetail,
   StockFundReceiptReason,
 } from '../../entities';
-import { MONEY_VOUCHER_TYPE } from '../../../packages/accounting/src/index.js';
-
 describe('FinanceService', () => {
   let service: FinanceService;
 
@@ -100,6 +98,12 @@ describe('FinanceService', () => {
 
   beforeEach(async () => {
     jest.clearAllMocks();
+    mockRepositories.StockFundReceiptReason.findOne.mockResolvedValue({
+      code: 'TEST_REASON',
+      reason: 'Test accounting reason',
+      accountingFormula: '{111:-,511:+}',
+      status: 'active',
+    });
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -323,6 +327,33 @@ describe('FinanceService', () => {
   });
 
   describe('createMoneyVoucher (Receipt)', () => {
+    it('should resolve fundId from reason accounting formula and branch', async () => {
+      const dto = {
+        type: 'RECEIPT',
+        branchId: 'branch-id-1',
+        amount: 200,
+        reasonCode: 'TEST_RECEIPT',
+      };
+
+      mockRepositories.StockFundReceiptReason.findOne.mockResolvedValueOnce({
+        code: 'TEST_RECEIPT',
+        reason: 'Test receipt reason',
+        accountingFormula: '{111:-,511:+}',
+        status: 'active',
+      });
+
+      await service.createMoneyVoucher(dto);
+
+      expect(mockRepositories.Fund.find).toHaveBeenCalledWith({
+        where: { branchId: 'branch-id-1', status: 'active' },
+      });
+      expect(mockRepositories.MoneyVoucher.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          fundId: 'fund-id-1',
+        }),
+      );
+    });
+
     it('should create a receipt header and corresponding details, and update fund debit', async () => {
       const dto = {
         type: 'RECEIPT',
@@ -330,13 +361,21 @@ describe('FinanceService', () => {
         amount: 200,
         orderId: 'order-id-1',
         purpose: 'ORDER_PAYMENT',
+        reasonCode: 'TEST_RECEIPT',
         note: 'Customer paid',
       };
 
+      mockRepositories.StockFundReceiptReason.findOne.mockResolvedValueOnce({
+        code: 'TEST_RECEIPT',
+        reason: 'Test receipt reason',
+        accountingFormula: '{111:-,511:+}',
+        status: 'active',
+      });
       mockRepositories.Fund.findOne.mockResolvedValueOnce({
         id: 'fund-id-1',
         branchId: 'branch-id-1',
         accountCode: '1111',
+        status: 'active',
         balance: 1000,
         debit: 500,
         credit: 200,
@@ -366,7 +405,7 @@ describe('FinanceService', () => {
         expect.objectContaining({
           amount: 200,
           type: 'RECEIVED',
-          category: 'ORDER_PAYMENT',
+          category: 'TEST_RECEIPT',
           fundId: 'fund-id-1',
           receivedId: 'received-id-1',
           note: 'Customer paid',
@@ -376,7 +415,7 @@ describe('FinanceService', () => {
       expect(result).toBeDefined();
     });
 
-    it('should use accounting reason formula and category for customer supplier debt offset receipt', async () => {
+    it('should reject an explicit fund outside the accounting reason formula', async () => {
       const dto = {
         type: 'RECEIPT',
         fundId: 'fund-id-1',
@@ -394,20 +433,51 @@ describe('FinanceService', () => {
         id: 'fund-id-1',
         branchId: 'branch-id-1',
         accountCode: '1111',
+        status: 'active',
         balance: 1000,
         debit: 500,
         credit: 200,
       });
 
-      await service.createMoneyVoucher(dto);
+      await expect(service.createMoneyVoucher(dto)).rejects.toThrow(
+        'does not match accounting_formula of reason BT_CN_KH_NCC',
+      );
+    });
+  });
 
-      expect(mockRepositories.FundDetail.create).toHaveBeenCalledWith(
+  describe('business fields to accounting reason mapping', () => {
+    it('should map receipt/payment methods to reason codes inside BE', async () => {
+      const createVoucherSpy = jest
+        .spyOn(service, 'createMoneyVoucher')
+        .mockResolvedValue({ id: 'voucher-id-1' } as any);
+
+      await service.createReceipt({
+        amount: 100,
+        paymentMethod: 'CASH',
+      });
+      await service.createPayment({
+        amount: 200,
+        paymentMethod: 'BANK_TRANSFER',
+      });
+
+      expect(createVoucherSpy).toHaveBeenNthCalledWith(
+        1,
         expect.objectContaining({
-          type: 'RECEIVED',
-          category: 'BT_CN_KH_NCC',
-          note: 'Bu tru cong no khach hang va nha cung cap',
+          type: 'RECEIPT',
+          paymentMethod: 'CASH',
+          reasonCode: 'THU_KHAC_CASH',
         }),
       );
+      expect(createVoucherSpy).toHaveBeenNthCalledWith(
+        2,
+        expect.objectContaining({
+          type: 'PAYMENT',
+          paymentMethod: 'BANK_TRANSFER',
+          reasonCode: 'CHI_KHAC_BANK',
+        }),
+      );
+
+      createVoucherSpy.mockRestore();
     });
   });
 
@@ -419,13 +489,21 @@ describe('FinanceService', () => {
         amount: 300,
         orderId: 'order-id-1',
         purpose: 'STOCK_IMPORT',
+        reasonCode: 'TEST_PAYMENT',
         note: 'Import payment',
       };
 
+      mockRepositories.StockFundReceiptReason.findOne.mockResolvedValueOnce({
+        code: 'TEST_PAYMENT',
+        reason: 'Test payment reason',
+        accountingFormula: '{111:+,156:-}',
+        status: 'active',
+      });
       mockRepositories.Fund.findOne.mockResolvedValueOnce({
         id: 'fund-id-1',
         branchId: 'branch-id-1',
         accountCode: '1111',
+        status: 'active',
         balance: 1000,
         debit: 500,
         credit: 200,
@@ -455,7 +533,7 @@ describe('FinanceService', () => {
         expect.objectContaining({
           amount: 300,
           type: 'PAID',
-          category: 'STOCK_IMPORT',
+          category: 'TEST_PAYMENT',
           fundId: 'fund-id-1',
           paidId: 'paid-id-1',
           note: 'Import payment',
@@ -471,13 +549,21 @@ describe('FinanceService', () => {
         fundId: 'fund-id-1',
         amount: 300,
         purpose: 'STOCK_IMPORT',
+        reasonCode: 'TEST_PAYMENT',
         note: 'Import payment',
       };
 
+      mockRepositories.StockFundReceiptReason.findOne.mockResolvedValueOnce({
+        code: 'TEST_PAYMENT',
+        reason: 'Test payment reason',
+        accountingFormula: '{111:+,156:-}',
+        status: 'active',
+      });
       mockRepositories.Fund.findOne.mockResolvedValueOnce({
         id: 'fund-id-1',
         branchId: 'branch-id-1',
         accountCode: '1111',
+        status: 'active',
         balance: 0,
         debit: 0,
         credit: 0,
@@ -496,91 +582,6 @@ describe('FinanceService', () => {
           balanceAfter: 0,
         }),
       );
-    });
-  });
-
-  describe('createTransfer', () => {
-    it('should perform a double-entry fund transfer, update balances, and create CQ voucher details', async () => {
-      const dto = {
-        fromFundId: 'fund-id-1',
-        toFundId: 'fund-id-2',
-        amount: 400,
-        note: 'Transfer to deposit fund',
-      };
-
-      const fromFund = {
-        id: 'fund-id-1',
-        name: 'Quỹ Tiền Mặt',
-        balance: 1000,
-        credit: 200,
-      };
-
-      const toFund = {
-        id: 'fund-id-2',
-        name: 'Quỹ Ngân Hàng',
-        balance: 500,
-        debit: 100,
-      };
-
-      mockRepositories.Fund.findOne
-        .mockResolvedValueOnce(fromFund)
-        .mockResolvedValueOnce(toFund);
-
-      const result = await service.createTransfer(dto);
-
-      expect(mockRepositories.Fund.save).toHaveBeenNthCalledWith(
-        1,
-        expect.objectContaining({
-          id: 'fund-id-1',
-          balance: 600,
-          credit: 600,
-        }),
-      );
-
-      expect(mockRepositories.Fund.save).toHaveBeenNthCalledWith(
-        2,
-        expect.objectContaining({
-          id: 'fund-id-2',
-          balance: 900,
-          debit: 500,
-        }),
-      );
-
-      expect(mockRepositories.FundReceiptTransfer.create).toHaveBeenCalledWith(
-        expect.objectContaining({
-          amount: 400,
-          fromFundId: 'fund-id-1',
-          toFundId: 'fund-id-2',
-          note: 'Transfer to deposit fund',
-          status: 'COMPLETED',
-        }),
-      );
-
-      expect(mockRepositories.FundDetail.create).toHaveBeenNthCalledWith(
-        1,
-        expect.objectContaining({
-          amount: 400,
-          type: 'PAID',
-          category: 'TRANSFER',
-          fundId: 'fund-id-1',
-          transferId: 'transfer-id-1',
-          note: 'Transfer to deposit fund',
-        }),
-      );
-
-      expect(mockRepositories.FundDetail.create).toHaveBeenNthCalledWith(
-        2,
-        expect.objectContaining({
-          amount: 400,
-          type: 'RECEIVED',
-          category: 'TRANSFER',
-          fundId: 'fund-id-2',
-          transferId: 'transfer-id-1',
-          note: 'Transfer to deposit fund',
-        }),
-      );
-
-      expect(result).toBeDefined();
     });
   });
 });

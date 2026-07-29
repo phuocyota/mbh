@@ -10,6 +10,7 @@ import {
   CreateWeeklyWorkScheduleDto,
   WeeklyWorkScheduleSlotDto,
 } from './dto/create-weekly-work-schedule.dto';
+import { SocketService } from '../socket/socket.service';
 
 @Injectable()
 export class WorkScheduleService extends BaseService<WorkSchedule> {
@@ -18,6 +19,7 @@ export class WorkScheduleService extends BaseService<WorkSchedule> {
     private workScheduleRepository: Repository<WorkSchedule>,
     @InjectRepository(Employee)
     private employeeRepository: Repository<Employee>,
+    private socketService: SocketService,
   ) {
     super(workScheduleRepository);
   }
@@ -26,8 +28,13 @@ export class WorkScheduleService extends BaseService<WorkSchedule> {
     return 'WorkSchedule';
   }
 
-  async create(dto: CreateWorkScheduleDto, user: JwtPayload): Promise<WorkSchedule> {
-    return super.create(this.buildSchedulePayload(dto), user);
+  async create(
+    dto: CreateWorkScheduleDto,
+    user: JwtPayload,
+  ): Promise<WorkSchedule> {
+    const schedule = await super.create(this.buildSchedulePayload(dto), user);
+    this.emitDashboardUpdate('created', schedule);
+    return schedule;
   }
 
   async update(
@@ -35,7 +42,13 @@ export class WorkScheduleService extends BaseService<WorkSchedule> {
     dto: CreateWorkScheduleDto,
     user: JwtPayload,
   ): Promise<WorkSchedule> {
-    return super.update(id, this.buildSchedulePayload(dto), user);
+    const schedule = await super.update(
+      id,
+      this.buildSchedulePayload(dto),
+      user,
+    );
+    this.emitDashboardUpdate('updated', schedule);
+    return schedule;
   }
 
   async createWeeklySchedule(
@@ -46,7 +59,9 @@ export class WorkScheduleService extends BaseService<WorkSchedule> {
     const toDate = this.parseDateKey(dto.toDate);
 
     if (fromDate.getTime() > toDate.getTime()) {
-      throw new BadRequestException('fromDate must be before or equal to toDate');
+      throw new BadRequestException(
+        'fromDate must be before or equal to toDate',
+      );
     }
 
     const slotByDay = new Map<number, WeeklyWorkScheduleSlotDto>();
@@ -103,12 +118,31 @@ export class WorkScheduleService extends BaseService<WorkSchedule> {
         }),
       ),
     );
+    this.socketService.emitDashboardUpdated({
+      source: 'work-schedule',
+      action: 'weekly-updated',
+      entityId: dto.employeeId,
+    });
 
     return {
       created: createdSchedules.length,
       replaced: replaceExisting ? workDates.length : 0,
       schedules: createdSchedules,
     };
+  }
+
+  async hardDelete(id: string): Promise<WorkSchedule> {
+    const schedule = await super.hardDelete(id);
+    this.emitDashboardUpdate('deleted', schedule);
+    return schedule;
+  }
+
+  private emitDashboardUpdate(action: string, schedule: WorkSchedule) {
+    this.socketService.emitDashboardUpdated({
+      source: 'work-schedule',
+      action,
+      entityId: schedule.id,
+    });
   }
 
   /**
@@ -232,7 +266,9 @@ export class WorkScheduleService extends BaseService<WorkSchedule> {
     }));
   }
 
-  private buildSchedulePayload(dto: CreateWorkScheduleDto): Partial<WorkSchedule> {
+  private buildSchedulePayload(
+    dto: CreateWorkScheduleDto,
+  ): Partial<WorkSchedule> {
     if (dto.shift !== 'custom') {
       return {
         ...dto,

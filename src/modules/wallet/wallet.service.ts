@@ -8,8 +8,6 @@ import { EntityManager, Repository } from 'typeorm';
 import { Wallet } from '../../entities/wallet.entity';
 import { WalletTransaction } from '../../entities/wallet-transaction.entity';
 import { Customer } from '../../entities/customer.entity';
-import { Fund } from '../../entities/fund.entity';
-import { StockFundReceiptReason } from '../../entities/stock-fund-receipt-reason.entity';
 import { BaseService } from '../../common/sql/base.service';
 import { ERROR_MESSAGES } from '../../common/constant/error-messages.constant';
 import { CustomerService } from '../customer/customer.service';
@@ -30,7 +28,8 @@ import {
 } from '../../../packages/accounting/src/index.js';
 
 const DEFERRED_PAYMENT_REASON_CODE = 'TT_TRA_CHAM';
-const CUSTOMER_DEBT_CLEARANCE_REASON_CODE = 'TNBHTS';
+const CASH_DEBT_CLEARANCE_REASON_CODE = 'TNBHTS';
+const BANK_DEBT_CLEARANCE_REASON_CODE = 'TNBHTS_BANK';
 
 export interface TopupResult {
   walletId: string;
@@ -40,6 +39,8 @@ export interface TopupResult {
   balanceAfter: number;
   transactionId: string;
 }
+
+type DebtCollectionPaymentMethod = 'CASH' | 'BANK';
 
 @Injectable()
 export class WalletService extends BaseService<Wallet> {
@@ -118,6 +119,7 @@ export class WalletService extends BaseService<Wallet> {
     createdBy?: string,
     note?: string,
     fundId?: string,
+    paymentMethod: DebtCollectionPaymentMethod = 'CASH',
   ): Promise<TopupResult> {
     if (amount <= 0) {
       throw new BadRequestException('Số tiền nạp phải lớn hơn 0');
@@ -130,7 +132,6 @@ export class WalletService extends BaseService<Wallet> {
       const walletRepository = manager.getRepository(Wallet);
       const walletTransactionRepository =
         manager.getRepository(WalletTransaction);
-      const reasonRepository = manager.getRepository(StockFundReceiptReason);
 
       const customer = await customerRepository.findOne({
         where: { id: customerId },
@@ -176,15 +177,6 @@ export class WalletService extends BaseService<Wallet> {
         balanceAfter,
       );
 
-      const deferredReason = await reasonRepository.findOne({
-        where: { code: DEFERRED_PAYMENT_REASON_CODE },
-      });
-      if (!deferredReason?.accountingFormula) {
-        throw new BadRequestException(
-          'Deferred payment accounting reason is not configured',
-        );
-      }
-
       const tx = walletTransactionRepository.create({
         walletId: wallet.id,
         customerId,
@@ -200,24 +192,32 @@ export class WalletService extends BaseService<Wallet> {
       const savedTx = await walletTransactionRepository.save(tx);
 
       if (recoveredDebtAmount > 0) {
-        const resolvedFundId = await this.resolveDebtCollectionFundId(
+        const branchId = await this.resolveCustomerBranchId(
           manager,
           customerId,
-          fundId,
         );
+        const reasonCode =
+          paymentMethod === 'BANK'
+            ? BANK_DEBT_CLEARANCE_REASON_CODE
+            : CASH_DEBT_CLEARANCE_REASON_CODE;
 
-        await this.financeService.createMoneyVoucher({
-          type: MONEY_VOUCHER_TYPE.RECEIPT,
-          fundId: resolvedFundId,
-          amount: recoveredDebtAmount,
-          customerId,
-          purpose: ACCOUNTING_PURPOSE.CUSTOMER_DEBT_COLLECTION,
-          refType: ACCOUNTING_SOURCE_TYPE.WALLET_TRANSACTION,
-          refId: savedTx.id,
-          note:
-            note ||
-            `Thu tien cong no khach hang ${customer.customerCode || customer.fullName}`,
-        });
+        await this.financeService.createMoneyVoucher(
+          {
+            type: MONEY_VOUCHER_TYPE.RECEIPT,
+            branchId,
+            fundId,
+            amount: recoveredDebtAmount,
+            customerId,
+            purpose: ACCOUNTING_PURPOSE.CUSTOMER_DEBT_COLLECTION,
+            reasonCode,
+            refType: ACCOUNTING_SOURCE_TYPE.WALLET_TRANSACTION,
+            refId: savedTx.id,
+            note:
+              note ||
+              `Thu tien cong no khach hang ${customer.customerCode || customer.fullName}`,
+          },
+          manager,
+        );
       }
 
       return {
@@ -238,12 +238,56 @@ export class WalletService extends BaseService<Wallet> {
     note?: string,
     fundId?: string,
   ): Promise<TopupResult> {
+    return this.repayCustomerDebt(
+      customerId,
+      amount,
+      createdBy,
+      note,
+      fundId,
+      'CASH',
+    );
+  }
+
+  async clearCustomerDebt(
+    customerId: string,
+    amount: number,
+    createdBy?: string,
+    note?: string,
+    fundId?: string,
+    paymentMethod: DebtCollectionPaymentMethod = 'CASH',
+  ): Promise<TopupResult> {
+    if (paymentMethod === 'CASH') {
+      return this.repayDebtByCash(customerId, amount, createdBy, note, fundId);
+    }
+
+    return this.repayCustomerDebt(
+      customerId,
+      amount,
+      createdBy,
+      note,
+      fundId,
+      paymentMethod,
+    );
+  }
+
+  private async repayCustomerDebt(
+    customerId,
+    amount,
+    createdBy,
+    note,
+    fundId,
+    paymentMethod: DebtCollectionPaymentMethod,
+  ): Promise<TopupResult> {
     const repaymentAmount = Number(amount);
     if (!Number.isFinite(repaymentAmount) || repaymentAmount <= 0) {
       throw new BadRequestException('Số tiền trả nợ phải lớn hơn 0');
     }
 
     const auditUserId = this.toUuidOrNull(createdBy);
+    const reasonCode =
+      paymentMethod === 'BANK'
+        ? BANK_DEBT_CLEARANCE_REASON_CODE
+        : CASH_DEBT_CLEARANCE_REASON_CODE;
 
     return this.walletRepository.manager.transaction(async (manager) => {
       const customerRepository = manager.getRepository(Customer);
@@ -282,7 +326,9 @@ export class WalletService extends BaseService<Wallet> {
       }
 
       if (repaymentAmount > currentDebt) {
-        throw new BadRequestException('Số tiền trả nợ vượt quá công nợ hiện tại');
+        throw new BadRequestException(
+          'Số tiền trả nợ vượt quá công nợ hiện tại',
+        );
       }
 
       const balanceAfter = balanceBefore + repaymentAmount;
@@ -305,33 +351,37 @@ export class WalletService extends BaseService<Wallet> {
         balanceBefore,
         balanceAfter,
         refType: WALLET_TRANSACTION_REF_TYPE.MANUAL,
-        reasonCode: CUSTOMER_DEBT_CLEARANCE_REASON_CODE,
-        note: note || 'Khách hàng trả nợ bằng tiền mặt',
+        reasonCode,
+        note:
+          note ||
+          `Khách hàng trả nợ bằng ${
+            paymentMethod === 'BANK' ? 'tiền gửi' : 'tiền mặt'
+          }`,
         createdBy: auditUserId,
       });
       const savedTx = await walletTransactionRepository.save(tx);
 
-      const resolvedFundId = await this.resolveCashDebtCollectionFundId(
-        manager,
-        customerId,
-        fundId,
-      );
+      const branchId = await this.resolveCustomerBranchId(manager, customerId);
 
-      await this.financeService.createMoneyVoucher({
-        type: MONEY_VOUCHER_TYPE.RECEIPT,
-        fundId: resolvedFundId,
-        amount: repaymentAmount,
-        customerId,
-        purpose: ACCOUNTING_PURPOSE.CUSTOMER_DEBT_COLLECTION,
-        reasonCode: CUSTOMER_DEBT_CLEARANCE_REASON_CODE,
-        refType: ACCOUNTING_SOURCE_TYPE.WALLET_TRANSACTION,
-        refId: savedTx.id,
-        note:
-          note ||
-          `Thu tiền mặt công nợ khách hàng ${
-            customer.customerCode || customer.fullName
-          }`,
-      });
+      await this.financeService.createMoneyVoucher(
+        {
+          type: MONEY_VOUCHER_TYPE.RECEIPT,
+          branchId,
+          fundId,
+          amount: repaymentAmount,
+          customerId,
+          purpose: ACCOUNTING_PURPOSE.CUSTOMER_DEBT_COLLECTION,
+          reasonCode,
+          refType: ACCOUNTING_SOURCE_TYPE.WALLET_TRANSACTION,
+          refId: savedTx.id,
+          note:
+            note ||
+            `Thu ${
+              paymentMethod === 'BANK' ? 'tiền gửi' : 'tiền mặt'
+            } công nợ khách hàng ${customer.customerCode || customer.fullName}`,
+        },
+        manager,
+      );
 
       return {
         walletId: wallet.id,
@@ -344,15 +394,10 @@ export class WalletService extends BaseService<Wallet> {
     });
   }
 
-  private async resolveDebtCollectionFundId(
+  private async resolveCustomerBranchId(
     manager: EntityManager,
     customerId: string,
-    explicitFundId?: string,
-  ) {
-    if (explicitFundId) {
-      return explicitFundId;
-    }
-
+  ): Promise<string> {
     const [customerBranch] = await manager.query(
       `
         SELECT u.branch_id
@@ -367,96 +412,11 @@ export class WalletService extends BaseService<Wallet> {
 
     if (!branchId) {
       throw new BadRequestException(
-        'fundId is required when topup collects customer debt',
+        'Không xác định được chi nhánh khách hàng để resolve quỹ từ accounting_formula',
       );
     }
 
-    const fund = await manager
-      .getRepository(Fund)
-      .createQueryBuilder('fund')
-      .where('fund.branchId = :branchId', { branchId })
-      .andWhere('LOWER(fund.status) = :status', { status: 'active' })
-      .orderBy(
-        `CASE
-          WHEN fund.accountCode LIKE '112%' THEN 0
-          WHEN fund.code IN ('NH', '112', '1121') THEN 1
-          WHEN fund.accountCode LIKE '111%' THEN 2
-          ELSE 3
-        END`,
-        'ASC',
-      )
-      .addOrderBy('fund.code', 'ASC')
-      .getOne();
-
-    if (!fund) {
-      throw new BadRequestException(
-        'No active fund found for customer branch when topup collects customer debt',
-      );
-    }
-
-    return fund.id;
-  }
-
-  private async resolveCashDebtCollectionFundId(
-    manager: EntityManager,
-    customerId: string,
-    explicitFundId?: string,
-  ) {
-    const fundRepository = manager.getRepository(Fund);
-
-    if (explicitFundId) {
-      const fund = await fundRepository.findOne({
-        where: { id: explicitFundId },
-      });
-
-      if (!fund) {
-        throw new NotFoundException('Cash fund not found');
-      }
-
-      if (!fund.accountCode?.startsWith('111')) {
-        throw new BadRequestException('fundId phải là quỹ tiền mặt');
-      }
-
-      if (String(fund.status).toLowerCase() !== 'active') {
-        throw new BadRequestException('Quỹ tiền mặt không ở trạng thái active');
-      }
-
-      return fund.id;
-    }
-
-    const [customerBranch] = await manager.query(
-      `
-        SELECT u.branch_id
-        FROM customers c
-        LEFT JOIN users u ON u.id = c.user_id
-        WHERE c.id = $1
-        LIMIT 1
-      `,
-      [customerId],
-    );
-    const branchId = customerBranch?.branch_id;
-
-    if (!branchId) {
-      throw new BadRequestException(
-        'fundId is required when customer branch cannot be resolved',
-      );
-    }
-
-    const fund = await fundRepository
-      .createQueryBuilder('fund')
-      .where('fund.branchId = :branchId', { branchId })
-      .andWhere('LOWER(fund.status) = :status', { status: 'active' })
-      .andWhere('fund.accountCode LIKE :cashAccount', { cashAccount: '111%' })
-      .orderBy('fund.code', 'ASC')
-      .getOne();
-
-    if (!fund) {
-      throw new BadRequestException(
-        'No active cash fund found for customer branch',
-      );
-    }
-
-    return fund.id;
+    return branchId;
   }
 
   async chargeForOrder(customerId: string, amount: number, orderId: string) {

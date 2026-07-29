@@ -4,7 +4,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { FindOptionsWhere, In, Repository } from 'typeorm';
+import { EntityManager, FindOptionsWhere, In, Repository } from 'typeorm';
 import { parseAccountingFormula } from '../../common/utils/accounting-formula.utils';
 import {
   Debt,
@@ -20,7 +20,6 @@ import {
 } from '../../entities';
 import { CreateFundDto } from './dto/create-fund.dto';
 import { CreateMoneyVoucherDto } from './dto/create-money-voucher.dto';
-import { CreateTransferDto } from './dto/create-transfer.dto';
 import {
   ACCOUNTING_SOURCE_TYPE,
   ACCOUNTING_PURPOSE,
@@ -297,6 +296,12 @@ export class FinanceService {
   createReceipt(dto: Omit<CreateMoneyVoucherDto, 'type'>) {
     return this.createMoneyVoucher({
       ...dto,
+      reasonCode:
+        dto.reasonCode ||
+        this.resolveGenericVoucherReasonCode(
+          MONEY_VOUCHER_TYPE.RECEIPT,
+          dto.paymentMethod,
+        ),
       type: MONEY_VOUCHER_TYPE.RECEIPT,
     });
   }
@@ -304,6 +309,12 @@ export class FinanceService {
   createPayment(dto: Omit<CreateMoneyVoucherDto, 'type'>) {
     return this.createMoneyVoucher({
       ...dto,
+      reasonCode:
+        dto.reasonCode ||
+        this.resolveGenericVoucherReasonCode(
+          MONEY_VOUCHER_TYPE.PAYMENT,
+          dto.paymentMethod,
+        ),
       type: MONEY_VOUCHER_TYPE.PAYMENT,
     });
   }
@@ -311,26 +322,47 @@ export class FinanceService {
   /**
    *handle thu chi
    */
-  async createMoneyVoucher(dto: CreateMoneyVoucherDto) {
+  async createMoneyVoucher(
+    dto: CreateMoneyVoucherDto,
+    manager?: EntityManager,
+  ) {
+    const fundRepository = manager
+      ? manager.getRepository(Fund)
+      : this.fundRepository;
+    const fundTransactionRepository = manager
+      ? manager.getRepository(FundTransaction)
+      : this.fundTransactionRepository;
+    const moneyVoucherRepository = manager
+      ? manager.getRepository(MoneyVoucher)
+      : this.moneyVoucherRepository;
+    const debtRepository = manager
+      ? manager.getRepository(Debt)
+      : this.debtRepository;
+    const supplierRepository = manager
+      ? manager.getRepository(Supplier)
+      : this.supplierRepository;
+    const fundReceiptReceivedRepository = manager
+      ? manager.getRepository(FundReceiptReceived)
+      : this.fundReceiptReceivedRepository;
+    const fundReceiptPaidRepository = manager
+      ? manager.getRepository(FundReceiptPaid)
+      : this.fundReceiptPaidRepository;
+    const fundDetailRepository = manager
+      ? manager.getRepository(FundDetail)
+      : this.fundDetailRepository;
+    const stockFundReceiptReasonRepository = manager
+      ? manager.getRepository(StockFundReceiptReason)
+      : this.stockFundReceiptReasonRepository;
+
     const type = this.mapAccountingRule(() =>
       normalizeMoneyVoucherType(dto.type),
     );
 
-    const fund = await this.fundRepository.findOne({
-      where: { id: dto.fundId },
-    });
-    if (!fund) {
-      throw new NotFoundException('Fund not found');
-    }
-
-    const reason = dto.reasonCode
-      ? await this.stockFundReceiptReasonRepository.findOne({
-          where: { code: dto.reasonCode },
-        })
-      : null;
-    if (dto.reasonCode && !reason) {
-      throw new NotFoundException('Accounting reason not found');
-    }
+    const { fund, reason } = await this.resolveVoucherFund(
+      { ...dto, type },
+      fundRepository,
+      stockFundReceiptReasonRepository,
+    );
 
     const amount = Number(dto.amount);
     if (!Number.isFinite(amount) || amount <= 0) {
@@ -342,14 +374,15 @@ export class FinanceService {
     const currentBalance = Number(fund.balance || 0);
     const postingSide = this.resolveFundPostingSide(reason, fund, type);
 
-    const voucher = await this.moneyVoucherRepository.save(
-      this.moneyVoucherRepository.create({
-        fundId: dto.fundId,
+    const voucher = await moneyVoucherRepository.save(
+      moneyVoucherRepository.create({
+        fundId: fund.id,
         amount,
         orderId: dto.orderId,
         supplierId: dto.supplierId,
         customerId: dto.customerId,
         purpose: dto.purpose,
+        reasonCode: reason.code,
         refType: dto.refType,
         refId: dto.refId,
         note: dto.note,
@@ -363,10 +396,10 @@ export class FinanceService {
     } else {
       fund.credit = Number(fund.credit || 0) + amount;
     }
-    await this.fundRepository.save(fund);
+    await fundRepository.save(fund);
 
-    await this.fundTransactionRepository.save(
-      this.fundTransactionRepository.create({
+    await fundTransactionRepository.save(
+      fundTransactionRepository.create({
         fundId: fund.id,
         type,
         amount,
@@ -378,12 +411,12 @@ export class FinanceService {
       }),
     );
 
-    const receiptNote = dto.note || reason?.reason || dto.purpose;
-    const detailCategory = dto.reasonCode || dto.purpose || 'OTHER';
+    const receiptNote = dto.note || reason.reason || dto.purpose;
+    const detailCategory = reason.code;
 
     if (type === MONEY_VOUCHER_TYPE.RECEIPT) {
-      const receivedReceipt = await this.fundReceiptReceivedRepository.save(
-        this.fundReceiptReceivedRepository.create({
+      const receivedReceipt = await fundReceiptReceivedRepository.save(
+        fundReceiptReceivedRepository.create({
           code: `PT${Date.now()}`,
           branchId: fund.branchId,
           amount,
@@ -395,8 +428,8 @@ export class FinanceService {
         }),
       );
 
-      await this.fundDetailRepository.save(
-        this.fundDetailRepository.create({
+      await fundDetailRepository.save(
+        fundDetailRepository.create({
           amount,
           type: 'RECEIVED',
           category: detailCategory,
@@ -406,8 +439,8 @@ export class FinanceService {
         }),
       );
     } else if (type === MONEY_VOUCHER_TYPE.PAYMENT) {
-      const paidReceipt = await this.fundReceiptPaidRepository.save(
-        this.fundReceiptPaidRepository.create({
+      const paidReceipt = await fundReceiptPaidRepository.save(
+        fundReceiptPaidRepository.create({
           code: `PC${Date.now()}`,
           branchId: fund.branchId,
           amount,
@@ -419,8 +452,8 @@ export class FinanceService {
         }),
       );
 
-      await this.fundDetailRepository.save(
-        this.fundDetailRepository.create({
+      await fundDetailRepository.save(
+        fundDetailRepository.create({
           amount,
           type: 'PAID',
           category: detailCategory,
@@ -441,7 +474,7 @@ export class FinanceService {
         );
       }
 
-      const supplier = await this.supplierRepository.findOne({
+      const supplier = await supplierRepository.findOne({
         where: { id: dto.supplierId },
       });
       if (!supplier) {
@@ -450,10 +483,10 @@ export class FinanceService {
 
       const nextDebt = Number(supplier.debt || 0) - amount;
       supplier.debt = nextDebt;
-      await this.supplierRepository.save(supplier);
+      await supplierRepository.save(supplier);
 
-      await this.debtRepository.save(
-        this.debtRepository.create({
+      await debtRepository.save(
+        debtRepository.create({
           supplierId: supplier.id,
           type: DEBT_TRANSACTION_TYPE.PAYMENT_OFFSET,
           amount,
@@ -465,94 +498,14 @@ export class FinanceService {
       );
     }
 
-    return this.moneyVoucherRepository.findOne({
+    return moneyVoucherRepository.findOne({
       where: { id: voucher.id },
       relations: ['fund', 'order', 'order.customer', 'supplier', 'customer'],
     });
   }
 
-  async createTransfer(dto: CreateTransferDto) {
-    const fromFund = await this.fundRepository.findOne({
-      where: { id: dto.fromFundId },
-    });
-    if (!fromFund) {
-      throw new NotFoundException('Source fund not found');
-    }
-
-    const toFund = await this.fundRepository.findOne({
-      where: { id: dto.toFundId },
-    });
-    if (!toFund) {
-      throw new NotFoundException('Destination fund not found');
-    }
-
-    if (fromFund.id === toFund.id) {
-      throw new BadRequestException(
-        'Source and destination funds cannot be the same',
-      );
-    }
-
-    const amount = Number(dto.amount);
-    if (!Number.isFinite(amount) || amount <= 0) {
-      throw new BadRequestException('Transfer amount must be greater than 0');
-    }
-
-    const fromBalance = Number(fromFund.balance || 0);
-    if (fromBalance < amount) {
-      throw new BadRequestException('Fund balance is not enough');
-    }
-
-    // Update fromFund balance (decrease balance, increase credit)
-    fromFund.balance = fromBalance - amount;
-    fromFund.credit = Number(fromFund.credit || 0) + amount;
-    await this.fundRepository.save(fromFund);
-
-    // Update toFund balance (increase balance, increase debit)
-    toFund.balance = Number(toFund.balance || 0) + amount;
-    toFund.debit = Number(toFund.debit || 0) + amount;
-    await this.fundRepository.save(toFund);
-
-    const code = `CQ${Date.now()}`;
-
-    const transferReceipt = await this.fundReceiptTransferRepository.save(
-      this.fundReceiptTransferRepository.create({
-        code,
-        amount,
-        fromFundId: fromFund.id,
-        toFundId: toFund.id,
-        note: dto.note,
-        status: 'COMPLETED',
-      }),
-    );
-
-    // Create two details (one PAID at fromFund, one RECEIVED at toFund)
-    await this.fundDetailRepository.save(
-      this.fundDetailRepository.create({
-        amount,
-        type: 'PAID',
-        category: 'TRANSFER',
-        fundId: fromFund.id,
-        transferId: transferReceipt.id,
-        note: dto.note || `Chuyển quỹ sang ${toFund.name}`,
-      }),
-    );
-
-    await this.fundDetailRepository.save(
-      this.fundDetailRepository.create({
-        amount,
-        type: 'RECEIVED',
-        category: 'TRANSFER',
-        fundId: toFund.id,
-        transferId: transferReceipt.id,
-        note: dto.note || `Nhận chuyển quỹ từ ${fromFund.name}`,
-      }),
-    );
-
-    return this.fundReceiptTransferRepository.findOne({
-      where: { id: transferReceipt.id },
-      relations: ['fromFund', 'toFund', 'details'],
-    });
-  }
+  // Nghiệp vụ tạo chuyển quỹ đã ngừng sử dụng.
+  // Chỉ giữ repository và các hàm đọc để hiển thị dữ liệu chuyển quỹ lịch sử.
 
   private toMoneyVoucherListItem(voucher: MoneyVoucher) {
     const order = voucher.order as any;
@@ -598,6 +551,7 @@ export class FinanceService {
       voucherType:
         voucher.type === MONEY_VOUCHER_TYPE.RECEIPT ? 'RECEIVED' : 'PAID',
       purpose: voucher.purpose,
+      reasonCode: voucher.reasonCode,
       refType: voucher.refType,
       refId: voucher.refId,
       orderId: voucher.orderId,
@@ -736,13 +690,40 @@ export class FinanceService {
     }
   }
 
+  private resolveGenericVoucherReasonCode(
+    type: string,
+    paymentMethod?: string,
+  ): string {
+    const normalizedMethod = paymentMethod?.trim().toUpperCase();
+    const methodGroup =
+      normalizedMethod === 'CASH'
+        ? 'CASH'
+        : ['BANK', 'BANK_TRANSFER', 'QR', 'MOMO', 'CARD'].includes(
+              normalizedMethod || '',
+            )
+          ? 'BANK'
+          : null;
+
+    if (!methodGroup) {
+      throw new BadRequestException(
+        'paymentMethod must be CASH, BANK, BANK_TRANSFER, QR, MOMO or CARD when reasonCode is not provided',
+      );
+    }
+
+    if (type === MONEY_VOUCHER_TYPE.RECEIPT) {
+      return methodGroup === 'CASH' ? 'THU_KHAC_CASH' : 'THU_KHAC_BANK';
+    }
+
+    return methodGroup === 'CASH' ? 'CHI_KHAC_CASH' : 'CHI_KHAC_BANK';
+  }
+
   private resolveFundPostingSide(
-    reason: StockFundReceiptReason | null,
+    reason: StockFundReceiptReason,
     fund: Fund,
     type: string,
   ): 'debit' | 'credit' {
     const fundAccountCodes = [fund.accountCode, fund.code].filter(Boolean);
-    const formulaEntry = parseAccountingFormula(reason?.accountingFormula).find(
+    const formulaEntry = parseAccountingFormula(reason.accountingFormula).find(
       (entry) =>
         fundAccountCodes.some(
           (accountCode) =>
@@ -760,6 +741,102 @@ export class FinanceService {
     }
 
     return type === MONEY_VOUCHER_TYPE.RECEIPT ? 'debit' : 'credit';
+  }
+
+  private async resolveVoucherFund(
+    dto: CreateMoneyVoucherDto,
+    fundRepository: Repository<Fund>,
+    reasonRepository: Repository<StockFundReceiptReason>,
+  ): Promise<{ fund: Fund; reason: StockFundReceiptReason }> {
+    if (!dto.reasonCode) {
+      throw new BadRequestException(
+        'reasonCode is required to resolve fund from accounting_formula',
+      );
+    }
+
+    const reason = await reasonRepository.findOne({
+      where: { code: dto.reasonCode, status: 'active', isDebt: false },
+    });
+    if (!reason) {
+      throw new NotFoundException(
+        `Active accounting reason not found: ${dto.reasonCode}`,
+      );
+    }
+
+    const formulaEntries = parseAccountingFormula(reason.accountingFormula);
+    if (!formulaEntries.length) {
+      throw new BadRequestException(
+        `Accounting formula is required for reason: ${reason.code}`,
+      );
+    }
+    const fundPostingSign = dto.type === MONEY_VOUCHER_TYPE.RECEIPT ? '-' : '+';
+    const fundFormulaEntries = formulaEntries.filter(
+      (entry) => entry.sign === fundPostingSign,
+    );
+    if (!fundFormulaEntries.length) {
+      throw new BadRequestException(
+        `Accounting formula of reason ${reason.code} does not configure the ${fundPostingSign} fund posting side`,
+      );
+    }
+
+    let explicitFund: Fund | null = null;
+    if (dto.fundId) {
+      explicitFund = await fundRepository.findOne({
+        where: { id: dto.fundId },
+      });
+      if (!explicitFund) {
+        throw new NotFoundException(`Fund not found: ${dto.fundId}`);
+      }
+    }
+
+    const branchId = dto.branchId || explicitFund?.branchId;
+    if (!branchId) {
+      throw new BadRequestException(
+        'branchId is required to resolve fund from accounting_formula',
+      );
+    }
+
+    const matchesFormula = (fund: Fund) =>
+      fundFormulaEntries.some((entry) =>
+        [fund.accountCode, fund.code]
+          .filter(Boolean)
+          .some(
+            (fundAccountCode) =>
+              fundAccountCode === entry.accountCode ||
+              fundAccountCode.startsWith(entry.accountCode),
+          ),
+      );
+
+    if (explicitFund) {
+      if (
+        explicitFund.branchId !== branchId ||
+        String(explicitFund.status).toLowerCase() !== 'active'
+      ) {
+        throw new BadRequestException(
+          `Fund ${explicitFund.id} is not active in branch ${branchId}`,
+        );
+      }
+      if (!matchesFormula(explicitFund)) {
+        throw new BadRequestException(
+          `Fund ${explicitFund.id} does not match accounting_formula of reason ${reason.code}`,
+        );
+      }
+
+      return { fund: explicitFund, reason };
+    }
+
+    const branchFunds = await fundRepository.find({
+      where: { branchId, status: 'active' },
+    });
+    const matchedFunds = branchFunds.filter(matchesFormula);
+
+    if (matchedFunds.length !== 1) {
+      throw new BadRequestException(
+        `Expected exactly one active fund matching accounting_formula of reason ${reason.code} in branch ${branchId}, found ${matchedFunds.length}`,
+      );
+    }
+
+    return { fund: matchedFunds[0], reason };
   }
 
   private resolveSummaryRange(range: FinanceSummaryRange) {

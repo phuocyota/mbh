@@ -115,10 +115,7 @@ export class OrderService {
       await this.orderItemService.createManyForOrder(savedOrder.id, items);
     }
 
-    const initialPayment = this.getInitialPaymentDto(
-      createOrderDto,
-      totalAmount,
-    );
+    const initialPayment = this.getInitialPaymentDto(createOrderDto);
     if (initialPayment) {
       await this.paymentService.createSuccessPayment({
         ...initialPayment,
@@ -158,7 +155,7 @@ export class OrderService {
     return orderWithItems;
   }
 
-  private getInitialPaymentDto(createOrderDto: any, totalAmount: number) {
+  private getInitialPaymentDto(createOrderDto: any) {
     const payment = createOrderDto.payment || {};
     const amount = Number(
       payment.amount ??
@@ -176,7 +173,6 @@ export class OrderService {
       method:
         payment.method || createOrderDto.paymentMethod || PAYMENT_METHOD.CASH,
       amount,
-      fundId: payment.fundId || createOrderDto.fundId,
       createdBy: payment.createdBy || createOrderDto.createdBy,
       transactionCode:
         payment.transactionCode ||
@@ -840,7 +836,6 @@ export class OrderService {
       amount: number;
       transId: string;
       createdBy?: string;
-      fundId?: string;
     },
   ) {
     const order = await this.findOrderByIdOrThrow(orderId);
@@ -901,7 +896,6 @@ export class OrderService {
     await this.stockVoucherService.createExportFromOrder(updatedOrder, {
       method: PAYMENT_METHOD.MOMO,
       amount: paymentDto.amount,
-      fundId: paymentDto.fundId,
       createdBy: paymentDto.createdBy,
     } as any);
 

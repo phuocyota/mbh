@@ -8,7 +8,6 @@ import {
   Stock,
   StockItem,
   StockFundReceiptReason,
-  Fund,
   MoneyVoucher,
   FundReceiptPaid,
   FundReceiptReceived,
@@ -18,6 +17,7 @@ import { SupplierModule } from '../supplier/supplier.module';
 import { StockModule } from '../stock/stock.module';
 import { StockVoucherController } from './stock-voucher.controller';
 import { StockVoucherService } from './stock-voucher.service';
+import { SocketModule } from '../socket/socket.module';
 
 @Module({
   imports: [
@@ -29,7 +29,6 @@ import { StockVoucherService } from './stock-voucher.service';
       Stock,
       StockItem,
       StockFundReceiptReason,
-      Fund,
       MoneyVoucher,
       FundReceiptPaid,
       FundReceiptReceived,
@@ -37,6 +36,7 @@ import { StockVoucherService } from './stock-voucher.service';
     FinanceModule,
     SupplierModule,
     StockModule,
+    SocketModule,
   ],
   controllers: [StockVoucherController],
   providers: [StockVoucherService],

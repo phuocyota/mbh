@@ -1,7 +1,6 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
-import { parseAccountingFormula } from '../../common/utils/accounting-formula.utils';
 import {
   StockReceiptDetail,
   StockReceiptImport,
@@ -10,7 +9,6 @@ import {
   Stock,
   StockItem,
   StockFundReceiptReason,
-  Fund,
   MoneyVoucher,
   FundReceiptPaid,
   FundReceiptReceived,
@@ -36,6 +34,7 @@ import {
   normalizePagination,
   toPaginationResponse,
 } from '../../common/dto/pagination.dto';
+import { SocketService } from '../socket/socket.service';
 
 const DEFERRED_SALE_REASON_CODE = 'BH_TRA_CHAM';
 const SUPPLIER_IMPORT_REASON_CODE = 'NHNCC';
@@ -55,8 +54,6 @@ export class StockVoucherService {
     private stockFundReceiptReasonRepository: Repository<StockFundReceiptReason>,
     @InjectRepository(StockItem)
     private stockItemRepository: Repository<StockItem>,
-    @InjectRepository(Fund)
-    private fundRepository: Repository<Fund>,
     @InjectRepository(MoneyVoucher)
     private moneyVoucherRepository: Repository<MoneyVoucher>,
     @InjectRepository(FundReceiptPaid)
@@ -66,6 +63,7 @@ export class StockVoucherService {
     private supplierService: SupplierService,
     private financeService: FinanceService,
     private stockService: StockService,
+    private socketService: SocketService,
   ) {}
 
   async findAll(
@@ -151,7 +149,6 @@ export class StockVoucherService {
       sourceType: order.customerId ? STOCK_PARTY_TYPE.CUSTOMER : undefined,
       referenceId: order.id,
       referenceType: 'order',
-      fundId: isCustomerAdvanceOffset ? undefined : payment?.fundId,
       reasonCode,
       note: `Xuất kho theo đơn hàng ${order.orderCode}`,
       items,
@@ -217,81 +214,6 @@ export class StockVoucherService {
     }
 
     return reason;
-  }
-
-  private async resolveSupplierImportFund(
-    reason: StockFundReceiptReason,
-    branchId: string,
-    fundId?: string,
-  ) {
-    if (fundId) {
-      const fund = await this.fundRepository.findOne({
-        where: {
-          id: fundId,
-          branchId,
-          status: 'active',
-        },
-      });
-
-      if (!fund) {
-        throw new BadRequestException(
-          `Active fund ${fundId} was not found in branch ${branchId}`,
-        );
-      }
-
-      return fund;
-    }
-
-    const formulaEntries = parseAccountingFormula(reason.accountingFormula);
-    const accountCodes = [
-      ...new Set(
-        formulaEntries
-          .filter((entry) => entry.sign === '+')
-          .map((entry) => entry.accountCode),
-      ),
-    ];
-
-    if (accountCodes.length === 0) {
-      throw new BadRequestException(
-        `Accounting formula is required for reason: ${reason.code}`,
-      );
-    }
-
-    const funds = await this.fundRepository.find({
-      where: [
-        {
-          code: In(accountCodes),
-          branchId,
-          status: 'active',
-        },
-        {
-          accountCode: In(accountCodes),
-          branchId,
-          status: 'active',
-        },
-      ],
-    });
-    const uniqueFunds = [
-      ...new Map(funds.map((fund) => [fund.id, fund])).values(),
-    ];
-    if (uniqueFunds.length === 1) {
-      return uniqueFunds[0];
-    }
-
-    const branchFunds = await this.fundRepository.find({
-      where: {
-        branchId,
-        status: 'active',
-      },
-    });
-
-    if (branchFunds.length !== 1) {
-      throw new BadRequestException(
-        `fundId is required for paid supplier import in branch ${branchId}`,
-      );
-    }
-
-    return branchFunds[0];
   }
 
   private getSourceId(dto: CreateStockVoucherDto) {
@@ -388,10 +310,6 @@ export class StockVoucherService {
       : STOCK_PAYMENT_STATUS.DEBT;
     const branchStock =
       await this.stockService.getOrCreateBranchStock(branchId);
-    const resolvedFund = isPaid
-      ? await this.resolveSupplierImportFund(reason, branchId, dto.fundId)
-      : null;
-
     const headerReceipt = await this.stockReceiptImportRepository.save(
       this.stockReceiptImportRepository.create({
         code: `NK${Date.now()}`,
@@ -437,7 +355,8 @@ export class StockVoucherService {
         await this.supplierService.recordPurchase(sourceId, totalAmount);
         await this.financeService.createMoneyVoucher({
           type: MONEY_VOUCHER_TYPE.PAYMENT,
-          fundId: resolvedFund!.id,
+          branchId,
+          fundId: dto.fundId,
           amount: totalAmount,
           supplierId: sourceId,
           purpose: ACCOUNTING_PURPOSE.STOCK_IMPORT,
@@ -649,11 +568,13 @@ export class StockVoucherService {
       type === STOCK_VOUCHER_TYPE.IMPORT &&
       sourceType === STOCK_PARTY_TYPE.SUPPLIER
     ) {
-      return this.createSupplierImportVoucher(dto, {
+      const result = await this.createSupplierImportVoucher(dto, {
         branchId,
         sourceId: sourceId!,
         sourceType,
       });
+      this.emitDashboardUpdate(type, branchId);
+      return result;
     }
 
     let branchStock: Stock | null = null;
@@ -681,12 +602,6 @@ export class StockVoucherService {
       ? await this.resolveReceiptReason(dto.reasonCode)
       : null;
     const reasonCode = reason?.code || dto.reasonCode || undefined;
-    const fundId = dto.fundId || undefined;
-    const supplierId =
-      sourceType === STOCK_PARTY_TYPE.SUPPLIER && sourceId
-        ? sourceId
-        : undefined;
-
     let headerReceipt:
       | StockReceiptImport
       | StockReceiptExport
@@ -827,10 +742,23 @@ export class StockVoucherService {
       }
     }
 
-    if (fundId && totalAmount > 0 && type === STOCK_VOUCHER_TYPE.EXPORT) {
+    const createsFundReceipt =
+      type === STOCK_VOUCHER_TYPE.EXPORT &&
+      totalAmount > 0 &&
+      reasonCode !== DEFERRED_SALE_REASON_CODE &&
+      Boolean(reasonCode || dto.fundId);
+
+    if (createsFundReceipt) {
+      if (!reasonCode) {
+        throw new BadRequestException(
+          'reasonCode is required to resolve fund from accounting_formula',
+        );
+      }
+
       await this.financeService.createMoneyVoucher({
         type: MONEY_VOUCHER_TYPE.RECEIPT,
-        fundId,
+        branchId,
+        fundId: dto.fundId,
         amount: totalAmount,
         orderId: dto.referenceType === 'order' ? dto.referenceId : undefined,
         purpose: ACCOUNTING_PURPOSE.STOCK_EXPORT,
@@ -856,6 +784,16 @@ export class StockVoucherService {
       relations: ['product', receiptRelation],
     });
 
-    return this.attachMoneyVouchers(result);
+    const attachedResult = await this.attachMoneyVouchers(result);
+    this.emitDashboardUpdate(type, branchId);
+    return attachedResult;
+  }
+
+  private emitDashboardUpdate(action: string, branchId?: string) {
+    this.socketService.emitDashboardUpdated({
+      source: 'stock-voucher',
+      action,
+      branchId,
+    });
   }
 }

@@ -1,5 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
 import {
+  IsIn,
   IsNotEmpty,
   IsUUID,
   IsNumber,
@@ -28,13 +29,25 @@ export class TopupWalletDto {
 
   @ApiProperty({
     description:
-      'Quy nhan tien. Bat buoc khi khoan nap dung de thu cong no vi am.',
+      'Legacy fund hint. Nếu truyền, quỹ phải khớp accountingFormula của lý do thu.',
     example: 'f47ac10b-58cc-4372-a567-0e02b2c3d479',
     required: false,
   })
   @IsOptional()
   @IsUUID()
   fundId?: string;
+
+  @ApiProperty({
+    description:
+      'Phương thức thu tiền, dùng để chọn lý do kế toán quyết định quỹ.',
+    enum: ['CASH', 'BANK'],
+    example: 'CASH',
+    required: false,
+    default: 'CASH',
+  })
+  @IsOptional()
+  @IsIn(['CASH', 'BANK'])
+  paymentMethod?: 'CASH' | 'BANK';
 
   @ApiProperty({
     description: 'Ghi chú',
@@ -66,7 +79,7 @@ export class RepayCustomerDebtCashDto {
 
   @ApiProperty({
     description:
-      'Quỹ tiền mặt nhận tiền. Nếu không truyền sẽ tự chọn quỹ tiền mặt active theo chi nhánh khách hàng.',
+      'Legacy fund hint. Nếu truyền, quỹ phải khớp accountingFormula của lý do thu tiền mặt.',
     example: 'f47ac10b-58cc-4372-a567-0e02b2c3d479',
     required: false,
   })
@@ -82,6 +95,19 @@ export class RepayCustomerDebtCashDto {
   @IsOptional()
   @IsString()
   note?: string;
+}
+
+export class ClearCustomerDebtDto extends RepayCustomerDebtCashDto {
+  @ApiProperty({
+    description: 'Phương thức nhận tiền trên phiếu thu',
+    enum: ['CASH', 'BANK'],
+    example: 'CASH',
+    required: false,
+    default: 'CASH',
+  })
+  @IsOptional()
+  @IsIn(['CASH', 'BANK'])
+  paymentMethod?: 'CASH' | 'BANK';
 }
 
 export class WalletBalanceDto {
