@@ -87,6 +87,12 @@ export class ProductController {
   }
 
   @ApiOperation({ summary: 'Get active categories with active products' })
+  @ApiQuery({
+    name: 'hasInventory',
+    required: false,
+    type: Boolean,
+    description: 'When true, only return products with total stock quantity > 0',
+  })
   @ApiQuery({ name: 'branchId', required: false })
   @ApiQuery({ name: 'minPrice', required: false, type: Number })
   @ApiQuery({ name: 'maxPrice', required: false, type: Number })
@@ -103,8 +109,10 @@ export class ProductController {
     @Query('isCanteenItem') isCanteenItem?: string,
     @Query('page') page?: string,
     @Query('size') size?: string,
+    @Query('hasInventory') hasInventory?: string,
   ) {
     return this.productService.findAllCategoriesWithProducts({
+      hasInventory: parseOptionalBoolean(hasInventory),
       branchId: this.resolveBranchId(req, branchId),
       minPrice,
       maxPrice,

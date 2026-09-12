@@ -83,6 +83,7 @@ export class CategoryService extends BaseService<Category> {
       maxPrice?: number;
       branchId?: string;
       isCanteenItem?: boolean;
+      hasInventory?: boolean;
       page?: number | string;
       size?: number | string;
     } = {},
@@ -113,6 +114,18 @@ export class CategoryService extends BaseService<Category> {
       params.branchId = filter.branchId;
     } else {
       productConditions.push('product.branch_id IS NULL');
+    }
+
+    if (filter.hasInventory === true) {
+      const branchCondition = filter.branchId
+        ? 'AND stock.branch_id = :branchId'
+        : '';
+      productConditions.push(`
+        (SELECT COALESCE(SUM(si.quantity), 0)
+         FROM stock_items si
+         INNER JOIN stocks stock ON stock.id = si.stock_id
+         WHERE si.product_id = product.id ${branchCondition}) > 0
+      `);
     }
 
     const query = this.categoryRepository
