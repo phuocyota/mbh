@@ -43,7 +43,8 @@ export class AuthController {
   @ApiBody({ type: StudentLoginDto })
   @ApiResponse({
     status: 200,
-    description: 'Student login successful, returns JWT token',
+    description:
+      'Student login successful, returns JWT token, walletBalance and debtLimit (remaining advance allowance as a number)',
   })
   @ApiResponse({
     status: 401,

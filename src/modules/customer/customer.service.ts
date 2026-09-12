@@ -117,6 +117,7 @@ export class CustomerService extends BaseService<Customer> {
         school: null,
         class: null,
         walletBalance: 0,
+        debtLimit: 0,
       };
     }
 
@@ -154,6 +155,7 @@ export class CustomerService extends BaseService<Customer> {
       studentCode: customer.studentProfile?.studentCode || null,
       studentFullName: customer.studentProfile?.fullName || customer.fullName,
       walletBalance: customer.wallet?.balance || 0,
+      debtLimit: Number(customer.debtLimit || 0),
     };
   }
 
