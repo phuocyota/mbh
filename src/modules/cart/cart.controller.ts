@@ -69,7 +69,7 @@ export class CartController {
     return this.cartService.getCart(cart.id);
   }
 
-  @ApiOperation({ summary: 'Update item quantity in my cart' })
+  @ApiOperation({ summary: 'Update item quantity and note in my cart' })
   @ApiBearerAuth()
   @ApiParam({ name: 'itemId', description: 'Cart Item ID' })
   @ApiResponse({ status: 200, description: 'Item updated' })
@@ -87,7 +87,12 @@ export class CartController {
       undefined,
       userId,
     );
-    return this.cartService.updateItemQuantity(cart.id, itemId, dto.quantity);
+    return this.cartService.updateItemQuantity(
+      cart.id,
+      itemId,
+      dto.quantity,
+      dto.note,
+    );
   }
 
   @ApiOperation({ summary: 'Remove item from my cart' })

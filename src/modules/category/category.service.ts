@@ -84,6 +84,7 @@ export class CategoryService extends BaseService<Category> {
       branchId?: string;
       isCanteenItem?: boolean;
       hasInventory?: boolean;
+      isActive?: boolean;
       page?: number | string;
       size?: number | string;
     } = {},
@@ -91,7 +92,7 @@ export class CategoryService extends BaseService<Category> {
     const pagination = normalizePagination(filter.page, filter.size);
     const productConditions = ['product.is_active = :isActive'];
     const params: Record<string, number | boolean | string> = {
-      isActive: true,
+      isActive: filter.isActive ?? true,
     };
 
     if (filter.minPrice !== undefined) {
