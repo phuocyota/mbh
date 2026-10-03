@@ -158,6 +158,10 @@ export class OrderController {
     description:
       'Cash payment received, order status updated to ready-to-pickup',
   })
+  @ApiResponse({
+    status: 400,
+    description: 'A valid payment amount is required',
+  })
   @Post(':id/receive-cash')
   async receiveCashPayment(
     @Param('id') id: string,
@@ -166,7 +170,7 @@ export class OrderController {
   ) {
     const userId = req.user?.userId;
     return this.orderService.receiveCashPayment(id, {
-      amount: paymentDto.amount,
+      amount: paymentDto?.amount,
       createdBy: userId,
     });
   }
