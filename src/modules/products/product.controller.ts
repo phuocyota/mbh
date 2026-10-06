@@ -86,7 +86,13 @@ export class ProductController {
     );
   }
 
-  @ApiOperation({ summary: 'Get active categories with active products' })
+  @ApiOperation({ summary: 'Get active categories with products filtered by active status' })
+  @ApiQuery({
+    name: 'isActive',
+    required: false,
+    type: Boolean,
+    description: 'Filter products by active status; defaults to true',
+  })
   @ApiQuery({
     name: 'hasInventory',
     required: false,
@@ -110,9 +116,11 @@ export class ProductController {
     @Query('page') page?: string,
     @Query('size') size?: string,
     @Query('hasInventory') hasInventory?: string,
+    @Query('isActive') isActive?: string,
   ) {
     return this.productService.findAllCategoriesWithProducts({
       hasInventory: parseOptionalBoolean(hasInventory),
+      isActive: parseOptionalBoolean(isActive),
       branchId: this.resolveBranchId(req, branchId),
       minPrice,
       maxPrice,

@@ -5,7 +5,7 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { Cart, CartItem } from 'src/entities';
+import { Cart, CartItem } from '../../entities';
 import { OrderService } from '../orders/order.service';
 import { CouponService } from '../coupon/coupon.service';
 import { CompleteCartDto } from './dto/complete-cart.dto';
@@ -134,6 +134,7 @@ export class CartService {
     cartId: string,
     cartItemId: string,
     quantity: number,
+    note?: string,
   ): Promise<CartItem> {
     const cartItem = await this.cartItemRepository.findOne({
       where: { id: cartItemId, cartId },
@@ -147,6 +148,9 @@ export class CartService {
     } else {
       cartItem.quantity = quantity;
       cartItem.subtotal = cartItem.unitPrice * quantity;
+      if (note !== undefined) {
+        cartItem.note = note;
+      }
       await this.cartItemRepository.save(cartItem);
     }
 

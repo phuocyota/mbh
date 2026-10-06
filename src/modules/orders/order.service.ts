@@ -808,8 +808,13 @@ export class OrderService {
 
   async receiveCashPayment(
     orderId: string,
-    paymentDto: { amount: number; createdBy?: string },
+    paymentDto: { amount?: number; createdBy?: string },
   ) {
+    const amount = Number(paymentDto?.amount);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      throw new BadRequestException('amount must be a positive number');
+    }
+
     const order = await this.findOrderByIdOrThrow(orderId);
 
     if (Number(paymentDto.amount) < Number(order.totalAmount || 0)) {
@@ -828,7 +833,7 @@ export class OrderService {
     await this.paymentService.createSuccessPayment({
       orderId: orderId,
       method: PAYMENT_METHOD.CASH,
-      amount: Number(paymentDto.amount),
+      amount,
       createdBy: paymentDto.createdBy,
     });
 
@@ -838,7 +843,7 @@ export class OrderService {
       {
         paymentStatus: ORDER_PAYMENT_STATUS.PAID,
         status: ORDER_STATUS.PREPARING,
-        paidAmount: paymentDto.amount,
+        paidAmount: amount,
         paidAt: new Date(),
         updatedBy: paymentDto.createdBy,
       },

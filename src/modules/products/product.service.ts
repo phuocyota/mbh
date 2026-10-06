@@ -17,6 +17,7 @@ type ProductPriceFilter = {
   branchId?: string;
   isCanteenItem?: boolean;
   hasInventory?: boolean;
+  isActive?: boolean;
   search?: string;
   displayStatus?: string;
   stockStatus?: string;
