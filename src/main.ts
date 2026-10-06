@@ -25,11 +25,17 @@ async function bootstrap() {
         'http://localhost:5173',
         'https://localhost:5173',
         'http://localhost:5171',
-      ];
+        process.env.KITCHEN_FRONTEND_ORIGIN,
+      ].filter((value): value is string => Boolean(value));
       // Allow private network IPs (192.168.x.x, 10.x.x.x, 172.16-31.x.x)
-      const PRIVATE_IP_REGEX = /^(http:\/\/)(192\.168\.|10\.|172\.(1[6-9]|2[0-9]|3[0-1])\.)[^:]+:\d+$/;
-      
-      if (!origin || allowedOrigins.includes(origin) || PRIVATE_IP_REGEX.test(origin)) {
+      const PRIVATE_IP_REGEX =
+        /^(http:\/\/)(192\.168\.|10\.|172\.(1[6-9]|2[0-9]|3[0-1])\.)[^:]+:\d+$/;
+
+      if (
+        !origin ||
+        allowedOrigins.includes(origin) ||
+        PRIVATE_IP_REGEX.test(origin)
+      ) {
         callback(null, true);
       } else {
         callback(new Error(`Origin ${origin} not allowed by CORS`), false);

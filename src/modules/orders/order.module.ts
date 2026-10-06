@@ -11,6 +11,7 @@ import { PaymentModule } from '../payment/payment.module';
 import { WalletModule } from '../wallet/wallet.module';
 import { SocketModule } from '../socket/socket.module';
 import { StockVoucherModule } from '../stock-voucher/stock-voucher.module';
+import { KitchenModule } from '../kitchen/kitchen.module';
 
 @Module({
   imports: [
@@ -22,6 +23,7 @@ import { StockVoucherModule } from '../stock-voucher/stock-voucher.module';
     CouponModule,
     SocketModule,
     StockVoucherModule,
+    KitchenModule,
   ],
   providers: [OrderService, OrderNumberService],
   controllers: [OrderController],

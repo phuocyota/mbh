@@ -20,6 +20,12 @@ interface ErrorResponse {
   method: string;
 }
 
+interface ContractErrorResponse {
+  success: false;
+  code: string;
+  message: string;
+}
+
 /**
  * Exception Filter để handle và log tất cả các lỗi trong ứng dụng
  */
@@ -36,6 +42,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
     let statusCode = HttpStatus.INTERNAL_SERVER_ERROR;
     let message = 'Lỗi hệ thống không xác định';
     let error = 'Internal Server Error';
+    let contractError: ContractErrorResponse | null = null;
 
     if (exception instanceof HttpException) {
       statusCode = exception.getStatus();
@@ -50,6 +57,16 @@ export class AllExceptionsFilter implements ExceptionFilter {
           (responseObj.error as string) ||
           message;
         error = (responseObj.error as string) || this.getErrorName(statusCode);
+        if (
+          responseObj.success === false &&
+          typeof responseObj.code === 'string'
+        ) {
+          contractError = {
+            success: false,
+            code: responseObj.code,
+            message,
+          };
+        }
       }
     } else if (exception instanceof Error) {
       message = exception.message || message;
@@ -69,7 +86,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
     this.logError(request, exception, errorResponse);
 
     // Trả về response
-    response.status(statusCode).json(errorResponse);
+    response.status(statusCode).json(contractError || errorResponse);
   }
 
   /**
@@ -124,7 +141,17 @@ export class AllExceptionsFilter implements ExceptionFilter {
     }
 
     const sanitized = { ...body };
-    const sensitiveFields = ['password', 'hashPassword', 'token', 'secret'];
+    const sensitiveFields = [
+      'password',
+      'hashPassword',
+      'token',
+      'secret',
+      'signature',
+      'clientSecret',
+      'privateKey',
+      'client_secret',
+      'private_key',
+    ];
 
     for (const field of sensitiveFields) {
       if (sanitized[field]) {

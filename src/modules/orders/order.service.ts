@@ -15,6 +15,7 @@ import { WalletService } from '../wallet/wallet.service';
 import { CustomerService } from '../customer/customer.service';
 import { SocketService } from '../socket/socket.service';
 import { StockVoucherService } from '../stock-voucher/stock-voucher.service';
+import { KitchenService } from '../kitchen/kitchen.service';
 import {
   ORDER_PAYMENT_STATUS,
   ORDER_STATUS,
@@ -43,6 +44,7 @@ export class OrderService {
     private couponService: CouponService,
     private socketService: SocketService,
     private stockVoucherService: StockVoucherService,
+    private kitchenService: KitchenService,
   ) {}
 
   async createOrder(createOrderDto: any) {
@@ -143,10 +145,8 @@ export class OrderService {
 
       if (isPaid) {
         const paidOrder = await this.getOrderWithItems(savedOrder.id);
-        await this.stockVoucherService.createExportFromOrder(
-          paidOrder,
-          initialPayment,
-        );
+        await this.exportLegacyStockItems(paidOrder, initialPayment);
+        await this.kitchenService.createTicketForPaidOrder(savedOrder.id, true);
       }
     }
 
@@ -181,6 +181,17 @@ export class OrderService {
     };
   }
 
+  private async exportLegacyStockItems(order: any, payment: any) {
+    const legacyOrder =
+      await this.kitchenService.orderForLegacyStockExport(order);
+    if (legacyOrder.items?.length) {
+      await this.stockVoucherService.createExportFromOrder(
+        legacyOrder,
+        payment,
+      );
+    }
+  }
+
   private async updateOrderWithStatusLog(
     order: Order,
     updateData: Partial<Order>,
@@ -206,6 +217,13 @@ export class OrderService {
             createdBy: changedBy ?? undefined,
           }),
         );
+      }
+
+      if (
+        updateData.paymentStatus === ORDER_PAYMENT_STATUS.PAID &&
+        this.kitchenService.isEnabled()
+      ) {
+        await this.kitchenService.createTicketInTransaction(manager, order.id);
       }
     });
   }
@@ -356,10 +374,8 @@ export class OrderService {
 
     const updatedOrder = await this.getOrderWithItems(orderId);
     if (isPaid) {
-      await this.stockVoucherService.createExportFromOrder(
-        updatedOrder,
-        paymentDto,
-      );
+      await this.exportLegacyStockItems(updatedOrder, paymentDto);
+      await this.kitchenService.createTicketForPaidOrder(orderId, true);
     }
     this.socketService.emitOrderPaymentReceived(updatedOrder, payment);
     if (isPaid) {
@@ -375,6 +391,13 @@ export class OrderService {
 
   async completeOrder(orderId: string, changedBy?: string) {
     const order = await this.findOrderByIdOrThrow(orderId);
+
+    if (
+      (await this.kitchenService.hasTicket(orderId)) &&
+      order.status !== ORDER_STATUS.READY_TO_PICKUP
+    ) {
+      throw new BadRequestException('ORDER_NOT_READY_FROM_KITCHEN');
+    }
 
     if (order.paymentStatus !== ORDER_PAYMENT_STATUS.PAID) {
       throw new BadRequestException(
@@ -396,6 +419,7 @@ export class OrderService {
     const updatedOrder = await this.getOrderWithItems(orderId);
     this.socketService.emitOrderCompleted(updatedOrder);
     this.socketService.emitOrderStatusChanged(updatedOrder);
+    await this.kitchenService.markDelivered(orderId, changedBy);
     return updatedOrder;
   }
 
@@ -788,6 +812,10 @@ export class OrderService {
   ) {
     const order = await this.findOrderByIdOrThrow(orderId);
 
+    if (Number(paymentDto.amount) < Number(order.totalAmount || 0)) {
+      throw new BadRequestException('Cash payment must fully cover the order');
+    }
+
     if (order.paymentStatus !== ORDER_PAYMENT_STATUS.UNPAID) {
       throw new BadRequestException('Order payment must be in UNPAID status');
     }
@@ -804,12 +832,12 @@ export class OrderService {
       createdBy: paymentDto.createdBy,
     });
 
-    // Update order: set paymentStatus to PAID and status to READY_TO_PICKUP
+    // Paid orders enter the kitchen queue before they can be picked up.
     await this.updateOrderWithStatusLog(
       order,
       {
         paymentStatus: ORDER_PAYMENT_STATUS.PAID,
-        status: ORDER_STATUS.READY_TO_PICKUP,
+        status: ORDER_STATUS.PREPARING,
         paidAmount: paymentDto.amount,
         paidAt: new Date(),
         updatedBy: paymentDto.createdBy,
@@ -819,13 +847,14 @@ export class OrderService {
     );
 
     const updatedOrder = await this.getOrderWithItems(orderId);
-    await this.stockVoucherService.createExportFromOrder(
-      updatedOrder,
-      paymentDto,
-    );
+    await this.exportLegacyStockItems(updatedOrder, {
+      ...paymentDto,
+      method: PAYMENT_METHOD.CASH,
+    });
+    await this.kitchenService.createTicketForPaidOrder(orderId, true);
     this.socketService.emitOrderPaymentReceived(updatedOrder);
     this.socketService.emitOrderPaid(updatedOrder);
-    this.socketService.emitOrderReadyToPickup(updatedOrder);
+    this.socketService.emitOrderPreparing(updatedOrder);
     this.socketService.emitOrderStatusChanged(updatedOrder);
     return updatedOrder;
   }
@@ -875,12 +904,12 @@ export class OrderService {
       createdBy: paymentDto.createdBy,
     });
 
-    // Update order: set paymentStatus to PAID and status to READY_TO_PICKUP
+    // Paid orders enter the kitchen queue before they can be picked up.
     await this.updateOrderWithStatusLog(
       order,
       {
         paymentStatus: ORDER_PAYMENT_STATUS.PAID,
-        status: ORDER_STATUS.READY_TO_PICKUP,
+        status: ORDER_STATUS.PREPARING,
         paymentMethod: PAYMENT_METHOD.MOMO,
         paidAmount: paymentDto.amount,
         paidAt: new Date(),
@@ -893,16 +922,17 @@ export class OrderService {
     const updatedOrder = await this.getOrderWithItems(orderId);
 
     // Create stock voucher (same as cash)
-    await this.stockVoucherService.createExportFromOrder(updatedOrder, {
+    await this.exportLegacyStockItems(updatedOrder, {
       method: PAYMENT_METHOD.MOMO,
       amount: paymentDto.amount,
       createdBy: paymentDto.createdBy,
     } as any);
+    await this.kitchenService.createTicketForPaidOrder(orderId, true);
 
     // Emit socket events
     this.socketService.emitOrderPaymentReceived(updatedOrder);
     this.socketService.emitOrderPaid(updatedOrder);
-    this.socketService.emitOrderReadyToPickup(updatedOrder);
+    this.socketService.emitOrderPreparing(updatedOrder);
     this.socketService.emitOrderStatusChanged(updatedOrder);
     return updatedOrder;
   }
@@ -948,6 +978,10 @@ export class OrderService {
     changedBy?: string,
   ) {
     const order = await this.findOrderByIdOrThrow(orderId);
+
+    if (await this.kitchenService.hasTicket(orderId)) {
+      throw new BadRequestException('ORDER_ALREADY_SENT_TO_KITCHEN');
+    }
 
     if (order.status === ORDER_STATUS.DONE) {
       throw new BadRequestException('Cannot cancel completed orders');

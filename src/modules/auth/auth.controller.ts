@@ -70,6 +70,12 @@ export class AuthController {
     return this.authService.loginCashier(dto);
   }
 
+  @ApiOperation({ summary: 'Kitchen staff login with email/password' })
+  @Post('login/kitchen')
+  async loginKitchen(@Body() dto: CashierLoginDto) {
+    return this.authService.loginKitchen(dto);
+  }
+
   @ApiOperation({
     summary: 'Admin/Manager/Supervisor/Staff login with email/password',
   })

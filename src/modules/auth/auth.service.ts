@@ -7,6 +7,9 @@ import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import { User } from 'src/entities';
 import { UserService } from '../user/user.service';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { Employee } from '../../entities';
 import { CustomerService } from '../customer/customer.service';
 import {
   ADMIN_LOGIN_ROLES,
@@ -20,6 +23,8 @@ export class AuthService {
     private userService: UserService,
     private customerService: CustomerService,
     private jwtService: JwtService,
+    @InjectRepository(Employee)
+    private employeeRepository: Repository<Employee>,
   ) {}
 
   async validateUser(email: string, password: string): Promise<any> {
@@ -211,5 +216,39 @@ export class AuthService {
 
     const { passwordHash, ...userWithoutPassword } = user;
     return this.login(userWithoutPassword, dto.deviceId);
+  }
+
+  async loginKitchen(dto: {
+    email: string;
+    password: string;
+    deviceId?: string;
+  }) {
+    const user = await this.userService.findByEmail(dto.email);
+    if (!user || !(await bcrypt.compare(dto.password, user.passwordHash))) {
+      throw new UnauthorizedException('Invalid credentials');
+    }
+    if (user.role !== USER_ROLE.KITCHEN) {
+      throw new UnauthorizedException(
+        'This endpoint is only for kitchen staff',
+      );
+    }
+    if (user.status !== COMMON_STATUS.ACTIVE || !user.branchId) {
+      throw new UnauthorizedException(
+        'Kitchen account is inactive or has no branch',
+      );
+    }
+    const employee = await this.employeeRepository.findOne({
+      where: { userId: user.id, branchId: user.branchId, status: 'working' },
+    });
+    if (!employee) {
+      throw new UnauthorizedException(
+        'Kitchen account is not linked to an active employee',
+      );
+    }
+    const { passwordHash, ...userWithoutPassword } = user;
+    return {
+      ...(await this.login(userWithoutPassword, dto.deviceId)),
+      employeeId: employee.id,
+    };
   }
 }

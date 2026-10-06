@@ -57,6 +57,52 @@ $ npm run test:e2e
 $ npm run test:cov
 ```
 
+## VietinBank parent wallet topup
+
+The parent app creates a fixed-amount QR with
+`POST /api/v1/vietinbank/generate-qr` and polls
+`GET /api/v1/vietinbank/topups/:requestId/status`. VietinBank confirms the
+deposit through `POST /api/v1/vietinbank/notify-bill`; the wallet is credited
+only by that signed callback. Every request resolves the VietinBank config and
+default receiving account for the authenticated user's branch.
+
+Required configuration for a real bank environment:
+
+```dotenv
+VIETINBANK_ENVIRONMENT=UAT
+VIETINBANK_SECRET_MASTER_KEY=
+VIETINBANK_QR_PATH=/vtb-api-uat/development/qr/vietqr/gen
+VIETINBANK_RSA_ALGORITHM=
+VIETINBANK_RSA_PADDING=
+VIETINBANK_CHANNEL=MOBILE
+VIETINBANK_VERSION=1.0.1
+VIETINBANK_CLIENT_IP=
+VIETINBANK_TIMEOUT_MS=10000
+VIETINBANK_TARGET_BALANCE=50000
+VIETINBANK_TOPUP_TTL_MINUTES=15
+```
+
+`VIETINBANK_RSA_PADDING` accepts `PKCS1` or `PSS`. Do not enable the real
+integration until VietinBank confirms the algorithm, padding, canonical
+signature source, endpoint and credentials.
+
+For local contract testing only, set `VIETINBANK_MOCK_ENABLED=true`. Mock mode
+still requires an active branch config and default account in the database, but
+does not resolve encrypted secrets. Mock QR content is not a scannable VietQR,
+and mock callbacks use `signature: "MOCK_SIGNATURE"`. Mock mode is disabled
+when `NODE_ENV=production`.
+
+VietinBank client secrets and partner private keys are AES-256-GCM encrypted
+in `vietinbank_secrets`. Generate a 32-byte master key, Base64 encode it, and
+set `VIETINBANK_SECRET_MASTER_KEY`. Store or rotate a secret without placing
+the plaintext in command arguments:
+
+```bash
+printf '%s' "$SECRET_VALUE" | npm run vietinbank-secret:set -- --ref vietinbank/branch/uat/client-secret
+```
+
+Only ADMIN users can manage configs under `/api/v1/vietinbank/configs`.
+
 ## Deployment
 
 When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
