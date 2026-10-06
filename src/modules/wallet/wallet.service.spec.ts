@@ -108,16 +108,22 @@ describe('WalletService credit flows', () => {
     const financeService = {
       createMoneyVoucher: jest.fn().mockResolvedValue({ id: 'voucher-id' }),
     };
+    const socketService = {
+      emitCustomerDebtPaid: jest.fn(),
+    };
 
     const service = new WalletService(
       rootWalletRepository as any,
       walletTransactionRepository as any,
       {} as any,
       financeService as any,
+      socketService as any,
     );
 
     return {
       service,
+      socketService,
+      rootWalletRepository,
       manager,
       customerRepository,
       walletRepository,
@@ -143,6 +149,11 @@ describe('WalletService credit flows', () => {
     );
 
     expect(result.balanceBefore).toBe(-30000);
+    expect(context.socketService.emitCustomerDebtPaid).toHaveBeenCalledTimes(1);
+    expect(context.socketService.emitCustomerDebtPaid).toHaveBeenCalledWith({
+      customerId,
+      transactionId: result.transactionId,
+    });
     expect(result.balanceAfter).toBe(0);
     expect(context.wallet.balance).toBe(0);
     expect(cashRepaymentSpy).toHaveBeenCalledWith(
@@ -230,6 +241,7 @@ describe('WalletService credit flows', () => {
     );
 
     expect(context.financeService.createMoneyVoucher).not.toHaveBeenCalled();
+    expect(context.socketService.emitCustomerDebtPaid).not.toHaveBeenCalled();
   });
 
   it('keeps the existing topup flow independent from debt clearance', async () => {
@@ -247,6 +259,7 @@ describe('WalletService credit flows', () => {
     );
 
     expect(result.balanceAfter).toBe(20000);
+    expect(context.socketService.emitCustomerDebtPaid).toHaveBeenCalledTimes(1);
     expect(context.financeService.createMoneyVoucher).toHaveBeenCalledWith(
       expect.objectContaining({
         amount: 30000,
@@ -256,4 +269,56 @@ describe('WalletService credit flows', () => {
       context.manager,
     );
   });
+
+  it('does not emit for a topup that does not repay debt', async () => {
+    const context = createContext({ balance: 10000 });
+    await context.service.topup(customerId, 5000, userId);
+    expect(context.socketService.emitCustomerDebtPaid).not.toHaveBeenCalled();
+  });
+
+  it.each(['CASH', 'BANK'] as const)(
+    'emits only after the %s repayment transaction commits',
+    async (paymentMethod) => {
+      const context = createContext();
+      context.rootWalletRepository.manager.transaction.mockImplementation(
+        async (callback) => {
+          const result = await callback(context.manager);
+          expect(
+            context.socketService.emitCustomerDebtPaid,
+          ).not.toHaveBeenCalled();
+          return result;
+        },
+      );
+      await context.service.clearCustomerDebt(
+        customerId,
+        10000,
+        userId,
+        undefined,
+        undefined,
+        paymentMethod,
+      );
+      expect(context.socketService.emitCustomerDebtPaid).toHaveBeenCalledTimes(
+        1,
+      );
+    },
+  );
+
+  it.each(['repayment', 'topup'])(
+    'does not emit if the %s transaction fails to commit',
+    async (flow) => {
+      const context = createContext();
+      context.rootWalletRepository.manager.transaction.mockImplementation(
+        async (callback) => {
+          await callback(context.manager);
+          throw new Error('Commit failed');
+        },
+      );
+      const operation =
+        flow === 'topup'
+          ? context.service.topup(customerId, 10000, userId)
+          : context.service.repayDebtByCash(customerId, 10000, userId);
+      await expect(operation).rejects.toThrow('Commit failed');
+      expect(context.socketService.emitCustomerDebtPaid).not.toHaveBeenCalled();
+    },
+  );
 });

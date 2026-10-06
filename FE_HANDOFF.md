@@ -2063,3 +2063,19 @@ Notes:
 - App has a success response wrapper, so axios reads this report at `response.data.data`.
 - `stockOnHand` and `usagePerMil` currently return `null` because DB has no real source for these columns yet; use `dataAvailable` to detect this.
 - `suggestedOrderQuantity` currently uses `planSales.max` when stock is unavailable.
+
+## Customer debt collection socket
+
+Listen for `customer:debt-paid` on the existing Socket.IO connection:
+
+```js
+socket.on('customer:debt-paid', ({ customerId, transactionId }) => {
+  // Reload the relevant customer's debt/wallet data and the debt list.
+});
+```
+
+- Payload: `{ customerId: string, transactionId: string }` (no HTTP response wrapper).
+- Sent once to the `dashboard` room, which connections join automatically.
+- Emitted after the database transaction commits for cash/bank debt collection, including partial repayment and wallet topups that recover debt.
+- Failed transactions and topups that do not recover debt do not emit this event.
+- Reload current data after reconnecting; missed events are not replayed.
