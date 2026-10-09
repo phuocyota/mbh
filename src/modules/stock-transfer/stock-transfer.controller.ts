@@ -1,3 +1,7 @@
+import { Roles } from '../../common/decorator/roles.decorator';
+import { RolesGuard } from '../../common/guard/roles.guard';
+import { UserType } from '../../common/enum/user-type.enum';
+import { resolveStockBranch } from '../stock/stock-scope';
 import {
   Body,
   Controller,
@@ -39,10 +43,11 @@ export class StockTransferController {
     @Query('toBranchId') toBranchId?: string,
     @Query('page') page?: string,
     @Query('size') size?: string,
+    @Query('branchId') branchId?: string,
   ) {
     return this.stockTransferService.findAll({
       status,
-      branchId: req.user?.branchId,
+      branchId: req.user?.branchId || branchId,
       fromBranchId: req.user?.branchId ? undefined : fromBranchId,
       toBranchId: req.user?.branchId ? undefined : toBranchId,
       page,
@@ -52,19 +57,34 @@ export class StockTransferController {
 
   @Get(':id')
   @ApiOperation({ summary: 'Get stock transfer by ID' })
-  findOne(@Param('id') id: string) {
-    return this.stockTransferService.findOne(id);
+  async findOne(@Req() req: any, @Param('id') id: string) {
+    const current = await this.stockTransferService.findOne(id);
+    resolveStockBranch(
+      req.user,
+      req.user.branchId === current.toBranchId
+        ? current.toBranchId
+        : current.fromBranchId,
+    );
+    return current;
   }
 
+  @UseGuards(RolesGuard)
+  @Roles(UserType.ADMIN, UserType.MANAGER)
   @Post()
-  @ApiOperation({ summary: 'Create a draft stock transfer' })
-  create(@Body() dto: CreateStockTransferDto) {
+  @ApiOperation({ summary: 'Create and complete a stock transfer' })
+  create(@Req() req: any, @Body() dto: CreateStockTransferDto) {
+    dto.actorId = req.user.userId;
+    resolveStockBranch(req.user, dto.fromBranchId);
     return this.stockTransferService.create(dto);
   }
 
+  @UseGuards(RolesGuard)
+  @Roles(UserType.ADMIN, UserType.MANAGER)
   @Post(':id/complete')
   @ApiOperation({ summary: 'Complete a stock transfer' })
-  complete(@Param('id') id: string) {
-    return this.stockTransferService.complete(id);
+  async complete(@Req() req: any, @Param('id') id: string) {
+    const current = await this.stockTransferService.findOne(id);
+    resolveStockBranch(req.user, current.fromBranchId);
+    return this.stockTransferService.complete(id, req.user.userId);
   }
 }

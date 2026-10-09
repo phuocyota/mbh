@@ -5,7 +5,10 @@ import { StockTakeItem } from './stock-take-item.entity';
 
 @Entity('stock_takes')
 export class StockTake extends BaseEntity {
-  @Column('uuid', { name: 'branch_id', default: '00000000-0000-0000-0000-000000000001' })
+  @Column('uuid', {
+    name: 'branch_id',
+    default: '00000000-0000-0000-0000-000000000001',
+  })
   branchId: string;
 
   @Column('varchar', { unique: true })
@@ -17,13 +20,28 @@ export class StockTake extends BaseEntity {
   @Column('timestamp', { name: 'counted_at', nullable: true })
   countedAt: Date;
 
-  @Column('numeric', { precision: 15, scale: 2, name: 'total_difference_amount', default: 0 })
+  @Column('numeric', {
+    precision: 15,
+    scale: 2,
+    name: 'total_difference_amount',
+    default: 0,
+  })
   totalDifferenceAmount: number;
 
-  @Column('numeric', { precision: 12, scale: 2, name: 'increase_quantity', default: 0 })
+  @Column('numeric', {
+    precision: 18,
+    scale: 4,
+    name: 'increase_quantity',
+    default: 0,
+  })
   increaseQuantity: number;
 
-  @Column('numeric', { precision: 12, scale: 2, name: 'decrease_quantity', default: 0 })
+  @Column('numeric', {
+    precision: 18,
+    scale: 4,
+    name: 'decrease_quantity',
+    default: 0,
+  })
   decreaseQuantity: number;
 
   @Column('text', { nullable: true })

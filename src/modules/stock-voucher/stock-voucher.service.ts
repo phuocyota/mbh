@@ -1,4 +1,13 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { DataSource, EntityManager } from 'typeorm';
+import { Product, StockRequest, StockLot, Supplier } from '../../entities';
+import { requestFingerprint } from '../../common/utils/request-fingerprint';
+import { StockMovementService } from '../stock/stock-movement.service';
+import { canUseStockProduct } from '../stock/stock-scope';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import {
@@ -64,12 +73,15 @@ export class StockVoucherService {
     private financeService: FinanceService,
     private stockService: StockService,
     private socketService: SocketService,
+    private dataSource: DataSource,
+    private movements: StockMovementService,
   ) {}
 
   async findAll(
     page?: number | string,
     size?: number | string,
     branchId?: string,
+    filters: { productType?: string; receiptType?: string } = {},
   ) {
     const pagination = normalizePagination(page, size);
     const query = this.stockReceiptDetailRepository
@@ -93,6 +105,15 @@ export class StockVoucherService {
         { branchId },
       );
     }
+
+    if (filters.productType)
+      query.andWhere('product.productType = :productType', {
+        productType: filters.productType,
+      });
+    if (filters.receiptType)
+      query.andWhere('detail.receiptType = :receiptType', {
+        receiptType: filters.receiptType,
+      });
 
     const [data, total] = await query.getManyAndCount();
     const hydratedData = await this.attachMoneyVouchers(data);
@@ -144,6 +165,8 @@ export class StockVoucherService {
 
     return this.createVoucher({
       branchId: order.branchId,
+      requestId: order.id,
+      actorId: payment.createdBy,
       type: STOCK_VOUCHER_TYPE.EXPORT,
       sourceId: order.customerId,
       sourceType: order.customerId ? STOCK_PARTY_TYPE.CUSTOMER : undefined,
@@ -300,6 +323,11 @@ export class StockVoucherService {
     },
   ) {
     const { branchId, sourceId, sourceType } = params;
+    const supplier = await this.transactionManager!.getRepository(
+      Supplier,
+    ).findOneBy({ id: sourceId });
+    if (!supplier || (supplier.branchId && supplier.branchId !== branchId))
+      throw new BadRequestException('SUPPLIER_BRANCH_MISMATCH');
     const totalAmount = dto.items.reduce((sum, item) => {
       return sum + Number(item.quantity) * Number(item.unitPrice || 0);
     }, 0);
@@ -308,14 +336,17 @@ export class StockVoucherService {
     const paymentStatus = isPaid
       ? STOCK_PAYMENT_STATUS.PAID
       : STOCK_PAYMENT_STATUS.DEBT;
-    const branchStock =
-      await this.stockService.getOrCreateBranchStock(branchId);
+    const branchStock = await this.stockService.getOrCreateBranchStock(
+      branchId,
+      this.transactionManager,
+    );
     const headerReceipt = await this.stockReceiptImportRepository.save(
       this.stockReceiptImportRepository.create({
         code: `NK${Date.now()}`,
         branchId,
         fromId: sourceId,
         fromType: sourceType,
+        createdBy: dto.actorId,
         referenceId: dto.referenceId,
         referenceType: dto.referenceType,
         reasonCode: reason.code,
@@ -328,8 +359,10 @@ export class StockVoucherService {
 
     const detailEntities = this.stockReceiptDetailRepository.create(
       dto.items.map((dtoItem) => ({
+        createdBy: dto.actorId,
         productId: dtoItem.productId,
         quantity: Number(dtoItem.quantity),
+        inputDetails: (dtoItem as any).inputDetails || null,
         receiptType: STOCK_VOUCHER_TYPE.IMPORT,
         fromId: sourceId,
         toId: branchId,
@@ -341,38 +374,49 @@ export class StockVoucherService {
     const savedDetails =
       await this.stockReceiptDetailRepository.save(detailEntities);
 
-    await this.incrementStockItemsBulk(
-      this.stockItemRepository,
-      branchStock.id,
-      dto.items.map((item) => ({
-        productId: item.productId,
-        quantity: Number(item.quantity),
-      })),
-    );
+    for (const item of dto.items)
+      await this.movements.change(
+        this.transactionManager!,
+        branchStock.id,
+        item.productId,
+        Number(item.quantity),
+        headerReceipt.id,
+        item,
+      );
 
     if (totalAmount > 0) {
       if (isPaid) {
-        await this.supplierService.recordPurchase(sourceId, totalAmount);
-        await this.financeService.createMoneyVoucher({
-          type: MONEY_VOUCHER_TYPE.PAYMENT,
-          branchId,
-          fundId: dto.fundId,
-          amount: totalAmount,
-          supplierId: sourceId,
-          purpose: ACCOUNTING_PURPOSE.STOCK_IMPORT,
-          reasonCode: reason.code,
-          refType: ACCOUNTING_SOURCE_TYPE.STOCK_VOUCHER,
-          refId: headerReceipt.id,
-          note: dto.note,
-        });
+        await this.supplierService.recordPurchase(
+          sourceId,
+          totalAmount,
+          this.transactionManager,
+        );
+        await this.financeService.createMoneyVoucher(
+          {
+            type: MONEY_VOUCHER_TYPE.PAYMENT,
+            branchId,
+            fundId: dto.fundId,
+            amount: totalAmount,
+            supplierId: sourceId,
+            purpose: ACCOUNTING_PURPOSE.STOCK_IMPORT,
+            reasonCode: reason.code,
+            refType: ACCOUNTING_SOURCE_TYPE.STOCK_VOUCHER,
+            refId: headerReceipt.id,
+            note: dto.note,
+          },
+          this.transactionManager,
+        );
       } else {
-        await this.supplierService.recordPurchaseDebt({
-          supplierId: sourceId,
-          amount: totalAmount,
-          refType: ACCOUNTING_SOURCE_TYPE.STOCK_VOUCHER,
-          refId: headerReceipt.id,
-          note: dto.note,
-        });
+        await this.supplierService.recordPurchaseDebt(
+          {
+            supplierId: sourceId,
+            amount: totalAmount,
+            refType: ACCOUNTING_SOURCE_TYPE.STOCK_VOUCHER,
+            refId: headerReceipt.id,
+            note: dto.note,
+          },
+          this.transactionManager,
+        );
       }
     }
 
@@ -554,14 +598,116 @@ export class StockVoucherService {
     });
   }
 
-  async createVoucher(dto: CreateStockVoucherDto) {
+  async createVoucher(dto: CreateStockVoucherDto, manager?: EntityManager) {
+    if (!manager) {
+      const result = await this.dataSource.transaction((m) =>
+        this.createVoucher(dto, m),
+      );
+      const branches = [
+        ...new Set([
+          dto.branchId || dto.fromBranchId || DEFAULT_BRANCH_ID,
+          ...(dto.type === 'TRANSFER' && dto.toBranchId
+            ? [dto.toBranchId]
+            : []),
+        ]),
+      ];
+      for (const branchId of branches) {
+        this.emitDashboardUpdate(dto.type, branchId);
+        this.socketService.emitKitchenConsumptionUpdated(branchId, {
+          branchId,
+          resource: 'stock-vouchers',
+        });
+      }
+      return result;
+    }
+    const scoped = Object.create(this) as StockVoucherService;
+    for (const key of Object.keys(this)) {
+      const value = (this as any)[key];
+      if (value instanceof Repository)
+        (scoped as any)[key] = manager.getRepository(value.target);
+    }
+    (scoped as any).transactionManager = manager;
+    return scoped.createVoucherInTransaction(dto);
+  }
+  private transactionManager?: EntityManager;
+  private async createVoucherInTransaction(dto: CreateStockVoucherDto) {
+    const manager = this.transactionManager!;
+    const requestId = (dto as any).requestId;
+    if (requestId) {
+      await manager.query(
+        'SELECT pg_advisory_xact_lock(hashtextextended($1,0))',
+        [requestId],
+      );
+      const previous = await manager.getRepository(StockRequest).findOneBy({
+        branchId: dto.branchId || dto.fromBranchId || DEFAULT_BRANCH_ID,
+        requestId,
+      });
+      if (previous) {
+        if (previous.payloadHash !== requestFingerprint(dto))
+          throw new ConflictException('IDEMPOTENCY_PAYLOAD_CONFLICT');
+        return previous.result;
+      }
+    }
+    if (!Array.isArray(dto.items) || !dto.items.length)
+      throw new BadRequestException('VOUCHER_ITEMS_REQUIRED');
+    if ((dto as any).purpose === 'DISPOSAL' && !dto.note?.trim())
+      throw new BadRequestException('DISPOSAL_REASON_REQUIRED');
+    const branchLocks = [
+      ...new Set([
+        dto.branchId || dto.fromBranchId || DEFAULT_BRANCH_ID,
+        ...(dto.type === 'TRANSFER' ? [dto.toBranchId!] : []),
+      ]),
+    ].sort();
+    for (const branch of branchLocks)
+      await manager.query(
+        'SELECT pg_advisory_xact_lock(hashtextextended($1,0))',
+        ['stock-branch:' + branch],
+      );
+    const originalItems = dto.items;
+    await this.movements.lockProducts(
+      manager,
+      dto.items.map((item) => item.productId),
+    );
+    const normalized = [] as any[];
+    for (const item of dto.items) {
+      const product = await manager
+        .getRepository(Product)
+        .findOneBy({ id: item.productId });
+      if (!product) throw new BadRequestException('PRODUCT_NOT_FOUND');
+      if (
+        !(await canUseStockProduct(
+          manager,
+          product,
+          dto.branchId || dto.fromBranchId || DEFAULT_BRANCH_ID,
+        ))
+      )
+        throw new BadRequestException('CROSS_BRANCH_PRODUCT');
+      const quantity = await this.movements.normalize(manager, product, item);
+      normalized.push({
+        ...item,
+        actorId: dto.actorId,
+        quantity,
+        inputDetails: {
+          unitId: item.unitId || product.baseUnitId || null,
+          quantity: Number(item.quantity),
+          unitPrice: Number(item.unitPrice || 0),
+          lotCode: item.lotCode || null,
+          manufacturedAt: item.manufacturedAt || null,
+          expiresAt: item.expiresAt || null,
+          allocations: item.allocations || [],
+        },
+        unitPrice:
+          (Number(item.unitPrice || 0) * Number(item.quantity)) / quantity,
+      });
+    }
+    dto = { ...dto, items: normalized };
     const type = dto.type.toUpperCase();
 
     const totalAmount = dto.items.reduce((sum, item) => {
       return sum + Number(item.quantity) * Number(item.unitPrice || 0);
     }, 0);
 
-    const branchId = dto.branchId || DEFAULT_BRANCH_ID;
+    const branchId = dto.branchId || dto.fromBranchId || DEFAULT_BRANCH_ID;
     const sourceId = this.getSourceId(dto);
     const sourceType = this.getSourceType(dto);
     if (
@@ -573,7 +719,13 @@ export class StockVoucherService {
         sourceId: sourceId!,
         sourceType,
       });
-      this.emitDashboardUpdate(type, branchId);
+      if (requestId)
+        await manager.getRepository(StockRequest).save({
+          branchId,
+          requestId,
+          result,
+          payloadHash: requestFingerprint({ ...dto, items: originalItems }),
+        });
       return result;
     }
 
@@ -585,7 +737,10 @@ export class StockVoucherService {
       type === STOCK_VOUCHER_TYPE.IMPORT ||
       type === STOCK_VOUCHER_TYPE.EXPORT
     ) {
-      branchStock = await this.stockService.getOrCreateBranchStock(branchId);
+      branchStock = await this.stockService.getOrCreateBranchStock(
+        branchId,
+        this.transactionManager,
+      );
     } else if (type === STOCK_VOUCHER_TYPE.TRANSFER) {
       if (!dto.fromBranchId || !dto.toBranchId) {
         throw new BadRequestException(
@@ -594,8 +749,12 @@ export class StockVoucherService {
       }
       fromStock = await this.stockService.getOrCreateBranchStock(
         dto.fromBranchId,
+        this.transactionManager,
       );
-      toStock = await this.stockService.getOrCreateBranchStock(dto.toBranchId);
+      toStock = await this.stockService.getOrCreateBranchStock(
+        dto.toBranchId,
+        this.transactionManager,
+      );
     }
 
     const reason = dto.reasonCode
@@ -614,6 +773,7 @@ export class StockVoucherService {
           code,
           branchId,
           fromId: sourceId || undefined,
+          createdBy: dto.actorId,
           fromType: sourceType || undefined,
           referenceId: dto.referenceId,
           referenceType: dto.referenceType,
@@ -630,6 +790,7 @@ export class StockVoucherService {
           code,
           branchId,
           toId: sourceId || undefined,
+          createdBy: dto.actorId,
           toType: sourceType || undefined,
           referenceId: dto.referenceId,
           referenceType: dto.referenceType,
@@ -645,6 +806,7 @@ export class StockVoucherService {
         this.stockReceiptTransferRepository.create({
           code,
           fromBranchId: dto.fromBranchId!,
+          createdBy: dto.actorId,
           toBranchId: dto.toBranchId!,
           status: STOCK_VOUCHER_STATUS.COMPLETED,
           receivedAt: new Date(),
@@ -667,7 +829,10 @@ export class StockVoucherService {
         fromId = sourceId;
         fromType = sourceType || STOCK_PARTY_TYPE.SUPPLIER;
         if (sourceType === STOCK_PARTY_TYPE.BRANCH && sourceId) {
-          await this.stockService.getOrCreateBranchStock(sourceId);
+          await this.stockService.getOrCreateBranchStock(
+            sourceId,
+            this.transactionManager,
+          );
         }
         toId = branchId;
         toType = STOCK_PARTY_TYPE.BRANCH;
@@ -675,7 +840,10 @@ export class StockVoucherService {
         fromId = branchId;
         fromType = STOCK_PARTY_TYPE.BRANCH;
         if (sourceType === STOCK_PARTY_TYPE.BRANCH && sourceId) {
-          await this.stockService.getOrCreateBranchStock(sourceId);
+          await this.stockService.getOrCreateBranchStock(
+            sourceId,
+            this.transactionManager,
+          );
           toId = sourceId;
           toType = STOCK_PARTY_TYPE.BRANCH;
         } else {
@@ -690,8 +858,10 @@ export class StockVoucherService {
       }
 
       const detailData = {
+        createdBy: dto.actorId,
         productId: dtoItem.productId,
         quantity,
+        inputDetails: (dtoItem as any).inputDetails || null,
         receiptType: type,
         fromId,
         toId,
@@ -710,35 +880,59 @@ export class StockVoucherService {
       );
       savedDetails.push(detail);
 
-      if (dtoItem.productId) {
-        if (type === STOCK_VOUCHER_TYPE.IMPORT) {
-          await this.updateStockItemQuantity(
-            this.stockItemRepository,
-            branchStock!.id,
+      if (type === 'IMPORT')
+        await this.movements.change(
+          manager,
+          branchStock!.id,
+          dtoItem.productId,
+          quantity,
+          headerReceipt.id,
+          dtoItem,
+        );
+      if (type === 'EXPORT')
+        await this.movements.change(
+          manager,
+          branchStock!.id,
+          dtoItem.productId,
+          -quantity,
+          headerReceipt.id,
+          { ...dtoItem, allowExpired: (dto as any).purpose === 'DISPOSAL' },
+        );
+      if (type === 'TRANSFER') {
+        await this.movements.change(
+          manager,
+          fromStock!.id,
+          dtoItem.productId,
+          -quantity,
+          headerReceipt.id,
+          dtoItem,
+        );
+        const product = await manager
+          .getRepository(Product)
+          .findOneByOrFail({ id: dtoItem.productId });
+        if (product.lotTrackingEnabled) {
+          for (const a of (dtoItem as any).allocations) {
+            const lot = await manager
+              .getRepository(StockLot)
+              .findOneByOrFail({ id: a.lotId });
+            await this.movements.change(
+              manager,
+              toStock!.id,
+              dtoItem.productId,
+              Number(a.quantity),
+              headerReceipt.id,
+              { ...lot, actorId: dto.actorId },
+            );
+          }
+        } else
+          await this.movements.change(
+            manager,
+            toStock!.id,
             dtoItem.productId,
             quantity,
+            headerReceipt.id,
+            { actorId: dto.actorId },
           );
-        } else if (type === STOCK_VOUCHER_TYPE.EXPORT) {
-          await this.updateStockItemQuantity(
-            this.stockItemRepository,
-            branchStock!.id,
-            dtoItem.productId,
-            -quantity,
-          );
-        } else if (type === STOCK_VOUCHER_TYPE.TRANSFER) {
-          await this.updateStockItemQuantity(
-            this.stockItemRepository,
-            fromId!,
-            dtoItem.productId,
-            -quantity,
-          );
-          await this.updateStockItemQuantity(
-            this.stockItemRepository,
-            toId!,
-            dtoItem.productId,
-            quantity,
-          );
-        }
       }
     }
 
@@ -755,21 +949,24 @@ export class StockVoucherService {
         );
       }
 
-      await this.financeService.createMoneyVoucher({
-        type: MONEY_VOUCHER_TYPE.RECEIPT,
-        branchId,
-        fundId: dto.fundId,
-        amount: totalAmount,
-        orderId: dto.referenceType === 'order' ? dto.referenceId : undefined,
-        purpose: ACCOUNTING_PURPOSE.STOCK_EXPORT,
-        reasonCode,
-        refType:
-          dto.referenceType === 'order'
-            ? ACCOUNTING_SOURCE_TYPE.ORDER
-            : ACCOUNTING_SOURCE_TYPE.STOCK_VOUCHER,
-        refId: dto.referenceId || headerReceipt.id,
-        note: dto.note,
-      });
+      await this.financeService.createMoneyVoucher(
+        {
+          type: MONEY_VOUCHER_TYPE.RECEIPT,
+          branchId,
+          fundId: dto.fundId,
+          amount: totalAmount,
+          orderId: dto.referenceType === 'order' ? dto.referenceId : undefined,
+          purpose: ACCOUNTING_PURPOSE.STOCK_EXPORT,
+          reasonCode,
+          refType:
+            dto.referenceType === 'order'
+              ? ACCOUNTING_SOURCE_TYPE.ORDER
+              : ACCOUNTING_SOURCE_TYPE.STOCK_VOUCHER,
+          refId: dto.referenceId || headerReceipt.id,
+          note: dto.note,
+        },
+        this.transactionManager,
+      );
     }
 
     const receiptRelation =
@@ -785,7 +982,13 @@ export class StockVoucherService {
     });
 
     const attachedResult = await this.attachMoneyVouchers(result);
-    this.emitDashboardUpdate(type, branchId);
+    if (requestId)
+      await manager.getRepository(StockRequest).save({
+        branchId,
+        requestId,
+        result: attachedResult,
+        payloadHash: requestFingerprint({ ...dto, items: originalItems }),
+      });
     return attachedResult;
   }
 

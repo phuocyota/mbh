@@ -1,3 +1,7 @@
+import { Roles } from '../../common/decorator/roles.decorator';
+import { RolesGuard } from '../../common/guard/roles.guard';
+import { UserType } from '../../common/enum/user-type.enum';
+import { resolveStockBranch } from '../stock/stock-scope';
 import {
   Body,
   Controller,
@@ -43,12 +47,14 @@ export class InventoryItemController {
     @Query('branchId') branchId?: string,
     @Query('page') page?: string,
     @Query('size') size?: string,
+    @Query('productType') productType?: string,
   ) {
     return this.inventoryItemService.findAll(
       search,
       page,
       size,
       req.user?.branchId || branchId,
+      productType,
     );
   }
 
@@ -67,25 +73,43 @@ export class InventoryItemController {
     );
   }
 
+  @UseGuards(RolesGuard)
+  @Roles(UserType.ADMIN, UserType.MANAGER)
   @Post()
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Create inventory item as product stock record' })
-  async create(@Body() dto: any) {
+  async create(@Req() req: any, @Body() dto: any) {
+    dto.actorId = req.user.userId;
+    dto.branchId = resolveStockBranch(req.user, dto.branchId);
     return this.inventoryItemService.create(dto);
   }
 
+  @UseGuards(RolesGuard)
+  @Roles(UserType.ADMIN, UserType.MANAGER)
   @Put(':id')
   @ApiOperation({ summary: 'Update inventory item stock fields' })
   @ApiParam({ name: 'id', description: 'Product ID' })
-  async update(@Param('id') id: string, @Body() dto: any) {
+  async update(@Req() req: any, @Param('id') id: string, @Body() dto: any) {
+    dto.actorId = req.user.userId;
+    dto.branchId = resolveStockBranch(req.user, dto.branchId);
     return this.inventoryItemService.update(id, dto);
   }
 
+  @UseGuards(RolesGuard)
+  @Roles(UserType.ADMIN, UserType.MANAGER)
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Deactivate inventory item product' })
   @ApiParam({ name: 'id', description: 'Product ID' })
-  async delete(@Param('id') id: string) {
+  async delete(
+    @Req() req: any,
+    @Param('id') id: string,
+    @Query('branchId') branchId?: string,
+  ) {
+    await this.inventoryItemService.findOne(
+      id,
+      resolveStockBranch(req.user, branchId),
+    );
     await this.inventoryItemService.delete(id);
   }
 }

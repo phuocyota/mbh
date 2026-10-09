@@ -1,3 +1,7 @@
+import { Roles } from '../../common/decorator/roles.decorator';
+import { RolesGuard } from '../../common/guard/roles.guard';
+import { UserType } from '../../common/enum/user-type.enum';
+import { resolveStockBranch } from '../stock/stock-scope';
 import {
   Body,
   Controller,
@@ -48,19 +52,29 @@ export class StockTakeController {
 
   @Get(':id')
   @ApiOperation({ summary: 'Get stock take by ID' })
-  findOne(@Param('id') id: string) {
+  async findOne(@Req() req: any, @Param('id') id: string) {
+    const current = await this.stockTakeService.findOne(id);
+    resolveStockBranch(req.user, current.branchId);
     return this.stockTakeService.findOne(id);
   }
 
+  @UseGuards(RolesGuard)
+  @Roles(UserType.ADMIN, UserType.MANAGER)
   @Post('drafts')
   @ApiOperation({ summary: 'Create a draft stock take' })
-  createDraft(@Body() dto: CreateStockTakeDto) {
+  createDraft(@Req() req: any, @Body() dto: CreateStockTakeDto) {
+    dto.actorId = req.user.userId;
+    dto.branchId = resolveStockBranch(req.user, dto.branchId);
     return this.stockTakeService.createDraft(dto);
   }
 
+  @UseGuards(RolesGuard)
+  @Roles(UserType.ADMIN, UserType.MANAGER)
   @Post(':id/complete')
   @ApiOperation({ summary: 'Complete a stock take' })
-  complete(@Param('id') id: string) {
-    return this.stockTakeService.complete(id);
+  async complete(@Req() req: any, @Param('id') id: string) {
+    const current = await this.stockTakeService.findOne(id);
+    resolveStockBranch(req.user, current.branchId);
+    return this.stockTakeService.complete(id, req.user.userId);
   }
 }

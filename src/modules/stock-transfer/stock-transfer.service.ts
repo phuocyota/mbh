@@ -1,3 +1,4 @@
+import { StockMovementService } from '../stock/stock-movement.service';
 import {
   BadRequestException,
   Injectable,
@@ -36,6 +37,7 @@ export class StockTransferService {
     private dataSource: DataSource,
     private stockVoucherService: StockVoucherService,
     private stockService: StockService,
+    private movements: StockMovementService,
   ) {}
 
   async findAll(
@@ -143,109 +145,27 @@ export class StockTransferService {
   }
 
   async create(dto: CreateStockTransferDto) {
-    return this.dataSource.transaction(async (trx) => {
-      const transferRepo = trx.getRepository(StockReceiptTransfer);
-      const detailRepo = trx.getRepository(StockReceiptDetail);
-      const productRepo = trx.getRepository(Product);
-      const stockRepo = trx.getRepository(Stock);
-
-      const fromStock = await this.stockService.getOrCreateBranchStock(
-        dto.fromBranchId,
-        trx,
-      );
-      const toStock = await this.stockService.getOrCreateBranchStock(
-        dto.toBranchId,
-        trx,
-      );
-
-      let totalAmount = 0;
-      const detailsToSave: StockReceiptDetail[] = [];
-      const voucherItems: Array<{
-        productId: string;
-        quantity: number;
-        unitPrice: number;
-      }> = [];
-
-      for (const dtoItem of dto.items) {
-        const product = await productRepo.findOne({
-          where: { id: dtoItem.productId },
-        });
-        if (!product) {
-          throw new NotFoundException(
-            `Product not found with ID ${dtoItem.productId}`,
-          );
-        }
-
-        const unitCost = Number(product.costPrice || product.price || 0);
-        const quantity = Number(dtoItem.quantity);
-        const itemTotal = quantity * unitCost;
-        totalAmount += itemTotal;
-        voucherItems.push({
-          productId: product.id,
-          quantity,
-          unitPrice: unitCost,
-        });
-
-        const detail = detailRepo.create({
-          productId: product.id,
-          quantity,
-          receiptType: 'TRANSFER',
-          fromId: fromStock.id,
-          toId: toStock.id,
-          fromType: 'STOCK',
-          toType: 'STOCK',
-        });
-
-        detailsToSave.push(detail);
-      }
-
-      const code = `CK${Date.now()}`;
-      const transfer = transferRepo.create({
-        code,
-        transferId: '00000000-0000-0000-0000-000000000000', // unused but NOT NULL compatibility placeholder
-        fromBranchId: dto.fromBranchId,
-        toBranchId: dto.toBranchId,
-        status: 'COMPLETED',
-        receivedAt: new Date(),
-        totalAmount,
-        note: dto.note,
-      });
-
-      const savedTransfer = await transferRepo.save(transfer);
-
-      for (const detail of detailsToSave) {
-        detail.transferId = savedTransfer.id;
-        await detailRepo.save(detail);
-      }
-
-      await this.stockVoucherService.createVoucher({
-        branchId: dto.fromBranchId,
-        toBranchId: dto.toBranchId,
-        type: 'EXPORT',
-        note: dto.note || `Xuất kho chuyển đến chi nhánh ${dto.toBranchId}`,
-        items: voucherItems,
-      });
-
-      await this.stockVoucherService.createVoucher({
-        branchId: dto.toBranchId,
-        fromBranchId: dto.fromBranchId,
-        type: 'IMPORT',
-        note: dto.note || `Nhập kho chuyển từ chi nhánh ${dto.fromBranchId}`,
-        items: voucherItems,
-      });
-
-      return transferRepo.findOne({
-        where: { id: savedTransfer.id },
-        relations: ['fromBranch', 'toBranch', 'details', 'details.product'],
-      });
+    if (dto.fromBranchId === dto.toBranchId)
+      throw new BadRequestException('TRANSFER_SAME_BRANCH');
+    return this.stockVoucherService.createVoucher({
+      type: 'TRANSFER',
+      branchId: dto.fromBranchId,
+      fromBranchId: dto.fromBranchId,
+      toBranchId: dto.toBranchId,
+      items: dto.items,
+      note: dto.note,
+      requestId: (dto as any).requestId,
+      actorId: dto.actorId,
     });
   }
 
-  async complete(id: string) {
+  async complete(id: string, actorId?: string) {
     return this.dataSource.transaction(async (trx) => {
       const transferRepo = trx.getRepository(StockReceiptTransfer);
-      const stockRepo = trx.getRepository(Stock);
-      const stockItemRepo = trx.getRepository(StockItem);
+      await transferRepo.findOne({
+        where: { id },
+        lock: { mode: 'pessimistic_write' },
+      });
 
       const transfer = await transferRepo.findOne({
         where: { id },
@@ -262,6 +182,20 @@ export class StockTransferService {
         );
       }
 
+      for (const branchId of [
+        transfer.fromBranchId,
+        transfer.toBranchId,
+      ].sort())
+        await trx.query(
+          'SELECT pg_advisory_xact_lock(hashtextextended($1,0))',
+          ['stock-branch:' + branchId],
+        );
+      await this.movements.lockProducts(
+        trx,
+        transfer.details
+          .map((detail) => detail.productId)
+          .filter((id): id is string => Boolean(id)),
+      );
       const fromStock = await this.stockService.getOrCreateBranchStock(
         transfer.fromBranchId,
         trx,
@@ -273,28 +207,39 @@ export class StockTransferService {
 
       for (const detail of transfer.details) {
         if (detail.productId) {
-          // Subtract from source stock
-          await this.updateStockItemQuantity(
-            stockItemRepo,
+          const product = await trx
+            .getRepository(Product)
+            .findOneByOrFail({ id: detail.productId });
+          if (product.lotTrackingEnabled)
+            throw new BadRequestException(
+              'LEGACY_DRAFT_TRANSFER_REQUIRES_LOT_REVIEW',
+            );
+          await this.movements.change(
+            trx,
             fromStock.id,
             detail.productId,
             -Number(detail.quantity),
+            transfer.id,
           );
-          // Add to destination stock
-          await this.updateStockItemQuantity(
-            stockItemRepo,
+          await this.movements.change(
+            trx,
             toStock.id,
             detail.productId,
             Number(detail.quantity),
+            transfer.id,
           );
         }
       }
 
       transfer.status = 'COMPLETED';
+      transfer.updatedBy = actorId;
       transfer.receivedAt = new Date();
       await transferRepo.save(transfer);
 
-      return this.findOne(id);
+      return transferRepo.findOneOrFail({
+        where: { id },
+        relations: ['details'],
+      });
     });
   }
 }

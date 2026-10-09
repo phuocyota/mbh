@@ -1,4 +1,10 @@
 import {
+  positive,
+  StockMovementService,
+} from '../stock/stock-movement.service';
+import { randomUUID } from 'crypto';
+import { stockProductCondition } from '../stock/stock-scope';
+import {
   BadRequestException,
   Injectable,
   NotFoundException,
@@ -20,6 +26,7 @@ export class InventoryItemService {
     @InjectRepository(StockItem)
     private readonly stockItemRepository: Repository<StockItem>,
     private readonly dataSource: DataSource,
+    private readonly movements: StockMovementService,
   ) {}
 
   async findAll(
@@ -27,6 +34,7 @@ export class InventoryItemService {
     page?: number | string,
     size?: number | string,
     branchId?: string,
+    productType?: string,
   ) {
     const resolvedBranchId = branchId || DEFAULT_BRANCH_ID;
     const pagination = normalizePagination(page, size);
@@ -34,10 +42,12 @@ export class InventoryItemService {
       .createQueryBuilder('product')
       .leftJoinAndSelect('product.category', 'category')
       .where('product.is_active = :isActive', { isActive: true })
-      .andWhere('product.branch_id = :branchId', {
+      .andWhere(stockProductCondition('product'), {
         branchId: resolvedBranchId,
       });
 
+    if (productType)
+      query.andWhere('product.product_type=:productType', { productType });
     if (search?.trim()) {
       query.andWhere(
         "(LOWER(product.name) LIKE :search OR LOWER(COALESCE(product.code, '')) LIKE :search)",
@@ -77,10 +87,26 @@ export class InventoryItemService {
       resolvedBranchId,
     );
 
+    const expired = await this.productRepository.manager.query(
+      "SELECT l.product_id AS id,SUM(l.quantity) AS quantity FROM stock_lots l JOIN stocks s ON s.id=l.stock_id WHERE s.branch_id=$1 AND l.expires_at < (now() AT TIME ZONE 'Asia/Bangkok')::date GROUP BY l.product_id",
+      [resolvedBranchId],
+    );
+    const expiredById = new Map(
+      expired.map((r: any) => [r.id, Number(r.quantity)]),
+    );
     return toPaginationResponse(
-      products.map((product) =>
-        this.toInventoryItem(product, quantityByProductId.get(product.id) || 0),
-      ),
+      products.map((product) => ({
+        ...this.toInventoryItem(
+          product,
+          quantityByProductId.get(product.id) || 0,
+        ),
+        expiredQuantity: expiredById.get(product.id) || 0,
+        availableQuantity: Math.max(
+          0,
+          (quantityByProductId.get(product.id) || 0) -
+            Number(expiredById.get(product.id) || 0),
+        ),
+      })),
       total,
       pagination.page,
       pagination.size,
@@ -89,10 +115,14 @@ export class InventoryItemService {
 
   async findOne(id: string, branchId?: string) {
     const resolvedBranchId = branchId || DEFAULT_BRANCH_ID;
-    const product = await this.productRepository.findOne({
-      where: { id, branchId: resolvedBranchId },
-      relations: ['category'],
-    });
+    const product = await this.productRepository
+      .createQueryBuilder('product')
+      .leftJoinAndSelect('product.category', 'category')
+      .where('product.id=:id', { id })
+      .andWhere(stockProductCondition('product'), {
+        branchId: resolvedBranchId,
+      })
+      .getOne();
 
     if (!product) {
       throw new NotFoundException(`Inventory item not found: ${id}`);
@@ -121,6 +151,7 @@ export class InventoryItemService {
       const savedProduct = await productRepo.save(
         productRepo.create({
           categoryId: dto.categoryId,
+          createdBy: dto.actorId,
           code: dto.code,
           name: dto.name,
           branchId,
@@ -138,6 +169,7 @@ export class InventoryItemService {
           savedProduct.id,
           Number(dto.quantity || 0),
           branchId,
+          dto.actorId,
         );
       }
 
@@ -168,7 +200,17 @@ export class InventoryItemService {
     if (dto.status !== undefined) product.isActive = dto.status === 'ACTIVE';
 
     await this.dataSource.transaction(async (trx) => {
-      await trx.getRepository(Product).save(product);
+      await trx.getRepository(Product).update(id, {
+        code: product.code,
+        name: product.name,
+        description: product.description,
+        unit: product.unit,
+        costPrice: product.costPrice,
+        price: product.price,
+        categoryId: product.categoryId,
+        isActive: product.isActive,
+        updatedBy: dto.actorId,
+      });
 
       if (dto.quantity !== undefined) {
         await this.setDefaultStockQuantity(
@@ -176,6 +218,7 @@ export class InventoryItemService {
           product.id,
           Number(dto.quantity || 0),
           branchId,
+          dto.actorId,
         );
       }
     });
@@ -198,6 +241,9 @@ export class InventoryItemService {
     return {
       id: product.id,
       productId: product.id,
+      productType: product.productType,
+      baseUnitId: product.baseUnitId,
+      lotTrackingEnabled: product.lotTrackingEnabled,
       code: product.code,
       name: product.name,
       quantity,
@@ -240,6 +286,9 @@ export class InventoryItemService {
   }
 
   private async getOrCreateDefaultStock(trx: EntityManager, branchId: string) {
+    await trx.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', [
+      'branch-stock:' + branchId,
+    ]);
     const stockRepo = trx.getRepository(Stock);
     let stock = await stockRepo.findOne({
       where: { branchId },
@@ -262,22 +311,24 @@ export class InventoryItemService {
     productId: string,
     quantity: number,
     branchId: string,
+    actorId?: string,
   ) {
+    await this.movements.lockProducts(trx, [productId]);
     const stock = await this.getOrCreateDefaultStock(trx, branchId);
-    const stockItemRepo = trx.getRepository(StockItem);
-    let stockItem = await stockItemRepo.findOne({
-      where: { stockId: stock.id, productId },
-    });
+    const stockItem = await this.movements.lock(trx, stock.id, productId);
 
-    if (!stockItem) {
-      stockItem = stockItemRepo.create({
-        stockId: stock.id,
-        productId,
-        quantity: 0,
-      });
-    }
-
-    stockItem.quantity = quantity;
-    await stockItemRepo.save(stockItem);
+    const product = await trx
+      .getRepository(Product)
+      .findOneByOrFail({ id: productId });
+    if (product.lotTrackingEnabled)
+      throw new BadRequestException('USE_LOT_STOCK_TAKE');
+    await this.movements.change(
+      trx,
+      stock.id,
+      productId,
+      positive(quantity, true) - Number(stockItem.quantity),
+      randomUUID(),
+      { actorId },
+    );
   }
 }

@@ -1,3 +1,6 @@
+import { StockModule } from '../stock/stock.module';
+import { KitchenOperationsService } from './kitchen-operations.service';
+import { KitchenOperationsController } from './kitchen-operations.controller';
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import {
@@ -49,9 +52,15 @@ import { RolesGuard } from '../../common/guard/roles.guard';
       WorkSchedule,
     ]),
     SocketModule,
+    StockModule,
   ],
-  controllers: [KitchenController],
-  providers: [KitchenService, KitchenScheduler, RolesGuard],
+  controllers: [KitchenController, KitchenOperationsController],
+  providers: [
+    KitchenOperationsService,
+    KitchenService,
+    KitchenScheduler,
+    RolesGuard,
+  ],
   exports: [KitchenService],
 })
 export class KitchenModule {}

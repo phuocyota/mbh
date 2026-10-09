@@ -1,8 +1,22 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsArray, IsNotEmpty, IsNumber, IsOptional, IsString, IsUUID, Min, ValidateNested } from 'class-validator';
+import {
+  IsArray,
+  IsNotEmpty,
+  IsNumber,
+  IsOptional,
+  IsString,
+  IsUUID,
+  Min,
+  ValidateNested,
+} from 'class-validator';
 
 export class CreateStockTransferItemDto {
+  @ApiProperty({ required: false }) @IsOptional() @IsArray() allocations?: {
+    lotId: string;
+    quantity: number;
+  }[];
+  @ApiProperty({ required: false }) @IsOptional() @IsUUID() unitId?: string;
   @ApiProperty()
   @IsNotEmpty()
   @IsUUID()
@@ -16,6 +30,8 @@ export class CreateStockTransferItemDto {
 }
 
 export class CreateStockTransferDto {
+  actorId?: string;
+  @ApiProperty({ required: false }) @IsOptional() @IsUUID() requestId?: string;
   @ApiProperty()
   @IsNotEmpty()
   @IsUUID()

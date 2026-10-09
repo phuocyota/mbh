@@ -5,31 +5,46 @@ import { Product } from './product.entity';
 
 @Entity('stock_take_items')
 export class StockTakeItem extends BaseEntity {
+  @Column('jsonb', { name: 'lot_counts', nullable: true }) lotCounts:
+    | { lotId: string; actualQuantity: number }[]
+    | null;
   @Column('uuid', { name: 'stock_take_id' })
   stockTakeId: string;
 
   @Column('uuid', { name: 'product_id' })
   productId: string;
 
-  @Column('numeric', { precision: 12, scale: 2, name: 'system_quantity' })
+  @Column('numeric', { precision: 18, scale: 4, name: 'system_quantity' })
   systemQuantity: number;
 
-  @Column('numeric', { precision: 12, scale: 2, name: 'actual_quantity' })
+  @Column('numeric', { precision: 18, scale: 4, name: 'actual_quantity' })
   actualQuantity: number;
 
-  @Column('numeric', { precision: 12, scale: 2, name: 'difference_quantity', default: 0 })
+  @Column('numeric', {
+    precision: 18,
+    scale: 4,
+    name: 'difference_quantity',
+    default: 0,
+  })
   differenceQuantity: number;
 
   @Column('numeric', { precision: 15, scale: 2, name: 'unit_cost', default: 0 })
   unitCost: number;
 
-  @Column('numeric', { precision: 15, scale: 2, name: 'difference_amount', default: 0 })
+  @Column('numeric', {
+    precision: 15,
+    scale: 2,
+    name: 'difference_amount',
+    default: 0,
+  })
   differenceAmount: number;
 
   @Column('text', { nullable: true })
   note: string;
 
-  @ManyToOne(() => StockTake, (stockTake) => stockTake.items, { onDelete: 'CASCADE' })
+  @ManyToOne(() => StockTake, (stockTake) => stockTake.items, {
+    onDelete: 'CASCADE',
+  })
   @JoinColumn({ name: 'stock_take_id' })
   stockTake: StockTake;
 

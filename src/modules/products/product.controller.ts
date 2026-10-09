@@ -1,3 +1,5 @@
+import { ForbiddenException } from '@nestjs/common';
+import { resolveStockBranch } from '../stock/stock-scope';
 import {
   Controller,
   Get,
@@ -19,6 +21,7 @@ import {
   ApiQuery,
 } from '@nestjs/swagger';
 import { ProductService } from './product.service';
+import { ProductWriteDto } from './product-write.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
 @ApiTags('Products')
@@ -48,6 +51,7 @@ export class ProductController {
     @Query('branchId') branchId?: string,
     @Query('minPrice') minPrice?: number,
     @Query('maxPrice') maxPrice?: number,
+    @Query('productType') productType?: string,
     @Query('isCanteenItem') isCanteenItem?: string,
     @Query('search') search?: string,
     @Query('displayStatus') displayStatus?: string,
@@ -60,6 +64,7 @@ export class ProductController {
       minPrice,
       maxPrice,
       branchId: this.resolveBranchId(req, branchId),
+      productType,
       isCanteenItem: parseOptionalBoolean(isCanteenItem),
       search,
       displayStatus,
@@ -86,7 +91,9 @@ export class ProductController {
     );
   }
 
-  @ApiOperation({ summary: 'Get active categories with products filtered by active status' })
+  @ApiOperation({
+    summary: 'Get active categories with products filtered by active status',
+  })
   @ApiQuery({
     name: 'isActive',
     required: false,
@@ -97,7 +104,8 @@ export class ProductController {
     name: 'hasInventory',
     required: false,
     type: Boolean,
-    description: 'When true, only return products with total stock quantity > 0',
+    description:
+      'When true, only return products with total stock quantity > 0',
   })
   @ApiQuery({ name: 'branchId', required: false })
   @ApiQuery({ name: 'minPrice', required: false, type: Number })
@@ -112,6 +120,7 @@ export class ProductController {
     @Query('branchId') branchId?: string,
     @Query('minPrice') minPrice?: number,
     @Query('maxPrice') maxPrice?: number,
+    @Query('productType') productType?: string,
     @Query('isCanteenItem') isCanteenItem?: string,
     @Query('page') page?: string,
     @Query('size') size?: string,
@@ -124,6 +133,7 @@ export class ProductController {
       branchId: this.resolveBranchId(req, branchId),
       minPrice,
       maxPrice,
+      productType,
       isCanteenItem: parseOptionalBoolean(isCanteenItem),
       page,
       size,
@@ -135,16 +145,24 @@ export class ProductController {
   @ApiResponse({ status: 200, description: 'Product details' })
   @ApiResponse({ status: 404, description: 'Product not found' })
   @Get(':id')
-  async findOne(@Param('id') id: string) {
-    return this.productService.findOne(id);
+  async findOne(@Req() req: any, @Param('id') id: string) {
+    if (req.user.userType === 'ADMIN' && !req.user.branchId)
+      return this.productService.findOne(id);
+    return this.productService.findOneForBranch(
+      id,
+      resolveStockBranch(req.user),
+    );
   }
 
   @ApiOperation({ summary: 'Create new product' })
   @ApiResponse({ status: 201, description: 'Product created' })
   @Post()
-  async create(@Req() req: any, @Body() createProductDto: any) {
+  async create(@Req() req: any, @Body() createProductDto: ProductWriteDto) {
+    if (req.user.userType === 'KITCHEN')
+      throw new ForbiddenException('MANAGER_REQUIRED');
     return this.productService.createProduct({
       ...createProductDto,
+      createdBy: req.user.userId,
       branchId: this.resolveBranchId(req, createProductDto?.branchId),
     });
   }
@@ -153,23 +171,49 @@ export class ProductController {
   @ApiParam({ name: 'id', description: 'Product ID' })
   @ApiResponse({ status: 200, description: 'Product updated' })
   @Put(':id')
-  async update(@Param('id') id: string, @Body() updateProductDto: any) {
-    return this.productService.updateProduct(id, updateProductDto);
+  async update(
+    @Req() req: any,
+    @Param('id') id: string,
+    @Body() updateProductDto: ProductWriteDto,
+  ) {
+    if (req.user.userType === 'KITCHEN')
+      throw new ForbiddenException('MANAGER_REQUIRED');
+    const product = await this.productService.findOne(id);
+    if (product.branchId) resolveStockBranch(req.user, product.branchId);
+    if (updateProductDto.branchId)
+      resolveStockBranch(req.user, updateProductDto.branchId);
+    return this.productService.updateProduct(id, {
+      ...updateProductDto,
+      updatedBy: req.user.userId,
+    });
   }
 
   @ApiOperation({ summary: 'Bulk update products' })
   @ApiResponse({ status: 200, description: 'Products updated' })
   @Put('bulk/update')
-  async updateBulk(@Body() items: { id: string; price: number }[]) {
-    return this.productService.updateBulk(items, { userId: 'system' } as any);
+  async updateBulk(
+    @Req() req: any,
+    @Body() items: { id: string; price: number }[],
+  ) {
+    if (req.user.userType === 'KITCHEN')
+      throw new ForbiddenException('MANAGER_REQUIRED');
+    for (const item of items) {
+      const product = await this.productService.findOne(item.id);
+      if (product.branchId) resolveStockBranch(req.user, product.branchId);
+    }
+    return this.productService.updateBulk(items, { userId: req.user.userId });
   }
 
   @ApiOperation({ summary: 'Delete product' })
   @ApiParam({ name: 'id', description: 'Product ID' })
   @ApiResponse({ status: 200, description: 'Product deleted' })
   @Delete(':id')
-  async delete(@Param('id') id: string) {
-    return this.productService.delete(id, { userId: 'system' } as any);
+  async delete(@Req() req: any, @Param('id') id: string) {
+    if (req.user.userType === 'KITCHEN')
+      throw new ForbiddenException('MANAGER_REQUIRED');
+    const product = await this.productService.findOne(id);
+    if (product.branchId) resolveStockBranch(req.user, product.branchId);
+    return this.productService.delete(id, { userId: req.user.userId });
   }
 }
 

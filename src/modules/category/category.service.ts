@@ -83,6 +83,7 @@ export class CategoryService extends BaseService<Category> {
       maxPrice?: number;
       branchId?: string;
       isCanteenItem?: boolean;
+      productType?: string;
       hasInventory?: boolean;
       isActive?: boolean;
       page?: number | string;
@@ -111,7 +112,9 @@ export class CategoryService extends BaseService<Category> {
     }
 
     if (filter.branchId) {
-      productConditions.push('product.branch_id = :branchId');
+      productConditions.push(
+        '(product.branch_id=:branchId OR EXISTS(SELECT 1 FROM stock_items scope_item JOIN stocks scope_stock ON scope_stock.id=scope_item.stock_id WHERE scope_item.product_id=product.id AND scope_stock.branch_id=:branchId))',
+      );
       params.branchId = filter.branchId;
     } else {
       productConditions.push('product.branch_id IS NULL');
@@ -129,6 +132,10 @@ export class CategoryService extends BaseService<Category> {
       `);
     }
 
+    if (filter.productType) {
+      productConditions.push('product.product_type = :productType');
+      params.productType = filter.productType;
+    }
     const query = this.categoryRepository
       .createQueryBuilder('category')
       .leftJoinAndSelect(
@@ -140,9 +147,12 @@ export class CategoryService extends BaseService<Category> {
       .where('category.status = :status', { status: COMMON_STATUS.ACTIVE });
 
     if (filter.branchId) {
-      query.andWhere('category.branch_id = :branchId', {
-        branchId: filter.branchId,
-      });
+      query.andWhere(
+        '(category.branch_id = :branchId OR product.id IS NOT NULL)',
+        {
+          branchId: filter.branchId,
+        },
+      );
     } else {
       query.andWhere('category.branch_id IS NULL');
     }

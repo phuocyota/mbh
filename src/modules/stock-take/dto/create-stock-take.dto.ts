@@ -1,8 +1,21 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsArray, IsNotEmpty, IsNumber, IsOptional, IsString, IsUUID, Min, ValidateNested } from 'class-validator';
+import {
+  IsArray,
+  IsNotEmpty,
+  IsNumber,
+  IsOptional,
+  IsString,
+  IsUUID,
+  Min,
+  ValidateNested,
+} from 'class-validator';
 
 export class CreateStockTakeItemDto {
+  @ApiProperty({ required: false }) @IsOptional() @IsArray() lotCounts?: {
+    lotId: string;
+    actualQuantity: number;
+  }[];
   @ApiProperty()
   @IsNotEmpty()
   @IsUUID()
@@ -16,6 +29,7 @@ export class CreateStockTakeItemDto {
 }
 
 export class CreateStockTakeDto {
+  actorId?: string;
   @ApiProperty({ required: false })
   @IsOptional()
   @IsUUID()

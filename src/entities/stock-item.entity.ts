@@ -12,7 +12,7 @@ export class StockItem extends BaseEntity {
   @Column('uuid', { name: 'product_id' })
   productId: string;
 
-  @Column('numeric', { precision: 12, scale: 2, default: 0 })
+  @Column('numeric', { precision: 18, scale: 4, default: 0 })
   quantity: number;
 
   @ManyToOne(() => Stock, (stock) => stock.items, { onDelete: 'CASCADE' })

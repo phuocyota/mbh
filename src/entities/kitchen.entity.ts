@@ -177,11 +177,25 @@ export class KitchenMealPlan extends BaseEntity {
 @Unique('UQ_kitchen_batch_meal_item', ['mealPlanId', 'mealItemId'])
 export class KitchenProductionBatch extends BaseEntity {
   @Column('uuid', { name: 'meal_plan_id' }) mealPlanId: string;
-  @Column('uuid', { name: 'meal_item_id' }) mealItemId: string;
+  @Column('uuid', { name: 'meal_item_id', nullable: true }) mealItemId:
+    | string
+    | null;
   @Column('uuid', { name: 'product_id' }) productId: string;
   @Column('uuid', { nullable: true, name: 'station_id' }) stationId?:
     | string
     | null;
+  @Column('varchar', { default: 'BOARDING' }) source: string;
+  @Column('uuid', { name: 'manual_line_id', nullable: true, unique: true })
+  manualLineId: string | null;
+  @Column('numeric', {
+    name: 'actual_quantity',
+    precision: 18,
+    scale: 4,
+    nullable: true,
+  })
+  actualQuantity: number | null;
+  @Column('varchar', { default: 'Ca trưa' }) shift: string;
+  @Column('jsonb', { default: {} }) details: Record<string, any>;
   @Column('int', { name: 'planned_quantity' }) plannedQuantity: number;
   @Column('int', { default: 0, name: 'adjustment_quantity' })
   adjustmentQuantity: number;
@@ -198,7 +212,7 @@ export class KitchenProductionBatch extends BaseEntity {
   })
   @JoinColumn({ name: 'meal_plan_id' })
   mealPlan: KitchenMealPlan;
-  @ManyToOne(() => MealItem)
+  @ManyToOne(() => MealItem, { nullable: true })
   @JoinColumn({ name: 'meal_item_id' })
   mealItem: MealItem;
 }

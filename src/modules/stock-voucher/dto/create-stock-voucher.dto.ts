@@ -74,11 +74,11 @@ function RequireSupplierImportSourceId(validationOptions?: ValidationOptions) {
           ) {
             return (
               (hasSourceId || hasFallbackToId) &&
-              (!hasSourceId || isUUID(String(_value)))
+              (!hasSourceId || (typeof _value === 'string' && isUUID(_value)))
             );
           }
 
-          return !hasSourceId || isUUID(String(_value));
+          return !hasSourceId || (typeof _value === 'string' && isUUID(_value));
         },
         defaultMessage(args: ValidationArguments) {
           const hasSourceId =
@@ -113,12 +113,15 @@ function RequireSupplierImportPaymentStatus(
           const partyType = String(
             dto.sourceType || dto.toType || '',
           ).toUpperCase();
-          const hasValue = value !== undefined && value !== null && value !== '';
+          const hasValue =
+            value !== undefined && value !== null && value !== '';
           const isAllowedPaymentStatus = [
             STOCK_PAYMENT_STATUS.PAID,
             STOCK_PAYMENT_STATUS.UNPAID,
             STOCK_PAYMENT_STATUS.DEBT,
-          ].includes(String(value || '').toUpperCase() as any);
+          ].includes(
+            (typeof value === 'string' ? value.toUpperCase() : '') as any,
+          );
 
           if (
             type === STOCK_VOUCHER_TYPE.IMPORT &&
@@ -138,6 +141,20 @@ function RequireSupplierImportPaymentStatus(
 }
 
 export class CreateStockVoucherItemDto {
+  @ApiProperty({ required: false }) @IsOptional() @IsUUID() unitId?: string;
+  @ApiProperty({ required: false }) @IsOptional() @IsString() lotCode?: string;
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsString()
+  manufacturedAt?: string;
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsString()
+  expiresAt?: string;
+  @ApiProperty({ required: false, type: Array })
+  @IsOptional()
+  @IsArray()
+  allocations?: { lotId: string; quantity: number }[];
   @ApiProperty()
   @IsNotEmpty()
   @IsUUID()
@@ -146,7 +163,7 @@ export class CreateStockVoucherItemDto {
   @ApiProperty({ example: 1 })
   @IsNotEmpty()
   @IsNumber()
-  @Min(1)
+  @Min(0.0001)
   quantity: number;
 
   @ApiProperty({ example: 10000, required: false })
@@ -162,6 +179,10 @@ export class CreateStockVoucherItemDto {
 }
 
 export class CreateStockVoucherDto {
+  /** Assigned by the controller after validation, never accepted from clients. */
+  actorId?: string;
+  @ApiProperty({ required: false }) @IsOptional() @IsUUID() requestId?: string;
+  @ApiProperty({ required: false }) @IsOptional() @IsString() purpose?: string;
   @ApiProperty({ example: DEFAULT_BRANCH_ID, required: false })
   @IsOptional()
   @IsUUID()

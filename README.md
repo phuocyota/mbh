@@ -1,74 +1,153 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
-</p>
+# MBH POS System
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+Multi-Branch Hospitality POS backend API for Kido Canteen. Built with NestJS, TypeORM, and PostgreSQL.
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+## Tech Stack
 
-## Description
+| Component | Technology |
+|-----------|------------|
+| Framework | NestJS 11 |
+| Database | PostgreSQL + TypeORM |
+| Authentication | JWT + Passport |
+| Real-time | Socket.IO |
+| API Docs | Swagger/OpenAPI |
+| Finance | VietinBank QR Payments, MoMo |
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
-
-## Project setup
+## Quick Start
 
 ```bash
-$ npm install
+# Install dependencies
+npm install
+
+# Configure environment
+cp .env.example .env  # if you have one, otherwise create manually
+# Edit .env with your database credentials and secrets
+
+# Run database migrations
+npm run migration:run
+
+# Start development server
+npm run start:dev
+
+# Run tests
+npm test
 ```
 
-## Compile and run the project
+The API runs on **port 3002** with Swagger docs at `/docs`.
 
-```bash
-# development
-$ npm run start
+## Project Structure
 
-# watch mode
-$ npm run start:dev
-
-# production mode
-$ npm run start:prod
+```
+src/
+├── modules/              # Feature modules
+│   ├── auth/             # JWT authentication
+│   ├── branch/           # Multi-branch management
+│   ├── cart/             # Shopping cart
+│   ├── cash-movement/    # Cash drawer operations
+│   ├── customer/         # Customer & student card lookup
+│   ├── dashboard/        # Dashboard analytics
+│   ├── employee/         # Staff management
+│   ├── finance/          # Financial operations
+│   ├── inventory-item/   # Stock inventory tracking
+│   ├── kitchen/          # Kitchen operations & portal
+│   ├── meal-item/        # Meal item catalog
+│   ├── orders/           # Order processing
+│   ├── parent/           # Parent app integration
+│   ├── payment/          # Payment processing
+│   ├── payroll/          # Employee payroll
+│   ├── products/         # Product catalog
+│   ├── reports/          # Revenue & inventory reports
+│   ├── shift/            # Shift management
+│   ├── socket/           # WebSocket events
+│   ├── stock/            # Stock management
+│   ├── stock-take/       # Inventory stocktakes
+│   ├── stock-transfer/   # Stock transfers between branches
+│   ├── stock-voucher/    # Stock vouchers
+│   ├── supplier/          # Supplier management
+│   ├── upload/           # File uploads
+│   ├── vietinbank/       # VietinBank QR payments
+│   ├── wallet/           # Wallet balance & transactions
+│   └── ...
+├── entities/             # TypeORM entity definitions
+├── common/
+│   ├── decorators/       # Custom decorators
+│   ├── filters/          # Exception filters
+│   ├── guard/            # Route guards
+│   ├── interceptors/    # Response/logging interceptors
+│   └── middleware/       # Request logging
+└── config/               # Configuration files
 ```
 
-## Run tests
+## Key Features
 
-```bash
-# unit tests
-$ npm run test
+### Kitchen Operations
+The kitchen module provides a real-time portal for kitchen staff to view and manage orders:
+- Real-time order updates via WebSocket
+- Kitchen display system integration
+- Production tracking per branch
 
-# e2e tests
-$ npm run test:e2e
+### Stock & Inventory
+Multi-layer inventory management across branches:
+- Stock items with lot tracking and expiration dates
+- Stock vouchers for adjustments
+- Stock takes for periodic reconciliation
+- Stock transfers between branches
 
-# test coverage
-$ npm run test:cov
-```
+### Finance
+- VietinBank QR code generation for wallet topups
+- Cash movement tracking
+- Fund management per branch
+- MoMo integration support
 
-## VietinBank parent wallet topup
+### Multi-Branch Support
+- Branch-specific configuration
+- POS device registration
+- Cross-branch stock transfers
+- Branch-level reporting
 
-The parent app creates a fixed-amount QR with
-`POST /api/v1/vietinbank/generate-qr` and polls
-`GET /api/v1/vietinbank/topups/:requestId/status`. VietinBank confirms the
-deposit through `POST /api/v1/vietinbank/notify-bill`; the wallet is credited
-only by that signed callback. Every request resolves the VietinBank config and
-default receiving account for the authenticated user's branch.
+## API Endpoints
 
-Required configuration for a real bank environment:
+API documentation is available via Swagger at `/docs` when the server is running.
 
-```dotenv
+### Authentication
+- `POST /api/v1/auth/login` - User login
+- `POST /api/v1/auth/register` - User registration
+
+### Core Operations
+- `/api/v1/orders` - Order management
+- `/api/v1/products` - Product catalog
+- `/api/v1/customers` - Customer lookup
+- `/api/v1/wallet` - Wallet operations
+
+### Inventory
+- `/api/v1/stock` - Stock management
+- `/api/v1/inventory-items` - Inventory item tracking
+- `/api/v1/stock-takes` - Stocktake operations
+- `/api/v1/stock-transfers` - Inter-branch transfers
+- `/api/v1/stock-vouchers` - Stock adjustments
+
+### Kitchen
+- `/api/v1/kitchen` - Kitchen operations and portal
+
+## Environment Variables
+
+```env
+# Database
+DB_HOST=localhost
+DB_PORT=5432
+DB_USERNAME=
+DB_PASSWORD=
+DB_DATABASE=mbh
+
+# Application
+NODE_ENV=development
+PORT=3002
+
+# JWT
+JWT_SECRET=
+JWT_EXPIRES_IN=7d
+
+# VietinBank (production)
 VIETINBANK_ENVIRONMENT=UAT
 VIETINBANK_SECRET_MASTER_KEY=
 VIETINBANK_QR_PATH=/vtb-api-uat/development/qr/vietqr/gen
@@ -80,65 +159,51 @@ VIETINBANK_CLIENT_IP=
 VIETINBANK_TIMEOUT_MS=10000
 VIETINBANK_TARGET_BALANCE=50000
 VIETINBANK_TOPUP_TTL_MINUTES=15
+
+# MoMo
+MOMO_ENDPOINT=
+MOMO_PARTNER_CODE=
+MOMO_ACCESS_KEY=
+MOMO_SECRET_KEY=
+
+# Frontend Origins (for CORS)
+KITCHEN_FRONTEND_ORIGIN=
 ```
 
-`VIETINBANK_RSA_PADDING` accepts `PKCS1` or `PSS`. Do not enable the real
-integration until VietinBank confirms the algorithm, padding, canonical
-signature source, endpoint and credentials.
-
-For local contract testing only, set `VIETINBANK_MOCK_ENABLED=true`. Mock mode
-still requires an active branch config and default account in the database, but
-does not resolve encrypted secrets. Mock QR content is not a scannable VietQR,
-and mock callbacks use `signature: "MOCK_SIGNATURE"`. Mock mode is disabled
-when `NODE_ENV=production`.
-
-VietinBank client secrets and partner private keys are AES-256-GCM encrypted
-in `vietinbank_secrets`. Generate a 32-byte master key, Base64 encode it, and
-set `VIETINBANK_SECRET_MASTER_KEY`. Store or rotate a secret without placing
-the plaintext in command arguments:
+## Scripts
 
 ```bash
-printf '%s' "$SECRET_VALUE" | npm run vietinbank-secret:set -- --ref vietinbank/branch/uat/client-secret
+npm run start           # Start production server
+npm run start:dev       # Start with hot reload
+npm run start:debug      # Start in debug mode
+npm run build            # Build for production
+npm run lint             # Lint code
+npm run format           # Format with Prettier
+npm test                # Run unit tests
+npm run test:cov        # Test coverage report
+npm run reset:branch    # Reset branch test data
 ```
 
-Only ADMIN users can manage configs under `/api/v1/vietinbank/configs`.
+## CORS
 
-## Deployment
+The API allows requests from configured frontend origins:
+- `https://be.kidocanteen.kidoedu.vn`
+- `https://fe.kidocanteen.kidoedu.vn`
+- `https://fe.parent.kidocanteen.kidoedu.vn`
+- `https://fe.admin.kidocanteen.kidoedu.vn`
+- `localhost:5173` and `localhost:5171` (development)
 
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
+## VietinBank Integration
 
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
+The wallet topup flow:
+1. Generate QR code: `POST /api/v1/vietinbank/generate-qr`
+2. Poll status: `GET /api/v1/vietinbank/topups/:requestId/status`
+3. VietinBank confirms via: `POST /api/v1/vietinbank/notify-bill`
 
-```bash
-$ npm install -g @nestjs/mau
-$ mau deploy
-```
+For local testing, enable mock mode: `VIETINBANK_MOCK_ENABLED=true`
 
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
-
-## Resources
-
-Check out a few resources that may come in handy when working with NestJS:
-
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
-
-## Support
-
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
-
-## Stay in touch
-
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
+> **Note**: Do not enable production VietinBank integration until confirmed with VietinBank on the algorithm, padding, signature source, endpoint, and credentials.
 
 ## License
 
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+Private - Kido Canteen

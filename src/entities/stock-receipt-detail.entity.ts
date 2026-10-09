@@ -10,8 +10,11 @@ export class StockReceiptDetail extends BaseEntity {
   @Column('uuid', { name: 'product_id' })
   productId: string;
 
-  @Column('numeric', { precision: 12, scale: 2 })
+  @Column('numeric', { precision: 18, scale: 4 })
   quantity: number;
+
+  @Column('jsonb', { name: 'input_details', nullable: true })
+  inputDetails: Record<string, any> | null;
 
   @Column('varchar', { name: 'receipt_type' })
   receiptType: string; // IMPORT, EXPORT, TRANSFER
@@ -41,15 +44,27 @@ export class StockReceiptDetail extends BaseEntity {
   @JoinColumn({ name: 'product_id' })
   product: Product;
 
-  @ManyToOne(() => StockReceiptImport, (importReceipt) => importReceipt.details, { onDelete: 'CASCADE', nullable: true })
+  @ManyToOne(
+    () => StockReceiptImport,
+    (importReceipt) => importReceipt.details,
+    { onDelete: 'CASCADE', nullable: true },
+  )
   @JoinColumn({ name: 'import_id' })
   importReceipt: StockReceiptImport;
 
-  @ManyToOne(() => StockReceiptExport, (exportReceipt) => exportReceipt.details, { onDelete: 'CASCADE', nullable: true })
+  @ManyToOne(
+    () => StockReceiptExport,
+    (exportReceipt) => exportReceipt.details,
+    { onDelete: 'CASCADE', nullable: true },
+  )
   @JoinColumn({ name: 'export_id' })
   exportReceipt: StockReceiptExport;
 
-  @ManyToOne(() => StockReceiptTransfer, (transferReceipt) => transferReceipt.details, { onDelete: 'CASCADE', nullable: true })
+  @ManyToOne(
+    () => StockReceiptTransfer,
+    (transferReceipt) => transferReceipt.details,
+    { onDelete: 'CASCADE', nullable: true },
+  )
   @JoinColumn({ name: 'transfer_id' })
   transferReceipt: StockReceiptTransfer;
 }
