@@ -37,6 +37,12 @@ export class CartService {
     branchId?: string,
     userId?: string,
   ): Promise<Cart> {
+    if (userId && !branchId) {
+      throw new BadRequestException(
+        'Branch ID is required in authentication token',
+      );
+    }
+
     let cart: Cart | null = null;
     let resolvedCustomerId = customerId;
 
@@ -69,16 +75,19 @@ export class CartService {
         itemCount: 0,
       });
       await this.cartRepository.save(cart);
+    } else if (userId && branchId && cart.branchId !== branchId) {
+      cart.branchId = branchId;
+      await this.cartRepository.save(cart);
     }
 
     return cart;
   }
 
-  async getMyCart(userId: string): Promise<Cart> {
+  async getMyCart(userId: string, branchId?: string): Promise<Cart> {
     const cart = await this.getOrCreateCart(
       undefined,
       undefined,
-      undefined,
+      branchId,
       userId,
     );
     return this.getCart(cart.id);
@@ -184,7 +193,12 @@ export class CartService {
     await this.cartRepository.save(cart);
   }
 
-  async completeCart(userId: string, dto: CompleteCartDto, role?: string) {
+  async completeCart(
+    userId: string,
+    dto: CompleteCartDto,
+    role?: string,
+    branchId?: string,
+  ) {
     if (!userId) {
       throw new BadRequestException('User is required');
     }
@@ -192,7 +206,7 @@ export class CartService {
     const cart = await this.getOrCreateCart(
       undefined,
       undefined,
-      undefined,
+      branchId,
       userId,
     );
     const cartWithItems = await this.getCart(cart.id);
@@ -205,7 +219,7 @@ export class CartService {
     const paymentMethod = dto.paymentMethod ?? PAYMENT_METHOD.WALLET;
 
     const order = await this.orderService.createOrder({
-      branchId: dto.branchId || cartWithItems.branchId || undefined,
+      branchId,
       posDeviceId: dto.posDeviceId || undefined,
       customerId: cartWithItems.customerId,
       cashierId: role === 'STUDENT' || role === 'CUSTOMER' ? null : userId,

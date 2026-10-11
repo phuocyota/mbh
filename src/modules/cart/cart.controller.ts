@@ -8,6 +8,7 @@ import {
   Param,
   UseGuards,
   Req,
+  BadRequestException,
 } from '@nestjs/common';
 import { randomUUID } from 'crypto';
 import {
@@ -29,6 +30,16 @@ import { CreateDraftCartDto } from './dto/create-draft-cart.dto';
 export class CartController {
   constructor(private cartService: CartService) {}
 
+  private getBranchId(req: any): string {
+    const branchId = req.user?.branchId;
+    if (!branchId) {
+      throw new BadRequestException(
+        'Branch ID is required in authentication token',
+      );
+    }
+    return branchId;
+  }
+
   @ApiOperation({ summary: 'Create or get anonymous draft cart without token' })
   @ApiResponse({ status: 201, description: 'Draft cart created or retrieved' })
   @Post('draft')
@@ -44,7 +55,7 @@ export class CartController {
   @Get('me')
   async getMyCart(@Req() req: any) {
     const userId = req.user?.userId;
-    return this.cartService.getMyCart(userId);
+    return this.cartService.getMyCart(userId, this.getBranchId(req));
   }
 
   @ApiOperation({ summary: 'Add item to my cart (via JWT token)' })
@@ -57,7 +68,7 @@ export class CartController {
     const cart = await this.cartService.getOrCreateCart(
       undefined,
       undefined,
-      undefined,
+      this.getBranchId(req),
       userId,
     );
     await this.cartService.addItem(
@@ -84,7 +95,7 @@ export class CartController {
     const cart = await this.cartService.getOrCreateCart(
       undefined,
       undefined,
-      undefined,
+      this.getBranchId(req),
       userId,
     );
     return this.cartService.updateItemQuantity(
@@ -106,7 +117,7 @@ export class CartController {
     const cart = await this.cartService.getOrCreateCart(
       undefined,
       undefined,
-      undefined,
+      this.getBranchId(req),
       userId,
     );
     return this.cartService.removeItem(cart.id, itemId);
@@ -120,7 +131,12 @@ export class CartController {
   async completeMyCart(@Req() req: any, @Body() dto: CompleteCartDto) {
     const userId = req.user?.userId;
     const role = req.user?.role;
-    return this.cartService.completeCart(userId, dto, role);
+    return this.cartService.completeCart(
+      userId,
+      dto,
+      role,
+      this.getBranchId(req),
+    );
   }
 
   @ApiOperation({ summary: 'Clear my cart (via JWT token)' })
@@ -133,7 +149,7 @@ export class CartController {
     const cart = await this.cartService.getOrCreateCart(
       undefined,
       undefined,
-      undefined,
+      this.getBranchId(req),
       userId,
     );
     return this.cartService.clearCart(cart.id);
