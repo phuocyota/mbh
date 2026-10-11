@@ -1,4 +1,5 @@
 export const SOCKET_EVENTS = {
+  CUSTOMER_DEBT_PAID: 'customer:debt-paid',
   ORDER_CREATED: 'order:created',
   ORDER_UPDATED: 'order:updated',
   ORDER_STATUS_CHANGED: 'order:status-changed',
@@ -12,6 +13,11 @@ export const SOCKET_EVENTS = {
   ORDER_REFUNDED: 'order:refunded',
   ORDER_DELETED: 'order:deleted',
   DASHBOARD_UPDATED: 'dashboard:updated',
+  KITCHEN_TICKET_CREATED: 'kitchen:ticket.created',
+  KITCHEN_TICKET_UPDATED: 'kitchen:ticket.updated',
+  KITCHEN_BATCH_UPDATED: 'kitchen:batch.updated',
+  KITCHEN_MEAL_PLAN_LOCKED: 'kitchen:meal-plan.locked',
+  KITCHEN_CONSUMPTION_UPDATED: 'kitchen:consumption.updated',
 } as const;
 
 export const SOCKET_ROOMS = {
@@ -20,4 +26,5 @@ export const SOCKET_ROOMS = {
   branchOrders: (branchId: string) => `orders:branch:${branchId}`,
   branchDashboard: (branchId: string) => `dashboard:branch:${branchId}`,
   order: (orderId: string) => `order:${orderId}`,
+  branchKitchen: (branchId: string) => `kitchen:branch:${branchId}`,
 } as const;

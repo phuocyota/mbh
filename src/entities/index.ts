@@ -47,3 +47,19 @@ export { FundDetail } from './fund-detail.entity';
 export { StockTake } from './stock-take.entity';
 export { StockTakeItem } from './stock-take-item.entity';
 export { StockFundReceiptReason } from './stock-fund-receipt-reason.entity';
+export {
+  VietinBankTopupRequest,
+  VIETINBANK_TOPUP_STATUS,
+} from './vietinbank-topup-request.entity';
+export { VietinBankBankTransaction } from './vietinbank-bank-transaction.entity';
+export {
+  VietinBankIntegrationConfig,
+  VIETINBANK_ENVIRONMENTS,
+  VIETINBANK_CONFIG_STATUSES,
+} from './vietinbank-integration-config.entity';
+export {
+  VietinBankAccount,
+  VIETINBANK_ACCOUNT_STATUSES,
+} from './vietinbank-account.entity';
+export { VietinBankSecret } from './vietinbank-secret.entity';
+export * from './kitchen.entity';

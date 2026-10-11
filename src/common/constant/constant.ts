@@ -180,6 +180,7 @@ export const WALLET_TRANSACTION_REF_TYPE = {
   MANUAL: 'MANUAL',
   ORDER: 'ORDER',
   REFUND: 'REFUND',
+  BANK_TOPUP: 'BANK_TOPUP',
 } as const;
 
 export const CART_NEXT_ACTION = {

@@ -43,6 +43,8 @@ import { MomoModule } from './modules/momo/momo.module';
 import { MealItemModule } from './modules/meal-item/meal-item.module';
 import { UploadModule } from './modules/upload/upload.module';
 import { CustomerMealItemModule } from './modules/customer-meal-item/customer-meal-item.module';
+import { VietinBankModule } from './modules/vietinbank/vietinbank.module';
+import { KitchenModule } from './modules/kitchen/kitchen.module';
 
 @Module({
   imports: [
@@ -87,6 +89,8 @@ import { CustomerMealItemModule } from './modules/customer-meal-item/customer-me
     MealItemModule,
     UploadModule,
     CustomerMealItemModule,
+    VietinBankModule,
+    KitchenModule,
   ],
   controllers: [AppController],
   providers: [

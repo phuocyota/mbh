@@ -23,11 +23,21 @@ export class ResponseInterceptor<T> implements NestInterceptor<
     next: CallHandler<T>,
   ): Observable<StandardResponse<T>> {
     return next.handle().pipe(
-      map((data) => ({
-        success: true,
-        message: 'Thành công',
-        data,
-      })),
+      map((data) => {
+        if (
+          data &&
+          typeof data === 'object' &&
+          'success' in data &&
+          typeof (data as { success?: unknown }).success === 'boolean'
+        ) {
+          return data as unknown as StandardResponse<T>;
+        }
+        return {
+          success: true,
+          message: 'Thành công',
+          data,
+        };
+      }),
     );
   }
 }

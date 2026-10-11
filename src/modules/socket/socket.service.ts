@@ -15,6 +15,12 @@ export class SocketService {
     this.server = server;
   }
 
+  emitCustomerDebtPaid(payload: { customerId: string; transactionId: string }) {
+    this.server
+      ?.to(SOCKET_ROOMS.DASHBOARD)
+      .emit(SOCKET_EVENTS.CUSTOMER_DEBT_PAID, payload);
+  }
+
   emitOrderCreated(order: any) {
     this.emitOrderEvent(SOCKET_EVENTS.ORDER_CREATED, order);
   }
@@ -52,6 +58,39 @@ export class SocketService {
 
   emitOrderCompleted(order: any) {
     this.emitOrderEvent(SOCKET_EVENTS.ORDER_COMPLETED, order);
+  }
+
+  emitKitchenTicketCreated(ticket: any) {
+    if (ticket?.branchId)
+      this.server
+        ?.to(SOCKET_ROOMS.branchKitchen(ticket.branchId))
+        .emit(SOCKET_EVENTS.KITCHEN_TICKET_CREATED, ticket);
+  }
+
+  emitKitchenTicketUpdated(ticket: any) {
+    if (ticket?.branchId)
+      this.server
+        ?.to(SOCKET_ROOMS.branchKitchen(ticket.branchId))
+        .emit(SOCKET_EVENTS.KITCHEN_TICKET_UPDATED, ticket);
+  }
+
+  emitKitchenBatchUpdated(branchId: string, batch: any) {
+    this.server
+      ?.to(SOCKET_ROOMS.branchKitchen(branchId))
+      .emit(SOCKET_EVENTS.KITCHEN_BATCH_UPDATED, batch);
+  }
+
+  emitKitchenMealPlanLocked(plan: any) {
+    if (plan?.branchId)
+      this.server
+        ?.to(SOCKET_ROOMS.branchKitchen(plan.branchId))
+        .emit(SOCKET_EVENTS.KITCHEN_MEAL_PLAN_LOCKED, plan);
+  }
+
+  emitKitchenConsumptionUpdated(branchId: string, session: any) {
+    this.server
+      ?.to(SOCKET_ROOMS.branchKitchen(branchId))
+      .emit(SOCKET_EVENTS.KITCHEN_CONSUMPTION_UPDATED, session);
   }
 
   emitOrderCancelled(

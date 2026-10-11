@@ -50,6 +50,9 @@ export class Product extends BaseEntity {
   @Column('varchar', { nullable: true })
   unit: string; // phần, ly, cái, hộp
 
+  @Column('uuid', { nullable: true, name: 'base_unit_id' })
+  baseUnitId: string | null;
+
   @Column('boolean', { default: true, name: 'is_active' })
   isActive: boolean;
 
