@@ -45,6 +45,7 @@ import { UploadModule } from './modules/upload/upload.module';
 import { CustomerMealItemModule } from './modules/customer-meal-item/customer-meal-item.module';
 import { VietinBankModule } from './modules/vietinbank/vietinbank.module';
 import { KitchenModule } from './modules/kitchen/kitchen.module';
+import { StockTraceModule } from './modules/stock-trace/stock-trace.module';
 
 @Module({
   imports: [
@@ -91,6 +92,7 @@ import { KitchenModule } from './modules/kitchen/kitchen.module';
     CustomerMealItemModule,
     VietinBankModule,
     KitchenModule,
+    StockTraceModule,
   ],
   controllers: [AppController],
   providers: [

@@ -1,3 +1,5 @@
+import { KitchenBatchUpdateDto } from './dto/kitchen-document.dto';
+import { KitchenOperationsService } from './kitchen-operations.service';
 import {
   Body,
   Controller,
@@ -25,7 +27,10 @@ const OPERATORS = [UserType.ADMIN, UserType.MANAGER, UserType.KITCHEN] as const;
 @Controller('kitchen')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class KitchenController {
-  constructor(private readonly kitchen: KitchenService) {}
+  constructor(
+    private readonly kitchen: KitchenService,
+    private operations: KitchenOperationsService,
+  ) {}
 
   @Put('staff/:userId/employee-link')
   @Roles(...MANAGERS)
@@ -189,14 +194,9 @@ export class KitchenController {
   startBatch(
     @Req() req: any,
     @Param('id') id: string,
-    @Body('expectedVersion') version: number,
+    @Body() dto: KitchenBatchUpdateDto,
   ) {
-    return this.kitchen.transitionBatch(
-      req.user,
-      id,
-      Number(version),
-      'PREPARING',
-    );
+    return this.operations.transition(req.user, id, dto, 'PREPARING');
   }
 
   @Get('batches/:id/adjustments')
@@ -210,9 +210,9 @@ export class KitchenController {
   readyBatch(
     @Req() req: any,
     @Param('id') id: string,
-    @Body('expectedVersion') version: number,
+    @Body() dto: KitchenBatchUpdateDto,
   ) {
-    return this.kitchen.transitionBatch(req.user, id, Number(version), 'READY');
+    return this.operations.transition(req.user, id, dto, 'READY');
   }
 
   @Post('batches/:id/complete')
@@ -220,14 +220,9 @@ export class KitchenController {
   completeBatch(
     @Req() req: any,
     @Param('id') id: string,
-    @Body('expectedVersion') version: number,
+    @Body() dto: KitchenBatchUpdateDto,
   ) {
-    return this.kitchen.transitionBatch(
-      req.user,
-      id,
-      Number(version),
-      'COMPLETED',
-    );
+    return this.operations.transition(req.user, id, dto, 'COMPLETED');
   }
 
   @Get('demand')

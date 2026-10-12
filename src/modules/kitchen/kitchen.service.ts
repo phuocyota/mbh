@@ -1,3 +1,9 @@
+import { KitchenOperationsService } from './kitchen-operations.service';
+import { canUseStockProduct } from '../stock/stock-scope';
+import {
+  StockMovementService,
+  localDate,
+} from '../stock/stock-movement.service';
 import {
   BadRequestException,
   ConflictException,
@@ -97,6 +103,8 @@ export class KitchenService {
     private dataSource: DataSource,
     private config: ConfigService,
     private socketService: SocketService,
+    private movements: StockMovementService,
+    private operations: KitchenOperationsService,
   ) {}
 
   isEnabled() {
@@ -203,7 +211,7 @@ export class KitchenService {
     if (!station || !product)
       throw new NotFoundException('Station or product not found');
     const branchId = this.resolveBranch(actor, station.branchId);
-    if (product.branchId && product.branchId !== branchId)
+    if (!(await canUseStockProduct(this.dataSource.manager, product, branchId)))
       throw new ForbiddenException('CROSS_BRANCH_FORBIDDEN');
     let row = await this.productStations.findOne({
       where: { branchId, productId },
@@ -248,8 +256,13 @@ export class KitchenService {
     const product = await this.products.findOne({
       where: { id: dto.productId },
     });
-    if (!product || (product.branchId && product.branchId !== branchId))
+    if (
+      !product ||
+      !(await canUseStockProduct(this.dataSource.manager, product, branchId))
+    )
       throw new BadRequestException('RECIPE_PRODUCT_BRANCH_MISMATCH');
+    if (product.productType && product.productType !== 'FINISHED_GOOD')
+      throw new BadRequestException('FINISHED_GOOD_REQUIRED');
     const ids = dto.items.map((item: any) => item.ingredientProductId);
     if (new Set(ids).size !== ids.length)
       throw new BadRequestException('DUPLICATE_RECIPE_INGREDIENT');
@@ -277,6 +290,8 @@ export class KitchenService {
     const productsById = new Map(ingredientProducts.map((p) => [p.id, p]));
     for (const item of dto.items) {
       const ingredient = productsById.get(item.ingredientProductId);
+      if (ingredient?.productType && ingredient.productType !== 'INGREDIENT')
+        throw new BadRequestException('INGREDIENT_REQUIRED');
       const unit = unitsById.get(item.unitId);
       const baseUnit = ingredient?.baseUnitId
         ? await this.units.findOne({ where: { id: ingredient.baseUnitId } })
@@ -290,14 +305,36 @@ export class KitchenService {
         throw new BadRequestException(
           `INCOMPATIBLE_INGREDIENT_UNIT:${item.ingredientProductId}`,
         );
-      if (ingredient?.branchId && ingredient.branchId !== branchId)
+      if (
+        ingredient &&
+        !(await canUseStockProduct(
+          this.dataSource.manager,
+          ingredient,
+          branchId,
+        ))
+      )
         throw new BadRequestException('RECIPE_INGREDIENT_BRANCH_MISMATCH');
     }
-    const latest = await this.recipes.findOne({
-      where: { branchId, productId: dto.productId },
-      order: { version: 'DESC' },
-    });
     return this.dataSource.transaction(async (manager) => {
+      await this.operations.lock(manager, branchId);
+      await this.movements.lockProducts(manager, [dto.productId, ...ids]);
+      const fresh = await manager
+        .getRepository(Product)
+        .find({ where: { id: In([dto.productId, ...ids]) } });
+      for (const previous of [product, ...ingredientProducts]) {
+        const current = fresh.find((p) => p.id === previous.id);
+        if (
+          !current ||
+          current.baseUnitId !== previous.baseUnitId ||
+          current.productType !== previous.productType ||
+          current.branchId !== previous.branchId
+        )
+          throw new ConflictException('PRODUCT_CHANGED_RETRY');
+      }
+      const latest = await manager.getRepository(KitchenRecipe).findOne({
+        where: { branchId, productId: dto.productId },
+        order: { version: 'DESC' },
+      });
       const recipe = await manager.save(
         KitchenRecipe,
         manager.create(KitchenRecipe, {
@@ -707,6 +744,18 @@ export class KitchenService {
       )
       .getRawMany();
     await this.dataSource.transaction(async (manager) => {
+      await this.operations.lock(manager, plan.branchId);
+      for (const shift of ['Ca sáng', 'Ca trưa', 'Ca chiều'])
+        await this.operations.unlocked(
+          manager,
+          plan.branchId,
+          plan.planDate,
+          shift,
+        );
+      const current = await manager
+        .getRepository(KitchenMealPlan)
+        .findOneByOrFail({ id: plan.id });
+      if (current.status === 'LOCKED') return;
       for (const item of items) {
         const count = await manager
           .getRepository(CustomerMealItem)
@@ -725,6 +774,12 @@ export class KitchenService {
               count?.quantity || item.expectedQuantity || 0,
             ),
             adjustmentQuantity: 0,
+            shift:
+              plan.mealPeriod === 'BREAKFAST'
+                ? 'Ca sáng'
+                : plan.mealPeriod === 'LUNCH'
+                  ? 'Ca trưa'
+                  : 'Ca chiều',
             status: KITCHEN_BATCH_STATUS.WAITING,
             createdBy: actor.userId,
           },
@@ -815,6 +870,23 @@ export class KitchenService {
         'Adjustment quantity and reason are required',
       );
     await this.dataSource.transaction(async (manager) => {
+      await this.operations.lock(manager, batch.mealPlan.branchId);
+      await this.operations.unlocked(
+        manager,
+        batch.mealPlan.branchId,
+        batch.mealPlan.planDate,
+        batch.shift,
+      );
+      const lockedBatch = await manager
+        .getRepository(KitchenProductionBatch)
+        .findOneByOrFail({ id: batch.id });
+      if (
+        Number(lockedBatch.plannedQuantity) +
+          Number(lockedBatch.adjustmentQuantity) +
+          dto.quantity <
+        0
+      )
+        throw new BadRequestException('NEGATIVE_PLANNED_QUANTITY');
       await manager.save(
         KitchenBatchAdjustment,
         manager.create(KitchenBatchAdjustment, {
@@ -854,47 +926,7 @@ export class KitchenService {
     expectedVersion: number,
     target: string,
   ) {
-    const batch = await this.batches.findOne({
-      where: { id },
-      relations: ['mealPlan'],
-    });
-    if (!batch) throw new NotFoundException('Kitchen batch not found');
-    this.resolveBranch(actor, batch.mealPlan.branchId);
-    const allowed: Record<string, string> = {
-      WAITING: 'PREPARING',
-      PREPARING: 'READY',
-      READY: 'COMPLETED',
-    };
-    try {
-      assertKitchenTransition(batch.status, target, allowed);
-    } catch {
-      throw new BadRequestException('INVALID_KITCHEN_BATCH_TRANSITION');
-    }
-    const patch: any = {
-      status: target,
-      updatedBy: actor.userId,
-      updatedAt: new Date(),
-    };
-    if (target === 'PREPARING') patch.startedAt = new Date();
-    if (target === 'READY') patch.readyAt = new Date();
-    if (target === 'COMPLETED') patch.completedAt = new Date();
-    const result = await this.batches
-      .createQueryBuilder()
-      .update()
-      .set(patch)
-      .where('id=:id AND version=:version', { id, version: expectedVersion })
-      .execute();
-    if (!result.affected)
-      throw new ConflictException('KITCHEN_BATCH_VERSION_CONFLICT');
-    const updated = await this.batches.findOne({
-      where: { id },
-      relations: ['mealItem'],
-    });
-    this.socketService.emitKitchenBatchUpdated(
-      batch.mealPlan.branchId,
-      updated,
-    );
-    return updated;
+    return this.operations.transition(actor, id, { expectedVersion }, target);
   }
 
   private async calculateDemand(
@@ -921,7 +953,9 @@ export class KitchenService {
       .createQueryBuilder('t')
       .innerJoinAndSelect('t.items', 'i')
       .where('t.branch_id=:branchId', { branchId })
-      .andWhere('DATE(t.created_at)=:date', { date })
+      .andWhere("(t.created_at AT TIME ZONE 'Asia/Bangkok')::date=:date", {
+        date,
+      })
       .andWhere('t.status IN (:...statuses)', {
         statuses: ['WAITING', 'PREPARING', 'READY', 'DELIVERED'],
       })
@@ -988,6 +1022,15 @@ export class KitchenService {
     const stock = new Map(
       stockRows.map((row: any) => [row.productId, Number(row.quantity)]),
     );
+    const expiredRows = await this.dataSource.query(
+      'SELECT l.product_id AS id, SUM(l.quantity) AS quantity FROM stock_lots l JOIN stocks s ON s.id=l.stock_id WHERE s.branch_id=$1 AND l.expires_at<$2 GROUP BY l.product_id',
+      [branchId, localDate()],
+    );
+    for (const row of expiredRows)
+      stock.set(
+        row.id,
+        Math.max(0, Number(stock.get(row.id) || 0) - Number(row.quantity)),
+      );
     return demand.map((line) => ({
       ...line,
       availableQuantity: stock.get(line.productId) || 0,
@@ -1004,47 +1047,63 @@ export class KitchenService {
       where: { id: dto.stationId, branchId },
     });
     if (!station) throw new NotFoundException('Kitchen station not found');
-    let session = await this.sessions.findOne({
-      where: {
+    return this.dataSource.transaction(async (manager) => {
+      await this.operations.lock(manager, branchId);
+      await this.operations.unlocked(
+        manager,
         branchId,
-        sessionDate: dto.date,
-        mealPeriod: dto.mealPeriod,
-        stationId: dto.stationId,
-      },
-      relations: ['lines'],
-    });
-    if (session) return session;
-    const demand = await this.calculateDemand(
-      branchId,
-      dto.date,
-      dto.mealPeriod,
-      dto.stationId,
-    );
-    session = await this.sessions.save(
-      this.sessions.create({
+        dto.date,
+        dto.mealPeriod === 'BREAKFAST'
+          ? 'Ca sáng'
+          : dto.mealPeriod === 'LUNCH'
+            ? 'Ca trưa'
+            : 'Ca chiều',
+      );
+      const sessions = manager.getRepository(KitchenConsumptionSession);
+      const previous = await sessions.findOne({
+        where: {
+          branchId,
+          sessionDate: dto.date,
+          mealPeriod: dto.mealPeriod,
+          stationId: dto.stationId,
+        },
+        relations: ['lines'],
+      });
+      if (previous) return previous;
+      const demand = await this.calculateDemand(
         branchId,
-        sessionDate: dto.date,
-        mealPeriod: dto.mealPeriod,
-        stationId: dto.stationId,
-        status: 'DRAFT',
-        createdBy: actor.userId,
-      }),
-    );
-    await this.dataSource.getRepository(KitchenConsumptionLine).save(
-      demand.map((line) =>
-        this.dataSource.getRepository(KitchenConsumptionLine).create({
-          sessionId: session.id,
-          productId: line.productId,
-          expectedQuantity: line.quantity,
-          actualQuantity: line.quantity,
-          unitId: line.unitId,
+        dto.date,
+        dto.mealPeriod,
+        dto.stationId,
+      );
+      if (!demand.length) throw new BadRequestException('NO_RECIPE_DEMAND');
+      const session = await sessions.save(
+        sessions.create({
+          branchId,
+          sessionDate: dto.date,
+          mealPeriod: dto.mealPeriod,
+          stationId: dto.stationId,
+          status: 'DRAFT',
           createdBy: actor.userId,
         }),
-      ),
-    );
-    return this.sessions.findOne({
-      where: { id: session.id },
-      relations: ['lines'],
+      );
+      const lines = manager.getRepository(KitchenConsumptionLine);
+      await lines.save(
+        demand.map((line) =>
+          lines.create({
+            sessionId: session.id,
+            productId: line.productId,
+            expectedQuantity: line.quantity,
+            actualQuantity: line.quantity,
+            unitId: line.unitId,
+            createdBy: actor.userId,
+          }),
+        ),
+      );
+      return sessions.findOneOrFail({
+        where: { id: session.id },
+        relations: ['lines'],
+      });
     });
   }
 
@@ -1101,6 +1160,17 @@ export class KitchenService {
     let confirmed: KitchenConsumptionSession;
     try {
       confirmed = await this.dataSource.transaction(async (manager) => {
+        await this.operations.lock(manager, session.branchId);
+        await this.operations.unlocked(
+          manager,
+          session.branchId,
+          session.sessionDate,
+          session.mealPeriod === 'BREAKFAST'
+            ? 'Ca sáng'
+            : session.mealPeriod === 'LUNCH'
+              ? 'Ca trưa'
+              : 'Ca chiều',
+        );
         const locked = await manager
           .getRepository(KitchenConsumptionSession)
           .createQueryBuilder('s')
@@ -1112,6 +1182,10 @@ export class KitchenService {
           .getRepository(Stock)
           .findOne({ where: { branchId: session.branchId } });
         if (!stock) throw new BadRequestException('BRANCH_STOCK_NOT_FOUND');
+        await this.movements.lockProducts(
+          manager,
+          session.lines.map((line) => line.productId),
+        );
         const stockItems = await manager
           .getRepository(StockItem)
           .createQueryBuilder('si')
@@ -1167,9 +1241,17 @@ export class KitchenService {
             actualQuantity: actual,
             updatedBy: actor.userId,
           });
-          const stockItem = byProduct.get(line.productId)!;
-          stockItem.quantity = Number(stockItem.quantity) - actual;
-          await manager.save(StockItem, stockItem);
+          const supplied = suppliedLines.find(
+            (l: any) => l.productId === line.productId,
+          );
+          await this.movements.change(
+            manager,
+            stock.id,
+            line.productId,
+            -actual,
+            receipt.id,
+            { allocations: supplied?.allocations, actorId: actor.userId },
+          );
           await manager.save(
             StockReceiptDetail,
             manager.create(StockReceiptDetail, {
@@ -1296,7 +1378,7 @@ export class KitchenService {
         ],
       ),
       this.dataSource.query(
-        `SELECT COALESCE(SUM(b.planned_quantity),0) "plannedQuantity", COALESCE(SUM(b.adjustment_quantity),0) "adjustmentQuantity", COALESCE(SUM(CASE WHEN b.status='COMPLETED' THEN b.planned_quantity+b.adjustment_quantity ELSE 0 END),0) "actualQuantity" FROM kitchen_production_batches b JOIN kitchen_meal_plans p ON p.id=b.meal_plan_id WHERE p.branch_id=$1 AND p.plan_date BETWEEN $2::date AND $3::date`,
+        `SELECT COALESCE(SUM(b.planned_quantity),0) "plannedQuantity", COALESCE(SUM(b.adjustment_quantity),0) "adjustmentQuantity", COALESCE(SUM(CASE WHEN b.status='COMPLETED' THEN b.actual_quantity ELSE 0 END),0) "actualQuantity" FROM kitchen_production_batches b JOIN kitchen_meal_plans p ON p.id=b.meal_plan_id WHERE p.branch_id=$1 AND p.plan_date BETWEEN $2::date AND $3::date`,
         params,
       ),
       this.dataSource.query(

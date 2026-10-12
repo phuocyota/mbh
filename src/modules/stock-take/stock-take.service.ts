@@ -1,11 +1,25 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { StockMovementService } from '../stock/stock-movement.service';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, EntityManager, In, Repository } from 'typeorm';
-import { Product, StockTake, StockTakeItem, Stock, StockItem } from '../../entities';
+import { DataSource, In, Repository } from 'typeorm';
+import {
+  Product,
+  StockTake,
+  StockTakeItem,
+  Stock,
+  StockItem,
+} from '../../entities';
 import { CreateStockTakeDto } from './dto/create-stock-take.dto';
 import { DEFAULT_BRANCH_ID } from '../../common/constant/default-branch.constant';
 import { StockService } from '../stock/stock.service';
-import { normalizePagination, toPaginationResponse } from '../../common/dto/pagination.dto';
+import {
+  normalizePagination,
+  toPaginationResponse,
+} from '../../common/dto/pagination.dto';
 
 @Injectable()
 export class StockTakeService {
@@ -22,10 +36,16 @@ export class StockTakeService {
     private stockItemRepository: Repository<StockItem>,
     private dataSource: DataSource,
     private stockService: StockService,
+    private movements: StockMovementService,
   ) {}
 
   async findAll(
-    filters: { status?: string; branchId?: string; page?: number | string; size?: number | string } = {},
+    filters: {
+      status?: string;
+      branchId?: string;
+      page?: number | string;
+      size?: number | string;
+    } = {},
   ) {
     const pagination = normalizePagination(filters.page, filters.size);
     const query = this.stockTakeRepository
@@ -38,7 +58,9 @@ export class StockTakeService {
       query.andWhere('stockTake.status = :status', { status: filters.status });
     }
     if (filters.branchId) {
-      query.andWhere('stockTake.branchId = :branchId', { branchId: filters.branchId });
+      query.andWhere('stockTake.branchId = :branchId', {
+        branchId: filters.branchId,
+      });
     }
 
     const orderedQuery = query.orderBy('stockTake.createdAt', 'DESC');
@@ -85,18 +107,27 @@ export class StockTakeService {
     return stockTake;
   }
 
-
-
   async createDraft(dto: CreateStockTakeDto) {
+    if (
+      !dto.items?.length ||
+      new Set(dto.items.map((item) => item.productId)).size !== dto.items.length
+    )
+      throw new BadRequestException('INVALID_STOCK_TAKE_ITEMS');
     return this.dataSource.transaction(async (trx) => {
       const stockTakeRepo = trx.getRepository(StockTake);
       const stockTakeItemRepo = trx.getRepository(StockTakeItem);
       const productRepo = trx.getRepository(Product);
-      const stockRepo = trx.getRepository(Stock);
       const stockItemRepo = trx.getRepository(StockItem);
 
       const branchId = dto.branchId || DEFAULT_BRANCH_ID;
-      const branchStock = await this.stockService.getOrCreateBranchStock(branchId, trx);
+      await this.movements.lockProducts(
+        trx,
+        dto.items.map((item) => item.productId),
+      );
+      const branchStock = await this.stockService.getOrCreateBranchStock(
+        branchId,
+        trx,
+      );
       const code = `KK${Date.now()}`;
 
       let totalDifferenceAmount = 0;
@@ -106,15 +137,21 @@ export class StockTakeService {
       const itemsToSave: StockTakeItem[] = [];
 
       for (const dtoItem of dto.items) {
-        const product = await productRepo.findOne({ where: { id: dtoItem.productId } });
+        const product = await productRepo.findOne({
+          where: { id: dtoItem.productId },
+        });
         if (!product) {
-          throw new NotFoundException(`Product not found with ID ${dtoItem.productId}`);
+          throw new NotFoundException(
+            `Product not found with ID ${dtoItem.productId}`,
+          );
         }
 
         // Get system quantity from StockItem
         const stockItem = await stockItemRepo.findOne({
           where: { stockId: branchStock.id, productId: product.id },
         });
+        if (product.branchId && product.branchId !== branchId && !stockItem)
+          throw new BadRequestException('CROSS_BRANCH_PRODUCT');
         const systemQuantity = stockItem ? Number(stockItem.quantity) : 0;
         const actualQuantity = Number(dtoItem.actualQuantity);
         const differenceQuantity = actualQuantity - systemQuantity;
@@ -129,7 +166,9 @@ export class StockTakeService {
         totalDifferenceAmount += differenceAmount;
 
         const stockTakeItem = stockTakeItemRepo.create({
+          createdBy: dto.actorId,
           productId: product.id,
+          lotCounts: dtoItem.lotCounts || null,
           systemQuantity,
           actualQuantity,
           differenceQuantity,
@@ -141,6 +180,7 @@ export class StockTakeService {
       }
 
       const stockTake = stockTakeRepo.create({
+        createdBy: dto.actorId,
         branchId,
         code,
         status: 'DRAFT',
@@ -157,16 +197,20 @@ export class StockTakeService {
         await stockTakeItemRepo.save(item);
       }
 
-      return this.findOne(savedStockTake.id);
+      return stockTakeRepo.findOneOrFail({
+        where: { id: savedStockTake.id },
+        relations: ['items', 'items.product'],
+      });
     });
   }
 
-  async complete(id: string) {
+  async complete(id: string, actorId?: string) {
     return this.dataSource.transaction(async (trx) => {
       const stockTakeRepo = trx.getRepository(StockTake);
-      const productRepo = trx.getRepository(Product);
-      const stockRepo = trx.getRepository(Stock);
-      const stockItemRepo = trx.getRepository(StockItem);
+      await stockTakeRepo.findOne({
+        where: { id },
+        lock: { mode: 'pessimistic_write' },
+      });
 
       const stockTake = await stockTakeRepo.findOne({
         where: { id },
@@ -178,35 +222,42 @@ export class StockTakeService {
       }
 
       if (stockTake.status !== 'DRAFT') {
-        throw new BadRequestException(`StockTake is already in ${stockTake.status} status`);
+        throw new BadRequestException(
+          `StockTake is already in ${stockTake.status} status`,
+        );
       }
 
-      const branchStock = await this.stockService.getOrCreateBranchStock(stockTake.branchId, trx);
+      await this.movements.lockProducts(
+        trx,
+        stockTake.items.map((item) => item.productId),
+      );
+      const branchStock = await this.stockService.getOrCreateBranchStock(
+        stockTake.branchId,
+        trx,
+      );
 
       for (const item of stockTake.items) {
-        // Find or create StockItem for this branch
-        let stockItem = await stockItemRepo.findOne({
-          where: { stockId: branchStock.id, productId: item.productId },
-        });
-
-        if (!stockItem) {
-          stockItem = stockItemRepo.create({
-            stockId: branchStock.id,
-            productId: item.productId,
-            quantity: 0,
-          });
-        }
-
-        // Set to actual quantity
-        stockItem.quantity = Number(item.actualQuantity);
-        await stockItemRepo.save(stockItem);
+        await this.movements.recount(
+          trx,
+          branchStock.id,
+          item.productId,
+          Number(item.systemQuantity),
+          Number(item.actualQuantity),
+          item.lotCounts,
+          stockTake.id,
+          actorId,
+        );
       }
 
       stockTake.status = 'COMPLETED';
+      stockTake.updatedBy = actorId;
       stockTake.countedAt = new Date();
       await stockTakeRepo.save(stockTake);
 
-      return this.findOne(id);
+      return stockTakeRepo.findOneOrFail({
+        where: { id },
+        relations: ['items', 'items.product'],
+      });
     });
   }
 }

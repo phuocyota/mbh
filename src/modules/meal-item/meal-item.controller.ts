@@ -1,3 +1,7 @@
+import { Roles } from '../../common/decorator/roles.decorator';
+import { RolesGuard } from '../../common/guard/roles.guard';
+import { UserType } from '../../common/enum/user-type.enum';
+import { resolveStockBranch } from '../stock/stock-scope';
 import {
   Body,
   Controller,
@@ -44,7 +48,7 @@ export class MealItemController {
     return this.mealItemService.findAllForUser(
       {
         ...query,
-        branchId: query.branchId || req.user?.branchId,
+        branchId: resolveStockBranch(req.user, query.branchId),
       },
       req.user?.userId,
     );
@@ -56,7 +60,7 @@ export class MealItemController {
     return this.mealItemService.getWeekPlan(
       {
         ...query,
-        branchId: query.branchId || req.user?.branchId,
+        branchId: resolveStockBranch(req.user, query.branchId),
       },
       req.user?.userId,
     );
@@ -71,10 +75,14 @@ export class MealItemController {
     type: MealItemDto,
   })
   @ApiResponse({ status: 404, description: 'Meal item not found' })
-  async findOne(@Param('id') id: string) {
-    return this.mealItemService.findOne(id);
+  async findOne(@Req() req: any, @Param('id') id: string) {
+    const item = await this.mealItemService.findOne(id);
+    resolveStockBranch(req.user, item.branchId);
+    return item;
   }
 
+  @UseGuards(RolesGuard)
+  @Roles(UserType.ADMIN, UserType.MANAGER)
   @Post()
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Create meal item' })
@@ -83,12 +91,18 @@ export class MealItemController {
     description: 'Meal item created',
     type: MealItemDto,
   })
-  async create(@Body() createMealItemDto: CreateMealItemDto) {
+  async create(@Req() req: any, @Body() createMealItemDto: CreateMealItemDto) {
+    createMealItemDto.branchId = resolveStockBranch(
+      req.user,
+      createMealItemDto.branchId,
+    );
     return this.mealItemService.createMealItem(createMealItemDto, {
-      userId: 'system',
+      userId: req.user.userId,
     } as any);
   }
 
+  @UseGuards(RolesGuard)
+  @Roles(UserType.ADMIN, UserType.MANAGER)
   @Put(':id')
   @ApiOperation({ summary: 'Update meal item' })
   @ApiParam({ name: 'id', description: 'Meal item ID' })
@@ -99,21 +113,30 @@ export class MealItemController {
   })
   @ApiResponse({ status: 404, description: 'Meal item not found' })
   async update(
+    @Req() req: any,
     @Param('id') id: string,
     @Body() updateMealItemDto: UpdateMealItemDto,
   ) {
+    const current = await this.mealItemService.findOne(id);
+    resolveStockBranch(req.user, current.branchId);
+    if (updateMealItemDto.branchId)
+      resolveStockBranch(req.user, updateMealItemDto.branchId);
     return this.mealItemService.updateMealItem(id, updateMealItemDto, {
-      userId: 'system',
+      userId: req.user.userId,
     } as any);
   }
 
+  @UseGuards(RolesGuard)
+  @Roles(UserType.ADMIN, UserType.MANAGER)
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Delete meal item' })
   @ApiParam({ name: 'id', description: 'Meal item ID' })
   @ApiResponse({ status: 204, description: 'Meal item deleted' })
   @ApiResponse({ status: 404, description: 'Meal item not found' })
-  async delete(@Param('id') id: string): Promise<void> {
-    await this.mealItemService.delete(id, { userId: 'system' } as any);
+  async delete(@Req() req: any, @Param('id') id: string): Promise<void> {
+    const current = await this.mealItemService.findOne(id);
+    resolveStockBranch(req.user, current.branchId);
+    await this.mealItemService.delete(id, { userId: req.user.userId } as any);
   }
 }

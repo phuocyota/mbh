@@ -371,6 +371,14 @@ export class FinanceService {
       );
     }
 
+    if (manager)
+      Object.assign(
+        fund,
+        await fundRepository.findOneOrFail({
+          where: { id: fund.id },
+          lock: { mode: 'pessimistic_write' },
+        }),
+      );
     const currentBalance = Number(fund.balance || 0);
     const postingSide = this.resolveFundPostingSide(reason, fund, type);
 

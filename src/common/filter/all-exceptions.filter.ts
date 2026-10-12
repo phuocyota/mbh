@@ -18,12 +18,15 @@ interface ErrorResponse {
   timestamp: string;
   path: string;
   method: string;
+  code?: string;
+  shortages?: unknown[];
 }
 
 interface ContractErrorResponse {
   success: false;
   code: string;
   message: string;
+  shortages?: unknown[];
 }
 
 /**
@@ -43,6 +46,8 @@ export class AllExceptionsFilter implements ExceptionFilter {
     let message = 'Lỗi hệ thống không xác định';
     let error = 'Internal Server Error';
     let contractError: ContractErrorResponse | null = null;
+    let code: string | undefined;
+    let shortages: unknown[] | undefined;
 
     if (exception instanceof HttpException) {
       statusCode = exception.getStatus();
@@ -52,8 +57,14 @@ export class AllExceptionsFilter implements ExceptionFilter {
         message = exceptionResponse;
       } else if (typeof exceptionResponse === 'object') {
         const responseObj = exceptionResponse as Record<string, unknown>;
+        code =
+          typeof responseObj.code === 'string' ? responseObj.code : undefined;
+        shortages = Array.isArray(responseObj.shortages)
+          ? responseObj.shortages
+          : undefined;
         message =
           (responseObj.message as string) ||
+          code ||
           (responseObj.error as string) ||
           message;
         error = (responseObj.error as string) || this.getErrorName(statusCode);
@@ -65,6 +76,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
             success: false,
             code: responseObj.code,
             message,
+            ...(shortages ? { shortages } : {}),
           };
         }
       }
@@ -80,6 +92,8 @@ export class AllExceptionsFilter implements ExceptionFilter {
       timestamp: new Date().toISOString(),
       path: request.url,
       method: request.method,
+      ...(code ? { code } : {}),
+      ...(shortages ? { shortages } : {}),
     };
 
     // Log lỗi với đầy đủ thông tin

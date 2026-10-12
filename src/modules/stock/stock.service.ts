@@ -22,6 +22,11 @@ export class StockService {
     const stockRepo = manager
       ? manager.getRepository(Stock)
       : this.stockRepository;
+    if (manager)
+      await manager.query(
+        'SELECT pg_advisory_xact_lock(hashtextextended($1,0))',
+        [`branch-stock:${branchId}`],
+      );
     let stock = await stockRepo.findOne({ where: { branchId } });
     if (!stock) {
       const branchRepo = manager

@@ -59,6 +59,16 @@ export class Product extends BaseEntity {
   @Column('boolean', { default: true, name: 'is_canteen_item' })
   isCanteenItem: boolean;
 
+  @Column('varchar', { name: 'product_type', nullable: true })
+  productType: 'INGREDIENT' | 'FUEL' | 'FINISHED_GOOD' | 'MERCHANDISE' | null;
+  @Column('boolean', { name: 'lot_tracking_enabled', default: false })
+  lotTrackingEnabled: boolean;
+  @Column('boolean', { name: 'requires_sample', default: false })
+  requiresSample: boolean;
+  @Column('int', { name: 'cook_duration', default: 30 }) cookDuration: number;
+  @Column('int', { name: 'recommended_use_minutes', default: 120 })
+  recommendedUseMinutes: number;
+
   // Relations
   @ManyToOne(() => Category, (category) => category.products)
   @JoinColumn({ name: 'category_id' })

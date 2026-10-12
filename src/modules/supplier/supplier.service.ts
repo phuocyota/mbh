@@ -1,8 +1,4 @@
-import {
-  BadRequestException,
-  Injectable,
-  NotFoundException,
-} from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { EntityManager, Repository, Like, DataSource, In } from 'typeorm';
 import {
@@ -103,7 +99,10 @@ export class SupplierService extends BaseService<Supplier> {
       ? manager.getRepository(Supplier)
       : this.supplierRepository;
 
-    const supplier = await repo.findOne({ where: { id: supplierId } });
+    const supplier = await repo.findOne({
+      where: { id: supplierId },
+      ...(manager ? { lock: { mode: 'pessimistic_write' as const } } : {}),
+    });
     if (!supplier) {
       throw new NotFoundException(`Supplier not found: ${supplierId}`);
     }
@@ -134,6 +133,7 @@ export class SupplierService extends BaseService<Supplier> {
 
     const supplier = await supplierRepo.findOne({
       where: { id: params.supplierId },
+      ...(manager ? { lock: { mode: 'pessimistic_write' as const } } : {}),
     });
     if (!supplier) {
       throw new NotFoundException(`Supplier not found: ${params.supplierId}`);

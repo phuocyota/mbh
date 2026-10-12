@@ -63,3 +63,7 @@ export {
 } from './vietinbank-account.entity';
 export { VietinBankSecret } from './vietinbank-secret.entity';
 export * from './kitchen.entity';
+
+export * from './stock-lot.entity';
+export * from './kitchen-operation.entity';
+export * from './product-recipe.entity';

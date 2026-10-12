@@ -1,4 +1,6 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
+import { Product } from '../../entities/product.entity';
+import { canUseStockProduct } from '../stock/stock-scope';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import { MealItem } from '../../entities/meal-item.entity';
@@ -449,11 +451,31 @@ export class MealItemService extends BaseService<MealItem> {
   }
 
   async createMealItem(dto: CreateMealItemDto, user: JwtPayload) {
+    await this.validateProduct(dto.productId, dto.branchId);
     return this.create(dto, user);
   }
 
   async updateMealItem(id: string, dto: UpdateMealItemDto, user: JwtPayload) {
+    const current = await this.findOne(id);
+    await this.validateProduct(
+      dto.productId || current.productId,
+      dto.branchId || current.branchId,
+    );
     return this.update(id, dto, user);
+  }
+
+  private async validateProduct(productId: string, branchId?: string | null) {
+    const manager = this.mealItemRepository.manager;
+    const product = await manager
+      .getRepository(Product)
+      .findOneBy({ id: productId, isActive: true });
+    if (
+      !product ||
+      (product.productType && product.productType !== 'FINISHED_GOOD')
+    )
+      throw new BadRequestException('FINISHED_GOOD_REQUIRED');
+    if (branchId && !(await canUseStockProduct(manager, product, branchId)))
+      throw new BadRequestException('CROSS_BRANCH_PRODUCT');
   }
 
   async delete(id: string, user: JwtPayload): Promise<MealItem> {

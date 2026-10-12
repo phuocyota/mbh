@@ -1,11 +1,20 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, Repository } from 'typeorm';
+import { EntityManager, In, Repository } from 'typeorm';
 import { Product, ProductPriceHistory } from 'src/entities';
 import { StockItem } from '../../entities/stock-item.entity';
 import { BaseService } from '../../common/sql/base.service';
 import { ERROR_MESSAGES } from '../../common/constant/error-messages.constant';
 import { CategoryService } from '../category/category.service';
+import {
+  stockProductCondition,
+  canUseStockProduct,
+} from '../stock/stock-scope';
 import {
   normalizePagination,
   toPaginationResponse,
@@ -16,6 +25,7 @@ type ProductPriceFilter = {
   maxPrice?: number;
   branchId?: string;
   isCanteenItem?: boolean;
+  productType?: string;
   hasInventory?: boolean;
   isActive?: boolean;
   search?: string;
@@ -62,7 +72,7 @@ export class ProductService extends BaseService<Product> {
     }
 
     if (filter.branchId) {
-      query.andWhere('p.branch_id = :branchId', { branchId: filter.branchId });
+      query.andWhere(stockProductCondition('p'), { branchId: filter.branchId });
     } else {
       query.andWhere('p.branch_id IS NULL');
     }
@@ -97,6 +107,10 @@ export class ProductService extends BaseService<Product> {
       });
     }
 
+    if (filter.productType)
+      query.andWhere('p.product_type=:productType', {
+        productType: filter.productType,
+      });
     this.applyPriceFilter(query, 'p', filter);
 
     query.orderBy('category.sortOrder', 'ASC').addOrderBy('p.name', 'ASC');
@@ -181,9 +195,107 @@ export class ProductService extends BaseService<Product> {
     return product;
   }
 
+  async findOneForBranch(id: string, branchId: string) {
+    const product = await this.findOne(id);
+    if (
+      !(await canUseStockProduct(
+        this.productRepository.manager,
+        product,
+        branchId,
+      ))
+    )
+      throw new ForbiddenException('CROSS_BRANCH_FORBIDDEN');
+    return product;
+  }
+
+  private async lockProductClassification(manager: EntityManager, id: string) {
+    await manager.query(
+      'SELECT pg_advisory_xact_lock(hashtextextended($1,0))',
+      ['stock-product:' + id],
+    );
+  }
+  private async validateKitchenFields(
+    dto: any,
+    product?: Product,
+    manager = this.productRepository.manager,
+  ) {
+    if (
+      dto.productType !== undefined &&
+      dto.productType !== null &&
+      !['INGREDIENT', 'FUEL', 'FINISHED_GOOD', 'MERCHANDISE'].includes(
+        dto.productType,
+      )
+    )
+      throw new BadRequestException('INVALID_PRODUCT_TYPE');
+    for (const key of ['cookDuration', 'recommendedUseMinutes'])
+      if (
+        dto[key] !== undefined &&
+        (!Number.isInteger(dto[key]) || dto[key] <= 0)
+      )
+        throw new BadRequestException('INVALID_DURATION');
+    if (
+      product &&
+      ((dto.productType !== undefined &&
+        dto.productType !== product.productType) ||
+        (dto.baseUnitId !== undefined && dto.baseUnitId !== product.baseUnitId))
+    ) {
+      const [row] = await manager.query(
+        `SELECT EXISTS(SELECT 1 FROM stock_items WHERE product_id=$1 AND quantity<>0)
+          OR EXISTS(SELECT 1 FROM stock_receipt_detail WHERE product_id=$1)
+          OR EXISTS(SELECT 1 FROM stock_movements WHERE product_id=$1)
+          OR EXISTS(SELECT 1 FROM stock_take_items WHERE product_id=$1)
+          OR EXISTS(SELECT 1 FROM order_items WHERE product_id=$1)
+          OR EXISTS(SELECT 1 FROM meal_items WHERE product_id=$1)
+          OR EXISTS(SELECT 1 FROM kitchen_production_batches WHERE product_id=$1)
+          OR EXISTS(SELECT 1 FROM kitchen_operations WHERE payload->>'productId'=$1::text)
+          OR EXISTS(SELECT 1 FROM kitchen_operations WHERE payload->'productIds' @> jsonb_build_array($1::text) OR EXISTS(SELECT 1 FROM jsonb_array_elements(COALESCE(payload->'items','[]'::jsonb)) line WHERE line->>'productId'=$1::text))
+          OR EXISTS(SELECT 1 FROM kitchen_recipe_items WHERE ingredient_product_id=$1)
+          OR EXISTS(SELECT 1 FROM kitchen_recipes WHERE product_id=$1) AS used`,
+        [product.id],
+      );
+      const initialType = product.productType === null && dto.productType;
+      let matchingInitialUnit = false;
+      if (product.baseUnitId === null && dto.baseUnitId) {
+        const [unit] = await manager.query(
+          'SELECT code FROM measurement_units WHERE id=$1 AND is_active=true',
+          [dto.baseUnitId],
+        );
+        matchingInitialUnit =
+          unit?.code?.toLowerCase() === product.unit?.trim().toLowerCase();
+      }
+      if (
+        (row.used || product.lotTrackingEnabled) &&
+        !(
+          (initialType || dto.productType === undefined) &&
+          (dto.baseUnitId === undefined ||
+            dto.baseUnitId === product.baseUnitId ||
+            matchingInitialUnit)
+        )
+      )
+        throw new BadRequestException('PRODUCT_CLASSIFICATION_IN_USE');
+    }
+    if (
+      dto.lotTrackingEnabled !== undefined &&
+      dto.lotTrackingEnabled !== product?.lotTrackingEnabled
+    )
+      throw new BadRequestException('USE_STOCK_LOT_OPENING');
+    if (
+      dto.productType &&
+      ['INGREDIENT', 'FUEL'].includes(dto.productType) &&
+      !product &&
+      !dto.baseUnitId
+    )
+      throw new BadRequestException('PRODUCT_BASE_UNIT_REQUIRED');
+  }
   async createProduct(createProductDto: any) {
     const productDto = this.withoutQuantity(createProductDto);
+    await this.validateKitchenFields(productDto);
     productDto.price = productDto.price ?? 0;
+    if (
+      productDto.isCanteenItem === undefined &&
+      ['INGREDIENT', 'FUEL'].includes(productDto.productType)
+    )
+      productDto.isCanteenItem = false;
 
     return this.productRepository.manager.transaction(async (manager) => {
       const productRepository = manager.getRepository(Product);
@@ -227,6 +339,7 @@ export class ProductService extends BaseService<Product> {
     const productDto = this.withoutQuantity(updateProductDto);
 
     await this.productRepository.manager.transaction(async (manager) => {
+      await this.lockProductClassification(manager, id);
       const productRepository = manager.getRepository(Product);
       const historyRepository = manager.getRepository(ProductPriceHistory);
 
@@ -237,6 +350,7 @@ export class ProductService extends BaseService<Product> {
         );
       }
 
+      await this.validateKitchenFields(productDto, product, manager);
       const oldPrice = Number(product.price);
       const oldCostPrice =
         product.costPrice === null || product.costPrice === undefined
@@ -327,7 +441,10 @@ export class ProductService extends BaseService<Product> {
   }
 
   async delete(id: string, user: { userId: string }): Promise<Product> {
+    void user;
     const product = await this.findOne(id);
+    if (product.productType)
+      throw new BadRequestException('USE_PRODUCT_DEACTIVATION');
     const queryRunner =
       this.productRepository.manager.connection.createQueryRunner();
 
@@ -403,7 +520,32 @@ export class ProductService extends BaseService<Product> {
   }
 
   private withoutQuantity(dto: any) {
-    const productDto = { ...dto };
+    const allowed = [
+      'branchId',
+      'categoryId',
+      'code',
+      'name',
+      'description',
+      'ingredients',
+      'imageUrl',
+      'price',
+      'costPrice',
+      'unit',
+      'baseUnitId',
+      'isActive',
+      'isCanteenItem',
+      'productType',
+      'requiresSample',
+      'cookDuration',
+      'recommendedUseMinutes',
+      'createdBy',
+      'updatedBy',
+    ];
+    const productDto: any = Object.fromEntries(
+      Object.entries(dto).filter(([key]) => allowed.includes(key)),
+    );
+    if (dto.lotTrackingEnabled !== undefined)
+      productDto.lotTrackingEnabled = dto.lotTrackingEnabled;
     delete productDto.quantity;
     return productDto;
   }
