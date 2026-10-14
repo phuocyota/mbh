@@ -24,7 +24,7 @@ import { KitchenOperationsService } from './kitchen-operations.service';
 @ApiBearerAuth()
 @Controller('kitchen')
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles(UserType.ADMIN, UserType.MANAGER, UserType.KITCHEN)
+@Roles(UserType.ADMIN, UserType.MANAGER, UserType.KITCHEN, UserType.CASHIER)
 export class KitchenOperationsController {
   constructor(private operations: KitchenOperationsService) {}
   @Get('dashboard') dashboard(@Req() req: any, @Query() q: any) {

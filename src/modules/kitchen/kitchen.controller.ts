@@ -20,7 +20,12 @@ import { UserType } from '../../common/enum/user-type.enum';
 import { KitchenService } from './kitchen.service';
 
 const MANAGERS = [UserType.ADMIN, UserType.MANAGER] as const;
-const OPERATORS = [UserType.ADMIN, UserType.MANAGER, UserType.KITCHEN] as const;
+const OPERATORS = [
+  UserType.ADMIN,
+  UserType.MANAGER,
+  UserType.KITCHEN,
+  UserType.CASHIER,
+] as const;
 
 @ApiTags('Kitchen')
 @ApiBearerAuth()

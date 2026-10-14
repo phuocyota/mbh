@@ -11,26 +11,26 @@ function serviceWithFeature(enabled = true) {
 }
 
 describe('KitchenService authorization and concurrency', () => {
-  it('uses the JWT branch for kitchen staff', () => {
+  it.each(['KITCHEN', 'CASHIER'])('uses the JWT branch for %s', (userType) => {
     const service = serviceWithFeature();
     expect(
       service.resolveBranch({
         userId: 'u1',
-        userType: 'KITCHEN',
+        userType,
         branchId: 'b1',
       }),
     ).toBe('b1');
   });
 
-  it('rejects a cross-branch kitchen request', () => {
-    const service = serviceWithFeature();
-    expect(() =>
-      service.resolveBranch(
-        { userId: 'u1', userType: 'KITCHEN', branchId: 'b1' },
-        'b2',
-      ),
-    ).toThrow(ForbiddenException);
-  });
+  it.each(['KITCHEN', 'CASHIER'])(
+    'rejects a cross-branch %s request',
+    (userType) => {
+      const service = serviceWithFeature();
+      expect(() =>
+        service.resolveBranch({ userId: 'u1', userType, branchId: 'b1' }, 'b2'),
+      ).toThrow(ForbiddenException);
+    },
+  );
 
   it('requires an explicit branch for an unscoped admin', () => {
     const service = serviceWithFeature();
