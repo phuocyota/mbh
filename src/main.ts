@@ -25,6 +25,7 @@ async function bootstrap() {
         'http://localhost:5173',
         'https://localhost:5173',
         'http://localhost:5171',
+        'http://localhost:5174',
         process.env.KITCHEN_FRONTEND_ORIGIN,
       ].filter((value): value is string => Boolean(value));
       // Allow private network IPs (192.168.x.x, 10.x.x.x, 172.16-31.x.x)
