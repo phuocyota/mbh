@@ -60,7 +60,7 @@ Enable recipe stock only after product base units and active recipes have been r
 
 ## Authentication and roles
 
-- `POST /auth/login/kitchen` accepts `{ email, password, deviceId? }` and returns the normal JWT response plus `employeeId`.
+- `POST /auth/kitchen` accepts `{ email, password, deviceId? }` and returns the normal JWT response plus `employeeId` (HTTP 201). `POST /auth/login/kitchen` remains available as an alias.
 - A kitchen user must be active, have role `KITCHEN`, have a branch, and be linked to an active Employee in the same branch.
 - `KITCHEN` can read configuration and operate tickets/batches. `ADMIN` and `MANAGER` also configure, adjust, assign, confirm stock consumption, and read reports.
 - For `KITCHEN` and `MANAGER`, branch comes only from JWT. `ADMIN` must send `branchId` when its JWT has no branch.

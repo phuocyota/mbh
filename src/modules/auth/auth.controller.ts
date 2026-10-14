@@ -3,6 +3,7 @@ import { ApiTags, ApiOperation, ApiResponse, ApiBody } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
 import { AdminLoginDto } from './dto/admin-login.dto';
 import { CashierLoginDto } from './dto/cashier-login.dto';
+import { KitchenLoginDto } from './dto/kitchen-login.dto';
 import { StudentLoginDto } from './dto/student-login.dto';
 
 @ApiTags('Auth')
@@ -71,8 +72,18 @@ export class AuthController {
   }
 
   @ApiOperation({ summary: 'Kitchen staff login with email/password' })
-  @Post('login/kitchen')
-  async loginKitchen(@Body() dto: CashierLoginDto) {
+  @ApiBody({ type: KitchenLoginDto })
+  @ApiResponse({
+    status: 201,
+    description: 'Kitchen login successful, returns JWT token and employeeId',
+  })
+  @ApiResponse({
+    status: 401,
+    description:
+      'Invalid credentials, non-kitchen role, inactive account, missing branch or active employee link',
+  })
+  @Post(['kitchen', 'login/kitchen'])
+  async loginKitchen(@Body() dto: KitchenLoginDto) {
     return this.authService.loginKitchen(dto);
   }
 
