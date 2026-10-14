@@ -5,7 +5,6 @@ import {
   ForbiddenException,
   Injectable,
   NotFoundException,
-  ServiceUnavailableException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { DataSource, EntityManager, In } from 'typeorm';
@@ -80,8 +79,6 @@ export class KitchenOperationsService {
     private movements: StockMovementService = new StockMovementService(),
   ) {}
   branch(actor: any, requested?: string) {
-    if (String(this.config.get('KITCHEN_MODULE_ENABLED')) !== 'true')
-      throw new ServiceUnavailableException('KITCHEN_MODULE_DISABLED');
     return resolveStockBranch(actor, requested);
   }
   manager(actor: any) {

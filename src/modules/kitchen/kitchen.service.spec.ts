@@ -1,18 +1,29 @@
 import { ConflictException, ForbiddenException } from '@nestjs/common';
 import { KitchenService } from './kitchen.service';
 
-function serviceWithFeature(enabled = true) {
+function createService() {
   const service = Object.create(KitchenService.prototype);
   service.config = {
-    get: (key: string) =>
-      key === 'KITCHEN_MODULE_ENABLED' ? String(enabled) : undefined,
+    get: jest.fn().mockReturnValue(undefined),
   };
   return service as KitchenService & Record<string, any>;
 }
 
 describe('KitchenService authorization and concurrency', () => {
+  it('lists active units without requiring a module feature flag', async () => {
+    const service = createService();
+    const units = [{ id: 'unit-1', code: 'kg', isActive: true }];
+    service.units = { find: jest.fn().mockResolvedValue(units) };
+    await expect(service.listUnits()).resolves.toEqual(units);
+    expect(service.units.find).toHaveBeenCalledWith({
+      where: { isActive: true },
+      order: { dimension: 'ASC', factorToBase: 'ASC' },
+    });
+    expect(service.config.get).not.toHaveBeenCalled();
+  });
+
   it.each(['KITCHEN', 'CASHIER'])('uses the JWT branch for %s', (userType) => {
-    const service = serviceWithFeature();
+    const service = createService();
     expect(
       service.resolveBranch({
         userId: 'u1',
@@ -25,7 +36,7 @@ describe('KitchenService authorization and concurrency', () => {
   it.each(['KITCHEN', 'CASHIER'])(
     'rejects a cross-branch %s request',
     (userType) => {
-      const service = serviceWithFeature();
+      const service = createService();
       expect(() =>
         service.resolveBranch({ userId: 'u1', userType, branchId: 'b1' }, 'b2'),
       ).toThrow(ForbiddenException);
@@ -33,14 +44,14 @@ describe('KitchenService authorization and concurrency', () => {
   );
 
   it('requires an explicit branch for an unscoped admin', () => {
-    const service = serviceWithFeature();
+    const service = createService();
     expect(() =>
       service.resolveBranch({ userId: 'u1', userType: 'ADMIN' }),
     ).toThrow('branchId is required for ADMIN');
   });
 
   it('returns a conflict when optimistic ticket update loses the race', async () => {
-    const service = serviceWithFeature();
+    const service = createService();
     service.getTicket = jest.fn().mockResolvedValue({
       id: 't1',
       orderId: 'o1',
@@ -71,11 +82,11 @@ describe('KitchenService authorization and concurrency', () => {
     ).rejects.toBeInstanceOf(ConflictException);
   });
 
-  it('does not query tickets when the module is disabled', async () => {
-    const service = serviceWithFeature(false);
-    const exist = jest.fn();
+  it('queries tickets without a module feature flag', async () => {
+    const service = createService();
+    const exist = jest.fn().mockResolvedValue(true);
     service.tickets = { exist };
-    await expect(service.hasTicket('o1')).resolves.toBe(false);
-    expect(exist).not.toHaveBeenCalled();
+    await expect(service.hasTicket('o1')).resolves.toBe(true);
+    expect(exist).toHaveBeenCalledWith({ where: { orderId: 'o1' } });
   });
 });

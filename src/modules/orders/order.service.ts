@@ -219,10 +219,7 @@ export class OrderService {
         );
       }
 
-      if (
-        updateData.paymentStatus === ORDER_PAYMENT_STATUS.PAID &&
-        this.kitchenService.isEnabled()
-      ) {
+      if (updateData.paymentStatus === ORDER_PAYMENT_STATUS.PAID) {
         await this.kitchenService.createTicketInTransaction(manager, order.id);
       }
     });

@@ -46,10 +46,9 @@ Batch `mealItemId` is nullable for manual source. `source` defaults BOARDING for
 
 The previous backend ticket/recipe contracts below remain applicable.
 
-The kitchen backend is disabled by default. Enable it with:
+The kitchen backend is always enabled. Configure the remaining options with:
 
 ```env
-KITCHEN_MODULE_ENABLED=true
 KITCHEN_RECIPE_STOCK_ENABLED=false
 KITCHEN_ACTIVATED_AT=2026-09-30T00:00:00+07:00
 KITCHEN_FRONTEND_ORIGIN=https://fe-kitchen.example.vn
@@ -107,7 +106,6 @@ Ticket events contain the ticket, order snapshot, item snapshots, station, times
 
 ## Stable error codes/messages
 
-- `KITCHEN_MODULE_DISABLED`
 - `KITCHEN_BRANCH_REQUIRED`
 - `CROSS_BRANCH_FORBIDDEN`
 - `KITCHEN_USER_EMPLOYEE_BRANCH_MISMATCH`

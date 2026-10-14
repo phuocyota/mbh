@@ -10,7 +10,6 @@ import {
   ForbiddenException,
   Injectable,
   NotFoundException,
-  ServiceUnavailableException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -107,21 +106,7 @@ export class KitchenService {
     private operations: KitchenOperationsService,
   ) {}
 
-  isEnabled() {
-    return (
-      String(
-        this.config.get('KITCHEN_MODULE_ENABLED') ?? 'false',
-      ).toLowerCase() === 'true'
-    );
-  }
-
-  private ensureEnabled() {
-    if (!this.isEnabled())
-      throw new ServiceUnavailableException('KITCHEN_MODULE_DISABLED');
-  }
-
   resolveBranch(actor: Actor, requested?: string) {
-    this.ensureEnabled();
     if (actor.userType === USER_ROLE.ADMIN) {
       const branchId = requested || actor.branchId;
       if (!branchId)
@@ -160,7 +145,6 @@ export class KitchenService {
   }
 
   listUnits() {
-    this.ensureEnabled();
     return this.units.find({
       where: { isActive: true },
       order: { dimension: 'ASC', factorToBase: 'ASC' },
@@ -444,7 +428,6 @@ export class KitchenService {
   }
 
   async createTicketInTransaction(manager: EntityManager, orderId: string) {
-    if (!this.isEnabled()) return null;
     const existing = await manager.findOne(KitchenOrderTicket, {
       where: { orderId },
     });
@@ -490,7 +473,6 @@ export class KitchenService {
   }
 
   async createTicketForPaidOrder(orderId: string, emitExisting = false) {
-    if (!this.isEnabled()) return null;
     const existing = await this.tickets.findOne({
       where: { orderId },
       relations: ['items', 'order', 'station'],
@@ -522,7 +504,6 @@ export class KitchenService {
   }
 
   async reconcilePaidTickets() {
-    if (!this.isEnabled()) return { created: 0 };
     const activation =
       this.config.get('KITCHEN_ACTIVATED_AT') || this.activatedAt;
     const rows = await this.dataSource.query(
@@ -644,7 +625,6 @@ export class KitchenService {
   }
 
   async markDelivered(orderId: string, changedBy?: string) {
-    if (!this.isEnabled()) return;
     const ticket = await this.tickets.findOne({ where: { orderId } });
     if (!ticket || ticket.status === KITCHEN_TICKET_STATUS.DELIVERED) return;
     ticket.status = KITCHEN_TICKET_STATUS.DELIVERED;
@@ -660,9 +640,7 @@ export class KitchenService {
   }
 
   hasTicket(orderId: string) {
-    return this.isEnabled()
-      ? this.tickets.exist({ where: { orderId } })
-      : Promise.resolve(false);
+    return this.tickets.exist({ where: { orderId } });
   }
 
   async orderForLegacyStockExport(order: any) {
@@ -670,8 +648,7 @@ export class KitchenService {
       String(
         this.config.get('KITCHEN_RECIPE_STOCK_ENABLED') ?? 'false',
       ).toLowerCase() === 'true';
-    if (!this.isEnabled() || !recipeStockEnabled || !order?.branchId)
-      return order;
+    if (!recipeStockEnabled || !order?.branchId) return order;
     const productIds = (order.items || []).map((item: any) => item.productId);
     if (!productIds.length) return order;
     const recipeRows = await this.recipes.find({
@@ -821,7 +798,6 @@ export class KitchenService {
   }
 
   async lockDuePlans() {
-    if (!this.isEnabled()) return;
     const now = new Date();
     const date = new Intl.DateTimeFormat('en-CA', {
       timeZone: 'Asia/Bangkok',

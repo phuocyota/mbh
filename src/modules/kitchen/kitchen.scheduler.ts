@@ -8,7 +8,6 @@ export class KitchenScheduler implements OnModuleInit, OnModuleDestroy {
   constructor(private readonly kitchen: KitchenService) {}
 
   onModuleInit() {
-    if (!this.kitchen.isEnabled()) return;
     void this.run();
     this.timer = setInterval(() => void this.run(), 60_000);
     this.timer.unref();
