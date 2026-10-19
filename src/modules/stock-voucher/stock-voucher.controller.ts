@@ -19,6 +19,7 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import { CreateStockVoucherDto } from './dto/create-stock-voucher.dto';
+import { CreateMaterialImportDto } from './dto/create-material-import.dto';
 import { StockVoucherService } from './stock-voucher.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { STOCK_VOUCHER_TYPE } from './stock-voucher.constants';
@@ -29,6 +30,23 @@ import { STOCK_VOUCHER_TYPE } from './stock-voucher.constants';
 @UseGuards(JwtAuthGuard)
 export class StockVoucherController {
   constructor(private stockVoucherService: StockVoucherService) {}
+
+  @Post('material-imports')
+  @UseGuards(RolesGuard)
+  @Roles(UserType.ADMIN, UserType.MANAGER)
+  @ApiOperation({
+    summary:
+      'Nhập nguyên liệu/nhiên liệu theo lô, ghi nguồn NCC và cập nhật tồn kho',
+  })
+  createMaterialImport(@Req() req: any, @Body() dto: CreateMaterialImportDto) {
+    return this.stockVoucherService.createMaterialImport(
+      {
+        ...dto,
+        branchId: resolveStockBranch(req.user, dto.branchId),
+      },
+      req.user.userId,
+    );
+  }
 
   @Get()
   @UseGuards(JwtAuthGuard)

@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { StockTraceController } from './stock-trace.controller';
 import { StockTraceService } from './stock-trace.service';
+import { ProductionTraceController } from '../production-trace/production-trace.controller';
 import {
   StockLot,
   StockMovement,
@@ -11,6 +12,7 @@ import {
   Product,
   Supplier,
   Branch,
+  Stock,
   ProductRecipe,
   ProductRecipeItem,
   KitchenProductionBatch,
@@ -28,13 +30,14 @@ import {
       Product,
       Supplier,
       Branch,
+      Stock,
       ProductRecipe,
       ProductRecipeItem,
       KitchenProductionBatch,
       KitchenOperation,
     ]),
   ],
-  controllers: [StockTraceController],
+  controllers: [StockTraceController, ProductionTraceController],
   providers: [StockTraceService],
   exports: [StockTraceService],
 })

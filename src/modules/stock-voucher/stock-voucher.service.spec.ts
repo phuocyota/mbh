@@ -235,6 +235,81 @@ describe('StockVoucherService', () => {
   });
 
   describe('createImportVoucher', () => {
+    it('imports material lots with supplier debt, returns lot identity and replays without increasing stock twice', async () => {
+      mockRepositories.Product.findOneBy.mockResolvedValueOnce({
+        id: 'product-id-1',
+        productType: 'INGREDIENT',
+        lotTrackingEnabled: true,
+        baseUnitId: 'unit',
+        branchId: 'branch-id-1',
+      });
+      mockRepositories.StockFundReceiptReason.findOne.mockResolvedValueOnce({
+        code: 'NHNCC',
+        isDebt: true,
+        accountingFormula: '{1561:-,331:+}',
+      });
+      mockRepositories.StockReceiptDetail.find.mockResolvedValueOnce([
+        {
+          id: 'detail-id-1',
+          productId: 'product-id-1',
+          quantity: 5,
+          inputDetails: { lotCode: 'LOT-1' },
+        },
+      ]);
+      mockRepositories.StockLot = {
+        findOneByOrFail: jest.fn(async () => ({
+          id: 'lot-id-1',
+          lotCode: 'LOT-1',
+          stockId: 'stock-id-1',
+          productId: 'product-id-1',
+          quantity: 5,
+          manufacturedAt: null,
+          expiresAt: '2099-01-01',
+        })),
+      };
+      const dto = {
+        branchId: 'branch-id-1',
+        supplierId: 'supplier-id-1',
+        requestId: '4cb10234-a79e-4bbb-b1dc-fd2abce7a7ba',
+        paymentStatus: 'DEBT',
+        items: [
+          {
+            productId: 'product-id-1',
+            lotCode: 'LOT-1',
+            quantity: 5,
+            unitPrice: 100,
+            expiresAt: '2099-01-01',
+          },
+        ],
+      };
+      const first = await service.createMaterialImport(dto, 'staff');
+      expect(first[0]).toMatchObject({
+        lot: { id: 'lot-id-1', status: 'IN STOCK' },
+      });
+      expect(mockMovements.change).toHaveBeenCalledWith(
+        mockManager,
+        'stock-id-1',
+        'product-id-1',
+        5,
+        'import-id',
+        expect.objectContaining({ lotCode: 'LOT-1', actorId: 'staff' }),
+      );
+      expect(mockSupplierService.recordPurchaseDebt).toHaveBeenCalledWith(
+        expect.objectContaining({ amount: 500 }),
+        mockManager,
+      );
+      const stored = mockRepositories.StockRequest.save.mock.calls[0][0];
+      mockRepositories.StockRequest.findOneBy.mockResolvedValueOnce(stored);
+      expect(await service.createMaterialImport(dto, 'staff')).toEqual(first);
+      expect(mockMovements.change).toHaveBeenCalledTimes(1);
+      mockRepositories.StockRequest.findOneBy.mockResolvedValueOnce(stored);
+      await expect(
+        service.createMaterialImport(
+          { ...dto, items: [{ ...dto.items[0], quantity: 6 }] },
+          'staff',
+        ),
+      ).rejects.toThrow('IDEMPOTENCY_PAYLOAD_CONFLICT');
+    });
     it('should create a paid supplier import without request fundId or reasonCode', async () => {
       mockRepositories.StockFundReceiptReason.findOne.mockResolvedValueOnce({
         code: 'NHNCC',

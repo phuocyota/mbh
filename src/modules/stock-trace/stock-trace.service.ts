@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, In, Repository } from 'typeorm';
+import { DataSource, Repository } from 'typeorm';
 import {
   StockLot,
   StockMovement,
@@ -10,16 +10,13 @@ import {
   Product,
   Supplier,
   Branch,
+  Stock,
   ProductRecipe,
   ProductRecipeItem,
   KitchenProductionBatch,
   KitchenOperation,
-  MeasurementUnit,
 } from '../../entities';
-import {
-  CreateProductRecipeDto,
-  UpdateProductRecipeDto,
-} from './dto/product-recipe.dto';
+import { CreateProductRecipeDto } from './dto/product-recipe.dto';
 import {
   LotMovementQueryDto,
   ProductLotsQueryDto,
@@ -28,6 +25,7 @@ import {
   ExpiringLotsQueryDto,
   ConsumedLotsQueryDto,
 } from './dto/trace-query.dto';
+import { FullTraceQueryDto } from './dto/full-trace-query.dto';
 import { normalizePagination, toPaginationResponse } from '../../common/dto/pagination.dto';
 import { localDate } from '../stock/stock-movement.service';
 
@@ -103,6 +101,8 @@ export class StockTraceService {
     private supplierRepository: Repository<Supplier>,
     @InjectRepository(Branch)
     private branchRepository: Repository<Branch>,
+    @InjectRepository(Stock)
+    private stockRepository: Repository<Stock>,
     @InjectRepository(ProductRecipe)
     private productRecipeRepository: Repository<ProductRecipe>,
     @InjectRepository(ProductRecipeItem)
@@ -799,5 +799,352 @@ export class StockTraceService {
       .getManyAndCount();
 
     return toPaginationResponse(rows, total, 1, 100);
+  }
+
+  // ============================================
+  // UNIFIED FULL-TRACE (one-shot endpoint)
+  // ============================================
+
+  async getFullTrace(query: FullTraceQueryDto) {
+    const lot = await this.resolveLot(query);
+    if (!lot) {
+      throw new NotFoundException('Không tìm thấy lô với tham số đã cung cấp');
+    }
+
+    const [product, stock, movements] = await Promise.all([
+      this.productRepository.findOne({ where: { id: lot.productId } }),
+      this.stockRepository.findOne({ where: { id: lot.stockId } }),
+      this.stockMovementRepository.find({
+        where: { lotId: lot.id },
+        order: { createdAt: 'ASC' },
+      }),
+    ]);
+
+    const branch = stock?.branchId
+      ? await this.branchRepository.findOne({ where: { id: stock.branchId } })
+      : null;
+
+    const origin = await this.resolveOrigin(lot, movements);
+    const consumption =
+      query.includeConsumption !== false
+        ? await this.resolveConsumption(lot, movements)
+        : null;
+    const recipe =
+      query.includeRecipe !== false && product?.productType === 'FINISHED_GOOD'
+        ? await this.getProductRecipe(lot.productId)
+        : null;
+
+    const status = this.computeLotStatus(lot);
+    const quantities = this.computeQuantities(movements);
+    const movementsEnriched =
+      query.includeMovements !== false
+        ? await this.enrichMovements(movements)
+        : [];
+    const timeline =
+      query.includeTimeline !== false
+        ? this.buildTimeline(lot, origin, movementsEnriched, consumption)
+        : [];
+
+    return {
+      generatedAt: new Date().toISOString(),
+      lot: {
+        id: lot.id,
+        code: lot.lotCode,
+        quantity: Number(lot.quantity),
+        manufacturedAt: lot.manufacturedAt,
+        expiresAt: lot.expiresAt,
+        status,
+        createdAt: lot.createdAt,
+      },
+      product: product
+        ? {
+            id: product.id,
+            name: product.name,
+            code: (product as any).code,
+            productType: product.productType,
+            unit: (product as any).unit,
+            lotTrackingEnabled: (product as any).lotTrackingEnabled,
+          }
+        : null,
+      location: stock
+        ? {
+            stockId: stock.id,
+            stockName: stock.name,
+            branchId: stock.branchId,
+            branchName: branch?.name ?? null,
+          }
+        : null,
+      quantities,
+      origin,
+      recipe: recipe
+        ? {
+            id: recipe.id,
+            version: recipe.version,
+            status: recipe.status,
+            yieldQuantity: Number(recipe.yieldQuantity),
+            standardCost: recipe.standardCost
+              ? Number(recipe.standardCost)
+              : null,
+            items: (recipe.items ?? []).map((it) => ({
+              ingredientProductId: it.ingredientProductId,
+              ingredientName:
+                (it as any).ingredientProduct?.name ?? 'Unknown',
+              quantity: Number(it.quantity),
+              unitId: it.unitId,
+              wasteFactor: Number(it.wasteFactor ?? 0),
+              requiredLotId: (it as any).requiredLotId ?? null,
+            })),
+          }
+        : null,
+      consumption,
+      movements: movementsEnriched,
+      timeline,
+    };
+  }
+
+  private async resolveLot(query: FullTraceQueryDto): Promise<StockLot | null> {
+    if (query.lotId) {
+      return this.stockLotRepository.findOne({ where: { id: query.lotId } });
+    }
+    if (!query.lotCode) return null;
+
+    const where: any = { lotCode: query.lotCode };
+    if (query.stockId) where.stockId = query.stockId;
+    if (query.productId) where.productId = query.productId;
+
+    if (where.stockId) {
+      return this.stockLotRepository.findOne({ where });
+    }
+
+    // Không có stockId: tìm theo branchId nếu có
+    const qb = this.stockLotRepository
+      .createQueryBuilder('sl')
+      .where('sl.lotCode = :lotCode', { lotCode: query.lotCode });
+    if (query.productId)
+      qb.andWhere('sl.productId = :productId', { productId: query.productId });
+    if (query.branchId) {
+      qb.innerJoin(
+        'stocks',
+        'stock',
+        'stock.id = sl.stockId AND stock.branch_id = :branchId',
+        { branchId: query.branchId },
+      );
+    }
+    return qb.orderBy('sl.createdAt', 'DESC').getOne();
+  }
+
+  private computeLotStatus(lot: StockLot): string {
+    if (Number(lot.quantity) <= 0) return 'DEPLETED';
+    if (lot.expiresAt) {
+      const today = localDate();
+      if (lot.expiresAt <= today) return 'EXPIRED';
+      const soon = new Date();
+      soon.setDate(soon.getDate() + 7);
+      const soonStr = soon.toISOString().slice(0, 10);
+      if (lot.expiresAt <= soonStr) return 'EXPIRING_SOON';
+    }
+    return 'AVAILABLE';
+  }
+
+  private computeQuantities(movements: StockMovement[]) {
+    let inbound = 0;
+    let outbound = 0;
+    for (const m of movements) {
+      const q = Number(m.quantity);
+      if (q >= 0) inbound += q;
+      else outbound += Math.abs(q);
+    }
+    return {
+      inbound,
+      outbound,
+      balance: inbound - outbound,
+      movementCount: movements.length,
+    };
+  }
+
+  private async resolveOrigin(lot: StockLot, movements: StockMovement[]) {
+    const firstInbound = movements.find((m) => Number(m.quantity) > 0);
+    if (!firstInbound) {
+      return {
+        type: 'UNKNOWN',
+        lotCode: lot.lotCode,
+        reason: 'Lô chưa có giao dịch nhập',
+      };
+    }
+
+    // Thử tìm trong receipt import (supplier/other)
+    const importReceipt = await this.stockReceiptImportRepository.findOne({
+      where: { id: firstInbound.referenceId },
+    });
+    if (importReceipt) {
+      let supplier: Supplier | null = null;
+      if (importReceipt.fromType === 'SUPPLIER' && importReceipt.fromId) {
+        supplier = await this.supplierRepository.findOne({
+          where: { id: importReceipt.fromId },
+        });
+      }
+      return {
+        type: importReceipt.fromType || 'IMPORT',
+        receiptId: importReceipt.id,
+        receiptCode: importReceipt.code,
+        receivedAt: importReceipt.createdAt?.toISOString() ?? null,
+        quantity: Number(firstInbound.quantity),
+        supplier: supplier
+          ? {
+              id: supplier.id,
+              code: supplier.code,
+              name: supplier.name,
+              phone: supplier.phone,
+              address: supplier.address,
+              taxCode: supplier.taxCode,
+            }
+          : null,
+        note: importReceipt.note ?? null,
+      };
+    }
+
+    // Thử tìm trong production batch (sản xuất nội bộ)
+    const batch = await this.kitchenBatchRepository.findOne({
+      where: { id: firstInbound.referenceId },
+    });
+    if (batch) {
+      return {
+        type: 'PRODUCTION',
+        batchId: batch.id,
+        producedAt: batch.createdAt?.toISOString() ?? null,
+        quantity: Number(firstInbound.quantity),
+      };
+    }
+
+    return {
+      type: 'UNKNOWN',
+      referenceId: firstInbound.referenceId,
+      reason: 'Không map được reference về chứng từ gốc',
+      quantity: Number(firstInbound.quantity),
+    };
+  }
+
+  private async resolveConsumption(
+    _lot: StockLot,
+    movements: StockMovement[],
+  ) {
+    const outbound = movements.filter((m) => Number(m.quantity) < 0);
+    if (!outbound.length) return { consumedBy: [] };
+
+    const batchIds = Array.from(new Set(outbound.map((m) => m.referenceId)));
+    const batches = batchIds.length
+      ? await this.kitchenBatchRepository
+          .createQueryBuilder('b')
+          .where('b.id IN (:...ids)', { ids: batchIds })
+          .getMany()
+      : [];
+    const batchMap = new Map(batches.map((b) => [b.id, b]));
+
+    // Lấy tên product thành phẩm từ batch
+    const prodIds = Array.from(
+      new Set(batches.map((b: any) => b.productId).filter(Boolean)),
+    );
+    const prods = prodIds.length
+      ? await this.productRepository
+          .createQueryBuilder('p')
+          .where('p.id IN (:...ids)', { ids: prodIds })
+          .getMany()
+      : [];
+    const prodMap = new Map(prods.map((p) => [p.id, p]));
+
+    return {
+      consumedBy: outbound.map((m) => {
+        const batch = batchMap.get(m.referenceId) as any;
+        const finished = batch ? prodMap.get(batch.productId) : null;
+        return {
+          movementId: m.id,
+          referenceId: m.referenceId,
+          referenceType: batch ? 'PRODUCTION_BATCH' : 'OTHER',
+          consumedQuantity: Math.abs(Number(m.quantity)),
+          consumedAt: m.createdAt?.toISOString() ?? null,
+          finishedGood: finished
+            ? { id: finished.id, name: finished.name }
+            : null,
+        };
+      }),
+    };
+  }
+
+  private async enrichMovements(movements: StockMovement[]) {
+    if (!movements.length) return [];
+    const stockIds = Array.from(new Set(movements.map((m) => m.stockId)));
+    const stocks = await this.stockRepository
+      .createQueryBuilder('s')
+      .where('s.id IN (:...ids)', { ids: stockIds })
+      .getMany();
+    const stockMap = new Map<string, Stock>(stocks.map((s) => [s.id, s]));
+
+    let cumulative = 0;
+    return movements.map((m) => {
+      const q = Number(m.quantity);
+      cumulative += q;
+      const stock = stockMap.get(m.stockId);
+      return {
+        id: m.id,
+        quantity: q,
+        direction: q >= 0 ? 'IN' : 'OUT',
+        cumulativeQuantity: cumulative,
+        referenceId: m.referenceId,
+        stockId: m.stockId,
+        stockName: stock?.name ?? null,
+        branchId: stock?.branchId ?? null,
+        at: m.createdAt?.toISOString() ?? null,
+      };
+    });
+  }
+
+  private buildTimeline(
+    lot: StockLot,
+    origin: any,
+    movements: any[],
+    consumption: any,
+  ) {
+    const events: { at: string | null; type: string; detail: any }[] = [];
+
+    if (origin?.receivedAt || origin?.producedAt) {
+      events.push({
+        at: origin.receivedAt ?? origin.producedAt ?? null,
+        type: origin.type === 'PRODUCTION' ? 'PRODUCED' : 'RECEIVED',
+        detail: origin,
+      });
+    }
+
+    const consumedMovementIds = new Set<string>(
+      (consumption?.consumedBy ?? [])
+        .filter((c: any) => c.finishedGood)
+        .map((c: any) => c.movementId),
+    );
+
+    for (const m of movements) {
+      events.push({
+        at: m.at,
+        type:
+          m.direction === 'IN'
+            ? 'INBOUND'
+            : consumedMovementIds.has(m.id)
+              ? 'CONSUMED_FOR_PRODUCTION'
+              : 'OUTBOUND',
+        detail: m,
+      });
+    }
+
+    if (lot.expiresAt) {
+      events.push({
+        at: `${lot.expiresAt}T00:00:00.000Z`,
+        type: 'EXPIRY_DATE',
+        detail: { expiresAt: lot.expiresAt },
+      });
+    }
+
+    return events.sort((a, b) => {
+      if (!a.at) return 1;
+      if (!b.at) return -1;
+      return a.at.localeCompare(b.at);
+    });
   }
 }

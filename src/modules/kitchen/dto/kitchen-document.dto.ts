@@ -2,6 +2,7 @@ import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import {
   IsArray,
+  ArrayMaxSize,
   IsIn,
   IsNumber,
   IsOptional,
@@ -78,7 +79,27 @@ export class KitchenDocumentDto {
   @ApiPropertyOptional() @IsOptional() @IsString() note?: string;
 }
 
+export class BatchInputLotDto {
+  @ApiPropertyOptional() @IsUUID() lotId: string;
+  /** Quantity in the ingredient product's base unit. */
+  @ApiPropertyOptional()
+  @IsNumber({ maxDecimalPlaces: 4 })
+  @Min(0.0001)
+  quantity: number;
+}
+
 export class KitchenBatchUpdateDto {
+  @ApiPropertyOptional({
+    type: [BatchInputLotDto],
+    description:
+      'Actual ingredient/fuel lots consumed at start; quantities in base units',
+  })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(500)
+  @ValidateNested({ each: true })
+  @Type(() => BatchInputLotDto)
+  inputLots?: BatchInputLotDto[];
   @ApiPropertyOptional() @IsNumber() expectedVersion: number;
   @ApiPropertyOptional() @IsOptional() @IsNumber() actualQuantity?: number;
   @ApiPropertyOptional() @IsOptional() @IsString() estimatedDoneAt?: string;

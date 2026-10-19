@@ -1,0 +1,94 @@
+# Lô nhập, mẻ chế biến và QR từng thành phẩm
+
+## Quy ước
+
+- Mỗi nguyên liệu/nhiên liệu cần `productType=INGREDIENT|FUEL`, `baseUnitId` và `lotTrackingEnabled=true`. Dùng luồng `POST /stock-lots/opening` hiện có nếu có tồn đầu; không bật theo dõi lô trực tiếp khi còn tồn chưa phân lô.
+- Phiếu nhập hiện có nhận `lotCode`, `manufacturedAt`, `expiresAt` trên từng dòng sản phẩm. Một mã lô trong cùng kho/sản phẩm phải giữ nguyên ngày sản xuất/hạn dùng. Nguyên liệu bắt buộc có hạn dùng, nhiên liệu có thể không có.
+- Thành phẩm: `productType=FINISHED_GOOD`. Mỗi đơn vị/phần có một UUID và QR riêng, cùng liên kết về mẻ chế biến. Số lượng thực tế là số nguyên 0–10000; số lượng 0 không sinh tem.
+- Không tự suy ra nguồn gốc từ công thức: chỉ lô thực dùng đã được ghi nhận bằng stock movement mới được trả về làm đầu vào thực tế.
+
+## Nhập nguyên liệu/nhiên liệu theo lô
+
+`POST /stock-vouchers/material-imports` — Bearer token, ADMIN/MANAGER. Chi nhánh mặc định lấy JWT; người dùng không phải ADMIN không thể chọn chi nhánh khác.
+
+```json
+{
+  "requestId": "37e62acf-18fd-4f2c-ab4c-f1d68bc504f9",
+  "supplierId": "07b4b0cf-8964-4cd6-81cf-7f4aa693ba9e",
+  "paymentStatus": "DEBT",
+  "note": "Nhập nguyên liệu ca sáng",
+  "items": [
+    {
+      "productId": "c82b57c4-4d9e-4c8a-85eb-fef828bd0529",
+      "lotCode": "NL-20261019-01",
+      "quantity": 10,
+      "unitPrice": 25000,
+      "manufacturedAt": "2026-10-19",
+      "expiresAt": "2026-10-25"
+    }
+  ]
+}
+```
+
+- `requestId` bắt buộc; gửi lại cùng ID và nội dung trả kết quả cũ, không cộng tồn lần nữa. Cùng ID nhưng đổi nội dung trả `IDEMPOTENCY_PAYLOAD_CONFLICT`.
+- `supplierId`, `paymentStatus` (PAID/UNPAID/DEBT), `productId`, `lotCode`, `quantity > 0` và `unitPrice >= 0` bắt buộc. PAID tạo thanh toán theo cấu hình kế toán hiện có; UNPAID/DEBT ghi công nợ NCC.
+- Chỉ nhận INGREDIENT/FUEL có `baseUnitId` và `lotTrackingEnabled=true`. Không tự bật theo dõi lô trên sản phẩm đã có tồn chưa phân lô.
+- `unitId` tùy chọn; nếu có thì quantity/unitPrice theo đơn vị nhập, backend quy đổi về đơn vị cơ sở. Ngày theo YYYY-MM-DD; nguyên liệu bắt buộc có hạn dùng; không nhận lô đã hết hạn.
+- Tối đa 500 dòng; được nhập cùng sản phẩm ở các mã lô khác nhau, không lặp cùng productId + lotCode trong một yêu cầu.
+- Response theo cấu trúc danh sách chi tiết phiếu nhập hiện có, mỗi dòng bổ sung `lot` gồm `id`, `lotCode`, `stockId`, `productId`, `manufacturedAt`, `expiresAt`, `quantity`, `status`. Dùng `lot.id` làm `inputLots[].lotId` khi bắt đầu chế biến. `lot.quantity` là tổng tồn hiện tại của lô theo đơn vị cơ sở; lượng nhập của phiếu nằm ở `detail.quantity`.
+- Tạo phiếu, cộng tồn/lô, movement và thanh toán/công nợ trong cùng transaction. API này không cần migration mới.
+
+## Bắt đầu mẻ
+
+`POST /kitchen/batches/:id/start`
+
+```json
+{
+  "expectedVersion": 1,
+  "inputLots": [
+    { "lotId": "UUID_LO_NGUYEN_LIEU", "quantity": 2500 },
+    { "lotId": "UUID_LO_NHIEN_LIEU", "quantity": 0.5 }
+  ]
+}
+```
+
+Số lượng theo đơn vị cơ sở của sản phẩm (vd g, ml). Bắt buộc đầu vào đối với FINISHED_GOOD; tối đa 500 lô. Backend kiểm tra kho thuộc chi nhánh, loại sản phẩm, hạn dùng và đủ tồn; khóa sản phẩm và trừ tồn theo lô trong cùng transaction với chuyển mẻ sang PREPARING. `StockMovement.referenceId` là batch ID. Version và trạng thái ngăn gửi lại bị trừ kho lần nữa.
+
+Không kết hợp xuất tiêu hao theo session và theo mẻ cho cùng chi nhánh/ngày/bữa/trạm. Backend chặn cả hai chiều bằng `SCOPE_ALREADY_CONSUMED_BY_SESSION` hoặc `SCOPE_ALREADY_CONSUMED_BY_BATCH` để tránh trừ kho hai lần. Session ở scope khác vẫn dùng được.
+
+## Sẵn sàng và hoàn tất
+
+Giữ API `/kitchen/batches/:id/ready` và `/complete` hiện có. Hạn dùng chốt ở READY: `readyAt + recommendedUseMinutes`. Khi complete, gửi `actualQuantity` nguyên và `expectedVersion`; yêu cầu lưu mẫu hiện có vẫn áp dụng. Backend tự tạo các bản ghi `finished_units` trong cùng transaction. Chặn hoàn tất nếu đã hết hạn/thiếu hạn dùng; chặn sửa số lượng sau khi hoàn tất. Không gia hạn lúc in lại.
+
+Mẻ cũ không có liên kết lô không được tự gán nguồn gốc: API trả `traceabilityComplete=false`. Không tự sinh lại tem cho các mẻ đã hoàn tất trước migration.
+
+## API truy xuất và in tem
+
+Tất cả API dưới đây yêu cầu Bearer token, role ADMIN/MANAGER/KITCHEN/CASHIER và kiểm tra chi nhánh từ JWT. ADMIN có thể xem chi nhánh của bản ghi.
+
+- `GET /production-trace/lots/:lotId`: trạng thái và nguồn gốc lô nhập từ API tổng hợp hiện có.
+- `GET /production-trace/batches/:batchId`: trạng thái, thời gian chế biến, hạn dùng, từng lô thực dùng/số lượng và nguồn nhập/NCC.
+- `GET /production-trace/batches/:batchId/labels?page=1&size=100`: tem từng đơn vị, tối đa 100/trang; có `qrSvg`, `qrPayload`, `unitId`, `serial`, tên món, mẻ, thời điểm hoàn tất và hạn dùng. In lại trả cùng định danh.
+- `GET /production-trace/units/:unitId`: quét đơn vị thành phẩm → mẻ → các lô thực dùng → nguồn nhập/NCC.
+
+Trạng thái truy xuất trả đúng chuỗi `IN STOCK`, `MAKE`, `READY`, `EXPIRED`:
+
+| Đối tượng | Điều kiện | Trạng thái |
+| --- | --- | --- |
+| Lô nhập | Chưa hết hạn | IN STOCK |
+| Mẻ | WAITING | IN STOCK |
+| Mẻ | PREPARING | MAKE |
+| Mẻ/thành phẩm | READY hoặc COMPLETED | READY |
+| Lô/mẻ/thành phẩm | Hết hạn | EXPIRED |
+
+Lô ngày hết hạn còn dùng được hết ngày địa phương UTC+7; thành phẩm hết hạn đúng timestamp. Trạng thái tính tại lúc gọi API, không ghi cứng vào QR. Tồn còn lại vẫn trả riêng, IN STOCK không bảo đảm quantity > 0.
+
+## Nội dung QR và tích hợp FE
+
+Mặc định QR chứa `MBH:UNIT:<uuid>`. FE/scanner đọc UUID và gọi API unit có xác thực. Để QR mở trang web bằng camera điện thoại, cấu hình `TRACE_QR_BASE_URL=https://your-frontend/trace?unitId=`; backend nối UUID vào cuối URL và tạo SVG. Cần trang FE `/trace` xử lý đăng nhập và gọi API. Không cấu hình URL vào API có Bearer rồi kỳ vọng camera điện thoại tự đăng nhập.
+
+Thay đổi này triển khai backend và SVG cho in tem; chưa bổ sung màn hình FE in/quét công khai. API bảo vệ dữ liệu NCC, không tự mở truy xuất cho khách chưa đăng nhập.
+
+## Triển khai
+
+Có migration `1764400000000-CreateFinishedUnits.ts`. Chạy migration bằng quy trình triển khai hiện có trước khi dùng luồng mới. Cập nhật client gửi `inputLots` khi start FINISHED_GOOD. Chưa chạy migration hay thay đổi dữ liệu production trong lần sửa mã này.

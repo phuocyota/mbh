@@ -12,6 +12,11 @@ import { randomUUID } from 'crypto';
 import { isUUID } from 'class-validator';
 import { StockMovementService } from '../stock/stock-movement.service';
 import {
+  consumeBatchLots,
+  createFinishedUnits,
+} from '../production-trace/production-trace.writer';
+import { portionCount } from '../production-trace/production-trace.rules';
+import {
   KitchenOperation,
   KitchenProductionBatch,
   KitchenMealPlan,
@@ -812,6 +817,37 @@ export class KitchenOperationsService {
       const product = await m
         .getRepository(Product)
         .findOneByOrFail({ id: batch.productId });
+      if (dto.inputLots !== undefined && target !== 'PREPARING')
+        throw new BadRequestException('INPUT_LOTS_ONLY_AT_START');
+      if (
+        target === 'PREPARING' &&
+        (product.productType === 'FINISHED_GOOD' || dto.inputLots !== undefined)
+      ) {
+        const sessions = await m.query(
+          `SELECT id FROM kitchen_consumption_sessions WHERE branch_id=$1 AND session_date=$2 AND meal_period=$3 AND station_id=$4 AND status='CONFIRMED' LIMIT 1`,
+          [branchId, plan.planDate, plan.mealPeriod, batch.stationId],
+        );
+        if (sessions?.length)
+          throw new ConflictException('SCOPE_ALREADY_CONSUMED_BY_SESSION');
+        await consumeBatchLots(
+          m,
+          this.movements,
+          batch,
+          branchId,
+          dto.inputLots,
+          actor.userId,
+        );
+      }
+      if (dto.actualQuantity !== undefined && batch.details.traceabilityVersion)
+        portionCount(dto.actualQuantity);
+      if (
+        target === 'UPDATE' &&
+        batch.status === 'COMPLETED' &&
+        batch.details.finishedUnitCount !== undefined &&
+        dto.actualQuantity !== undefined &&
+        Number(dto.actualQuantity) !== Number(batch.actualQuantity)
+      )
+        throw new ConflictException('FINISHED_UNIT_QUANTITY_IMMUTABLE');
       if (dto.actualQuantity !== undefined) {
         positive(dto.actualQuantity, true);
         const imports = await m.getRepository(KitchenOperation).findBy({
@@ -864,7 +900,14 @@ export class KitchenOperationsService {
             Number(product.recommendedUseMinutes) * 60000,
         ).toISOString();
       }
-      if (target === 'COMPLETED') batch.completedAt = new Date();
+      if (target === 'COMPLETED') {
+        batch.completedAt = new Date();
+        if (
+          product.productType === 'FINISHED_GOOD' ||
+          batch.details.traceabilityVersion
+        )
+          await createFinishedUnits(m, batch, branchId, actor.userId);
+      }
       batch.updatedBy = actor.userId;
       const saved = await m.save(batch);
       await this.audit(

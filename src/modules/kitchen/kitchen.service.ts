@@ -1154,6 +1154,20 @@ export class KitchenService {
           .where('s.id=:id', { id })
           .getOneOrFail();
         if (locked.status === 'CONFIRMED') return locked;
+        const tracedBatches = await manager.query(
+          `SELECT b.id FROM kitchen_production_batches b
+           JOIN kitchen_meal_plans p ON p.id=b.meal_plan_id
+           WHERE p.branch_id=$1 AND p.plan_date=$2 AND p.meal_period=$3
+             AND b.station_id=$4 AND b.details->>'traceabilityVersion'='1' LIMIT 1`,
+          [
+            session.branchId,
+            session.sessionDate,
+            session.mealPeriod,
+            session.stationId,
+          ],
+        );
+        if (tracedBatches?.length)
+          throw new ConflictException('SCOPE_ALREADY_CONSUMED_BY_BATCH');
         const stock = await manager
           .getRepository(Stock)
           .findOne({ where: { branchId: session.branchId } });

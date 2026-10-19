@@ -84,6 +84,58 @@ function harness() {
   return { actor, rows, batch, repo, manager, service, socket, dish };
 }
 describe('Kitchen operations boundary rules', () => {
+  it('keeps completed portion identities consistent by rejecting quantity edits', async () => {
+    const h = harness();
+    h.batch.status = 'COMPLETED';
+    h.batch.actualQuantity = 3;
+    h.batch.details.finishedUnitCount = 3;
+    await expect(
+      h.service.transition(
+        h.actor,
+        'batch',
+        { expectedVersion: 2, actualQuantity: 4 },
+        'UPDATE',
+      ),
+    ).rejects.toThrow('FINISHED_UNIT_QUANTITY_IMMUTABLE');
+    expect(h.manager.save).not.toHaveBeenCalled();
+    expect(h.socket.emitKitchenBatchUpdated).not.toHaveBeenCalled();
+  });
+  it('does not allow rewriting the input lots after production starts', async () => {
+    const h = harness();
+    await expect(
+      h.service.transition(
+        h.actor,
+        'batch',
+        { expectedVersion: 2, inputLots: [] },
+        'UPDATE',
+      ),
+    ).rejects.toThrow('INPUT_LOTS_ONLY_AT_START');
+  });
+  it('creates per-portion identities within the same completion transaction', async () => {
+    const h = harness();
+    const repo = {
+      countBy: jest.fn(async () => 0),
+      insert: jest.fn(async () => ({})),
+    };
+    const original = h.manager.getRepository;
+    h.manager.getRepository = (type: any) =>
+      type.name === 'FinishedUnit' ? repo : original(type);
+    h.batch.details = {
+      traceabilityVersion: 1,
+      servingExpiresAt: '2099-01-01T00:00:00Z',
+    };
+    h.dish.requiresSample = false;
+    await h.service.transition(
+      h.actor,
+      'batch',
+      { expectedVersion: 2, actualQuantity: 2 },
+      'COMPLETED',
+    );
+    expect(repo.insert.mock.calls[0][0]).toHaveLength(2);
+    expect(h.batch.details.finishedUnitCount).toBe(2);
+    expect(h.manager.save).toHaveBeenCalledWith(h.batch);
+    expect(h.socket.emitKitchenBatchUpdated).toHaveBeenCalled();
+  });
   it('fixes serving expiry at ready time instead of later import or configuration time', async () => {
     const h = harness();
     h.batch.status = 'PREPARING';

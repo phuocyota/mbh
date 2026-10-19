@@ -11,6 +11,7 @@ import {
   Product,
   Supplier,
   Branch,
+  Stock,
   ProductRecipe,
   ProductRecipeItem,
   KitchenProductionBatch,
@@ -122,6 +123,12 @@ describe('StockTraceService', () => {
       branchRepository: {
         findOne: jest.fn(),
       },
+      stockRepository: {
+        findOne: jest.fn(),
+        createQueryBuilder: jest.fn(() => createQueryBuilderMock({
+          getMany: [],
+        })),
+      },
       productRecipeRepository: {
         findOne: jest.fn().mockResolvedValue(null),
         find: jest.fn().mockResolvedValue([]),
@@ -177,6 +184,7 @@ describe('StockTraceService', () => {
         { provide: getRepositoryToken(Product), useValue: mockRepositories.productRepository },
         { provide: getRepositoryToken(Supplier), useValue: mockRepositories.supplierRepository },
         { provide: getRepositoryToken(Branch), useValue: mockRepositories.branchRepository },
+        { provide: getRepositoryToken(Stock), useValue: mockRepositories.stockRepository },
         { provide: getRepositoryToken(ProductRecipe), useValue: mockRepositories.productRecipeRepository },
         { provide: getRepositoryToken(ProductRecipeItem), useValue: mockRepositories.productRecipeItemRepository },
         { provide: getRepositoryToken(KitchenProductionBatch), useValue: mockRepositories.kitchenBatchRepository },

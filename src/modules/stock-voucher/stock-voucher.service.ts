@@ -12,7 +12,11 @@ import {
   SALE_REASON_CODES,
   saleDescription,
 } from '../../common/utils/sale-description';
-import { StockMovementService } from '../stock/stock-movement.service';
+import {
+  StockMovementService,
+  localDate,
+} from '../stock/stock-movement.service';
+import { CreateMaterialImportDto } from './dto/create-material-import.dto';
 import { canUseStockProduct } from '../stock/stock-scope';
 import {
   BadRequestException,
@@ -159,6 +163,36 @@ export class StockVoucherService {
 
   createImportVoucher(dto: Omit<CreateStockVoucherDto, 'type'>) {
     return this.createVoucher({ ...dto, type: STOCK_VOUCHER_TYPE.IMPORT });
+  }
+
+  createMaterialImport(dto: CreateMaterialImportDto, actorId: string) {
+    if (
+      !dto.items?.length ||
+      new Set(dto.items.map((i) => `${i.productId}:${i.lotCode?.trim()}`))
+        .size !== dto.items.length
+    )
+      throw new BadRequestException('MATERIAL_IMPORT_DUPLICATE_PRODUCT_LOT');
+    return this.createImportVoucher({
+      branchId: dto.branchId,
+      actorId,
+      requestId: dto.requestId,
+      sourceId: dto.supplierId,
+      sourceType: STOCK_PARTY_TYPE.SUPPLIER,
+      paymentStatus: dto.paymentStatus,
+      reasonCode: dto.reasonCode,
+      note: dto.note,
+      purpose: 'MATERIAL_IMPORT',
+      items: dto.items.map((i) => ({
+        productId: i.productId,
+        lotCode: i.lotCode.trim(),
+        quantity: i.quantity,
+        unitPrice: i.unitPrice,
+        unitId: i.unitId,
+        manufacturedAt: i.manufacturedAt,
+        expiresAt: i.expiresAt,
+        note: i.note,
+      })),
+    });
   }
 
   createExportVoucher(dto: Omit<CreateStockVoucherDto, 'type'>) {
@@ -486,7 +520,33 @@ export class StockVoucherService {
       relations: ['product', 'importReceipt'],
     });
 
-    return this.attachMoneyVouchers(result);
+    const attached = await this.attachMoneyVouchers(result);
+    if (dto.purpose !== 'MATERIAL_IMPORT') return attached;
+    return Promise.all(
+      attached.map(async (detail) => {
+        const input = detail.inputDetails;
+        const lot = await this.transactionManager!.getRepository(
+          StockLot,
+        ).findOneByOrFail({
+          stockId: branchStock.id,
+          productId: detail.productId,
+          lotCode: input!.lotCode,
+        });
+        return {
+          ...detail,
+          lot: {
+            id: lot.id,
+            lotCode: lot.lotCode,
+            stockId: lot.stockId,
+            productId: lot.productId,
+            manufacturedAt: lot.manufacturedAt,
+            expiresAt: lot.expiresAt,
+            quantity: Number(lot.quantity),
+            status: 'IN STOCK',
+          },
+        };
+      }),
+    );
   }
 
   private async attachMoneyVouchers(details: StockReceiptDetail[]) {
@@ -767,6 +827,20 @@ export class StockVoucherService {
         .getRepository(Product)
         .findOneBy({ id: item.productId });
       if (!product) throw new BadRequestException('PRODUCT_NOT_FOUND');
+      if (dto.purpose === 'MATERIAL_IMPORT') {
+        if (!['INGREDIENT', 'FUEL'].includes(product.productType || ''))
+          throw new BadRequestException(
+            'Chỉ được nhập sản phẩm nguyên liệu hoặc nhiên liệu.',
+          );
+        if (!product.lotTrackingEnabled || !product.baseUnitId)
+          throw new BadRequestException(
+            'Sản phẩm phải có đơn vị cơ sở và bật theo dõi lô trước khi nhập.',
+          );
+        if (!item.lotCode?.trim())
+          throw new BadRequestException('Vui lòng nhập mã lô.');
+        if (item.expiresAt && item.expiresAt < localDate())
+          throw new BadRequestException('Không thể nhập lô đã hết hạn.');
+      }
       if (
         !(await canUseStockProduct(
           manager,

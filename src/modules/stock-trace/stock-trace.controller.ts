@@ -32,6 +32,7 @@ import {
   ExpiringLotsQueryDto,
   ConsumedLotsQueryDto,
 } from './dto/trace-query.dto';
+import { FullTraceQueryDto } from './dto/full-trace-query.dto';
 
 @ApiTags('Stock Traceability')
 @ApiBearerAuth()
@@ -211,5 +212,19 @@ export class StockTraceController {
   @ApiOperation({ summary: 'Report of lots expiring within date range' })
   async getExpiringLotsReport(@Query() query: ExpiringLotsQueryDto) {
     return this.stockTraceService.getExpiringLots(query);
+  }
+
+  // ============================================
+  // UNIFIED FULL-TRACE (one API, BE tổng hợp hết)
+  // ============================================
+
+  @Get('full')
+  @Roles(UserType.ADMIN, UserType.MANAGER, UserType.KITCHEN)
+  @ApiOperation({
+    summary:
+      'Truy xuất nguồn gốc tổng hợp 1 API: lot + sản phẩm + chi nhánh + nguồn gốc (NCC/sản xuất) + movements + consumption + recipe + timeline',
+  })
+  async getFullTrace(@Query() query: FullTraceQueryDto) {
+    return this.stockTraceService.getFullTrace(query);
   }
 }
