@@ -235,6 +235,25 @@ describe('StockVoucherService', () => {
   });
 
   describe('createImportVoucher', () => {
+    it('applies material product restrictions when selecting the NHNNL reason on a normal import', async () => {
+      mockRepositories.Product.findOneBy.mockResolvedValueOnce({
+        id: 'product-id-1',
+        productType: 'FINISHED_GOOD',
+      });
+      await expect(
+        service.createImportVoucher({
+          branchId: 'branch-id-1',
+          sourceId: 'supplier-id-1',
+          sourceType: 'SUPPLIER',
+          reasonCode: 'NHNNL',
+          paymentStatus: 'DEBT',
+          items: [{ productId: 'product-id-1', quantity: 1, unitPrice: 100 }],
+        }),
+      ).rejects.toThrow('Chỉ được nhập sản phẩm nguyên liệu hoặc nhiên liệu.');
+      expect(mockMovements.change).not.toHaveBeenCalled();
+      expect(mockRepositories.StockReceiptImport.save).not.toHaveBeenCalled();
+    });
+
     it('persists auto serials and replays the same identities without another stock change', async () => {
       mockRepositories.StockFundReceiptReason.findOne.mockResolvedValueOnce({
         code: 'NHNCC',
@@ -314,9 +333,9 @@ describe('StockVoucherService', () => {
         branchId: 'branch-id-1',
       });
       mockRepositories.StockFundReceiptReason.findOne.mockResolvedValueOnce({
-        code: 'NHNCC',
+        code: 'NHNNL',
         isDebt: true,
-        accountingFormula: '{1561:-,331:+}',
+        accountingFormula: '{152:-,331:+}',
       });
       mockRepositories.StockReceiptDetail.find.mockResolvedValueOnce([
         {
@@ -353,6 +372,11 @@ describe('StockVoucherService', () => {
         ],
       };
       const first = await service.createMaterialImport(dto, 'staff');
+      expect(
+        mockRepositories.StockFundReceiptReason.findOne,
+      ).toHaveBeenCalledWith({
+        where: { code: 'NHNNL', isDebt: true, status: 'active' },
+      });
       expect(first[0]).toMatchObject({
         lot: { id: 'lot-id-1', status: 'IN STOCK' },
       });

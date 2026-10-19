@@ -41,6 +41,7 @@ import {
 } from '../../entities';
 import { CreateStockVoucherDto } from './dto/create-stock-voucher.dto';
 import {
+  MATERIAL_IMPORT_REASON_CODE,
   STOCK_PARTY_TYPE,
   STOCK_PAYMENT_STATUS,
   STOCK_VOUCHER_STATUS,
@@ -180,7 +181,7 @@ export class StockVoucherService {
       sourceId: dto.supplierId,
       sourceType: STOCK_PARTY_TYPE.SUPPLIER,
       paymentStatus: dto.paymentStatus,
-      reasonCode: dto.reasonCode,
+      reasonCode: dto.reasonCode || MATERIAL_IMPORT_REASON_CODE,
       note: dto.note,
       purpose: 'MATERIAL_IMPORT',
       items: dto.items.map((i) => ({
@@ -770,6 +771,7 @@ export class StockVoucherService {
   private transactionManager?: EntityManager;
   private async createVoucherInTransaction(dto: CreateStockVoucherDto) {
     const manager = this.transactionManager!;
+    const originalRequest = dto;
     const requestId = (dto as any).requestId;
     if (requestId) {
       await manager.query(
@@ -801,7 +803,12 @@ export class StockVoucherService {
         'SELECT pg_advisory_xact_lock(hashtextextended($1,0))',
         ['stock-branch:' + branch],
       );
-    const originalItems = dto.items;
+    if (
+      dto.type === STOCK_VOUCHER_TYPE.IMPORT &&
+      dto.reasonCode === MATERIAL_IMPORT_REASON_CODE
+    ) {
+      dto = { ...dto, purpose: 'MATERIAL_IMPORT' };
+    }
     if (dto.purpose === 'SALE') {
       const customer = await manager
         .getRepository(Customer)
@@ -912,7 +919,7 @@ export class StockVoucherService {
           branchId,
           requestId,
           result,
-          payloadHash: requestFingerprint({ ...dto, items: originalItems }),
+          payloadHash: requestFingerprint(originalRequest),
         });
       return result;
     }
@@ -1192,7 +1199,7 @@ export class StockVoucherService {
         branchId,
         requestId,
         result: attachedResult,
-        payloadHash: requestFingerprint({ ...dto, items: originalItems }),
+        payloadHash: requestFingerprint(originalRequest),
       });
     return attachedResult;
   }

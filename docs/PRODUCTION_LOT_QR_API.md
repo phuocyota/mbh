@@ -31,14 +31,17 @@
 ```
 
 - `requestId` bắt buộc; gửi lại cùng ID và nội dung trả kết quả cũ, không cộng tồn lần nữa. Cùng ID nhưng đổi nội dung trả `IDEMPOTENCY_PAYLOAD_CONFLICT`.
+- Lý do mặc định là `NHNNL` — **Nhập nguyên, nhiên liệu**. Migration `1764500000000-SeedMaterialImportReason.ts` thêm cấu hình đã thanh toán/công nợ. Công nợ (`isDebt=true`) dùng `{152:-,331:+}`: Nợ 152 – Nguyên vật liệu, Có 331 – Phải trả nhà cung cấp. Cấu hình đã thanh toán giữ công thức từ `NHNCC` đang hoạt động. Cần chạy migration trước khi dùng lý do mới; thiếu công thức nguồn đã thanh toán thì migration báo lỗi.
 - `supplierId`, `paymentStatus` (PAID/UNPAID/DEBT), `productId`, `lotCode`, `quantity > 0` và `unitPrice >= 0` bắt buộc. PAID tạo thanh toán theo cấu hình kế toán hiện có; UNPAID/DEBT ghi công nợ NCC.
 - Chỉ nhận INGREDIENT/FUEL có `baseUnitId` và `lotTrackingEnabled=true`. Không tự bật theo dõi lô trên sản phẩm đã có tồn chưa phân lô.
 - `unitId` tùy chọn; nếu có thì quantity/unitPrice theo đơn vị nhập, backend quy đổi về đơn vị cơ sở. Ngày theo YYYY-MM-DD; nguyên liệu bắt buộc có hạn dùng; không nhận lô đã hết hạn.
 - Tối đa 500 dòng; được nhập cùng sản phẩm ở các mã lô khác nhau, không lặp cùng productId + lotCode trong một yêu cầu.
 - Response theo cấu trúc danh sách chi tiết phiếu nhập hiện có, mỗi dòng bổ sung `lot` gồm `id`, `lotCode`, `stockId`, `productId`, `manufacturedAt`, `expiresAt`, `quantity`, `status`. Dùng `lot.id` làm `inputLots[].lotId` khi bắt đầu chế biến. `lot.quantity` là tổng tồn hiện tại của lô theo đơn vị cơ sở; lượng nhập của phiếu nằm ở `detail.quantity`.
-- Tạo phiếu, cộng tồn/lô, movement và thanh toán/công nợ trong cùng transaction. API này không cần migration mới.
+- Tạo phiếu, cộng tồn/lô, movement và thanh toán/công nợ trong cùng transaction. Phần nhập lô dùng schema hiện có; lý do `NHNNL` cần migration seed nêu trên.
 
 ## Nhập số lô và serial trên FE
+
+Màn hình `/stock-in/create` có lựa chọn **Nhập nguyên, nhiên liệu** bên cạnh **Nhập hàng từ nhà cung cấp**, gửi `reasonCode=NHNNL` đến `POST /stock-vouchers`. Backend tự áp dụng kiểm tra `MATERIAL_IMPORT` cho lý do này (chỉ INGREDIENT/FUEL, bật theo dõi lô, có đơn vị cơ sở, mã lô và hạn dùng hợp lệ). Chi tiết phiếu hiển thị loại phiếu theo lý do đã lưu.
 
 Màn hình `/stock-in/create` cho nhập số lô, ngày sản xuất, hạn sử dụng theo từng dòng hàng và gửi đến `POST /stock-vouchers` hiện có. Sản phẩm bật theo dõi lô bắt buộc số lô; nguyên liệu bật theo dõi lô bắt buộc hạn dùng. Thông tin lô và serial hiển thị lại trong chi tiết phiếu nhập.
 
@@ -105,4 +108,4 @@ Thay đổi này triển khai backend và SVG cho in tem; chưa bổ sung màn h
 
 ## Triển khai
 
-Có migration `1764400000000-CreateFinishedUnits.ts`. Chạy migration bằng quy trình triển khai hiện có trước khi dùng luồng mới. Cập nhật client gửi `inputLots` khi start FINISHED_GOOD. Chưa chạy migration hay thay đổi dữ liệu production trong lần sửa mã này.
+Có migration `1764400000000-CreateFinishedUnits.ts` cho thành phẩm và `1764500000000-SeedMaterialImportReason.ts` cho lý do nhập nguyên, nhiên liệu. Chạy migration bằng quy trình triển khai hiện có trước khi dùng luồng mới. Cập nhật client gửi `inputLots` khi start FINISHED_GOOD. Chưa chạy migration hay thay đổi dữ liệu production trong lần sửa mã này.

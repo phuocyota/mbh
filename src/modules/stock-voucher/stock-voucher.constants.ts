@@ -23,3 +23,5 @@ export const STOCK_PAYMENT_STATUS = {
 
 export type StockVoucherType =
   (typeof STOCK_VOUCHER_TYPE)[keyof typeof STOCK_VOUCHER_TYPE];
+
+export const MATERIAL_IMPORT_REASON_CODE = 'NHNNL';

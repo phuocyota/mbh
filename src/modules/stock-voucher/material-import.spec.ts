@@ -84,6 +84,7 @@ describe('Material import API', () => {
     );
     expect(result).toMatchObject({
       purpose: 'MATERIAL_IMPORT',
+      reasonCode: 'NHNNL',
       sourceType: 'SUPPLIER',
       actorId: 'staff',
       sourceId: input().supplierId,
