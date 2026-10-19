@@ -245,6 +245,8 @@ export class OrderItemService extends BaseService<OrderItem> {
       .addSelect('oi.product_id', 'productId')
       .addSelect('oi.product_name', 'name')
       .addSelect('p.unit', 'unit')
+      .addSelect('p.category_id', 'categoryId')
+      .addSelect('p.product_type', 'productType')
       .addSelect('SUM(oi.quantity)', 'monthlyUsage')
       .addSelect('COALESCE(SUM(oi.total_amount), 0)', 'revenue')
       .addSelect('o.branch_id', 'branchId')
@@ -264,6 +266,8 @@ export class OrderItemService extends BaseService<OrderItem> {
       .addGroupBy('oi.product_id')
       .addGroupBy('oi.product_name')
       .addGroupBy('p.unit')
+      .addGroupBy('p.category_id')
+      .addGroupBy('p.product_type')
       .addGroupBy('o.branch_id')
       .addGroupBy('b.name')
       .orderBy('c.name', 'ASC')
@@ -280,6 +284,8 @@ export class OrderItemService extends BaseService<OrderItem> {
       name: string;
       unit: string | null;
       monthlyUsage: string;
+      categoryId: string | null;
+      productType: string | null;
       revenue: string;
       branchId: string | null;
       branchName: string | null;

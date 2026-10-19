@@ -850,7 +850,7 @@ export class ReportsService {
     const branchId = this.resolveBranchId(query.branchId, user);
     const minRate = Number(query.minRate || 1.2);
     const maxRate = Number(query.maxRate || 1.5);
-    const [rows, revenueRows, stockRows] = await Promise.all([
+    const [orderRows, revenueRows, stockRows, direct] = await Promise.all([
       this.orderItemService.getMonthlyOrderPlanRows({
         from,
         to,
@@ -864,12 +864,36 @@ export class ReportsService {
         branchId,
       }),
       this.getStockOnHandByProduct(branchId),
+      this.getDirectSales(from, to, branchId),
     ]);
+    const rowsByProduct = new Map<string, (typeof orderRows)[number]>();
+    for (const row of orderRows) {
+      const existing = rowsByProduct.get(row.productId);
+      if (existing) {
+        existing.monthlyUsage = String(Number(existing.monthlyUsage) + Number(row.monthlyUsage));
+        existing.revenue = String(Number(existing.revenue) + Number(row.revenue));
+      } else rowsByProduct.set(row.productId, { ...row });
+    }
+    for (const item of direct) {
+      const existing = rowsByProduct.get(item.productId);
+      if (existing) {
+        existing.monthlyUsage = String(Number(existing.monthlyUsage) + Number(item.qty));
+        existing.revenue = String(Number(existing.revenue) + Number(item.total));
+      } else {
+        rowsByProduct.set(item.productId, {
+          productId: item.productId, code: item.code, name: item.name, unit: item.unit,
+          categoryId: item.categoryId || null, productType: item.productType || null,
+          groupName: item.groupName || 'Chưa phân loại', branchId: item.branchId || null,
+          branchName: item.branchName || null, monthlyUsage: String(item.qty), revenue: String(item.total),
+        });
+      }
+    }
+    const rows = [...rowsByProduct.values()].sort((a, b) => a.name.localeCompare(b.name));
     const stockByProductId = new Map(
       stockRows.map((row) => [row.productId, Number(row.quantity || 0)]),
     );
 
-    const revenueMonth = Number(revenueRows.totalRow?.totalRevenue || 0);
+    const revenueMonth = Number(revenueRows.totalRow?.totalRevenue || 0) + direct.reduce((sum, row) => sum + Number(row.total), 0);
     const firstRow = rows[0];
 
     return {
@@ -904,6 +928,8 @@ export class ReportsService {
           group: row.groupName,
           code: row.code,
           productId: row.productId,
+          categoryId: row.categoryId,
+          productType: row.productType,
           name: row.name,
           unit: row.unit,
           monthlyUsage,

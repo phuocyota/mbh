@@ -30,6 +30,11 @@ describe('StockVoucherService', () => {
   let service: StockVoucherService;
 
   const mockRepositories: any = {
+    Order: {
+      findOneBy: jest
+        .fn()
+        .mockResolvedValue({ id: 'order-id-1', orderCode: 'ABC123' }),
+    },
     Customer: {
       findOneBy: jest
         .fn()
@@ -669,8 +674,14 @@ describe('StockVoucherService', () => {
           code: reasonCode,
         });
         await service.createSaleVoucher({ ...sale, paymentMethod });
+        const code =
+          mockRepositories.StockReceiptExport.create.mock.calls[0][0].code;
         expect(mockRepositories.StockReceiptExport.create).toHaveBeenCalledWith(
-          expect.objectContaining({ totalAmount: 300, reasonCode }),
+          expect.objectContaining({
+            totalAmount: 300,
+            reasonCode,
+            note: `Xuất bán theo đơn ${code}`,
+          }),
         );
         expect(mockFinanceService.createMoneyVoucher).toHaveBeenCalledWith(
           expect.objectContaining({
@@ -679,6 +690,7 @@ describe('StockVoucherService', () => {
             reasonCode,
             branchId: 'branch-id-1',
             refId: 'export-id',
+            note: `Thu tiền đơn hàng ${code}`,
           }),
           mockManager,
         );
@@ -788,6 +800,7 @@ describe('StockVoucherService', () => {
           referenceType: 'order',
           totalAmount: 300,
           status: 'COMPLETED',
+          note: 'Xuất bán theo đơn ABC123\nGhi chú: Export note',
         }),
       );
       expect(mockRepositories.StockReceiptExport.save).toHaveBeenCalled();

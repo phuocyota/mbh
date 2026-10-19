@@ -6,6 +6,7 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { EntityManager, FindOptionsWhere, In, Repository } from 'typeorm';
 import { parseAccountingFormula } from '../../common/utils/accounting-formula.utils';
+import { saleDescription } from '../../common/utils/sale-description';
 import {
   Debt,
   Fund,
@@ -17,6 +18,7 @@ import {
   FundReceiptTransfer,
   FundDetail,
   StockFundReceiptReason,
+  StockReceiptExport,
 } from '../../entities';
 import { CreateFundDto } from './dto/create-fund.dto';
 import { CreateMoneyVoucherDto } from './dto/create-money-voucher.dto';
@@ -145,6 +147,13 @@ export class FinanceService {
       .leftJoinAndSelect('order.customer', 'orderCustomer')
       .leftJoinAndSelect('voucher.supplier', 'supplier')
       .leftJoinAndSelect('voucher.customer', 'customer');
+    query.leftJoinAndMapOne(
+      'voucher.saleExport',
+      StockReceiptExport,
+      'saleExport',
+      'saleExport.id = voucher.ref_id AND voucher.purpose = :salePurpose',
+      { salePurpose: ACCOUNTING_PURPOSE.STOCK_EXPORT },
+    );
 
     if (branchId) {
       query.andWhere('fund.branchId = :branchId', { branchId });
@@ -179,6 +188,7 @@ export class FinanceService {
           OR voucher.note ILIKE :search
           OR voucher.refType ILIKE :search
           OR order.orderCode ILIKE :search
+          OR saleExport.code ILIKE :search
           OR supplier.code ILIKE :search
           OR supplier.name ILIKE :search
           OR customer.customerCode ILIKE :search
@@ -516,6 +526,14 @@ export class FinanceService {
   // Chỉ giữ repository và các hàm đọc để hiển thị dữ liệu chuyển quỹ lịch sử.
 
   private toMoneyVoucherListItem(voucher: MoneyVoucher) {
+    const saleCode =
+      voucher.order?.orderCode || (voucher as any).saleExport?.code;
+    const description =
+      voucher.purpose === ACCOUNTING_PURPOSE.STOCK_EXPORT &&
+      voucher.type === MONEY_VOUCHER_TYPE.RECEIPT &&
+      saleCode
+        ? saleDescription('receipt', saleCode, voucher.note)
+        : voucher.note || voucher.purpose;
     const order = voucher.order as any;
     const supplier = voucher.supplier as any;
     const directCustomer = voucher.customer as any;
@@ -565,8 +583,8 @@ export class FinanceService {
       orderId: voucher.orderId,
       supplierId: voucher.supplierId,
       customerId: voucher.customerId,
-      note: voucher.note,
-      description: voucher.note || voucher.purpose,
+      note: description,
+      description,
     };
   }
 
@@ -579,6 +597,16 @@ export class FinanceService {
         code: order.orderCode,
       };
     }
+
+    const saleExport = (voucher as any).saleExport as
+      | StockReceiptExport
+      | undefined;
+    if (saleExport)
+      return {
+        type: ACCOUNTING_SOURCE_TYPE.STOCK_VOUCHER,
+        id: saleExport.id,
+        code: saleExport.code,
+      };
 
     if (voucher.refType || voucher.refId) {
       return {

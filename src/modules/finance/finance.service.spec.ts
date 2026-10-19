@@ -16,6 +16,33 @@ import {
 describe('FinanceService', () => {
   let service: FinanceService;
 
+  it('shows a receipt note for the actual linked order instead of STOCK_EXPORT', () => {
+    const result = (service as any).toMoneyVoucherListItem({
+      id: 'receipt',
+      type: 'RECEIPT',
+      purpose: 'STOCK_EXPORT',
+      amount: 10000,
+      note: null,
+      order: { id: 'order', orderCode: 'ABC123' },
+    });
+    expect(result.note).toBe('Thu tiền đơn hàng ABC123');
+    expect(result.description).toBe('Thu tiền đơn hàng ABC123');
+    expect(result.reference.code).toBe('ABC123');
+  });
+
+  it('uses the export code as the shared reference for a standalone sale', () => {
+    const result = (service as any).toMoneyVoucherListItem({
+      id: 'receipt',
+      type: 'RECEIPT',
+      purpose: 'STOCK_EXPORT',
+      amount: 10000,
+      note: 'STOCK_EXPORT',
+      saleExport: { id: 'export', code: 'XK1792371266858' },
+    });
+    expect(result.note).toBe('Thu tiền đơn hàng XK1792371266858');
+    expect(result.reference.code).toBe('XK1792371266858');
+  });
+
   const mockRepositories: any = {
     Fund: {
       findOne: jest.fn().mockResolvedValue({
@@ -179,6 +206,7 @@ describe('FinanceService', () => {
     it('should aggregate received, paid and transfer totals by branch', async () => {
       const baseQueryBuilder = {
         leftJoinAndSelect: jest.fn().mockReturnThis(),
+        leftJoinAndMapOne: jest.fn().mockReturnThis(),
         andWhere: jest.fn().mockReturnThis(),
         clone: jest.fn(),
       };
@@ -270,6 +298,7 @@ describe('FinanceService', () => {
     it('should filter by voucher type alias', async () => {
       const baseQueryBuilder = {
         leftJoinAndSelect: jest.fn().mockReturnThis(),
+        leftJoinAndMapOne: jest.fn().mockReturnThis(),
         andWhere: jest.fn().mockReturnThis(),
         clone: jest.fn(),
       };

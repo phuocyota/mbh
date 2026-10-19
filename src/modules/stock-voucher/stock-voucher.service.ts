@@ -8,6 +8,10 @@ import {
   User,
 } from '../../entities';
 import { requestFingerprint } from '../../common/utils/request-fingerprint';
+import {
+  SALE_REASON_CODES,
+  saleDescription,
+} from '../../common/utils/sale-description';
 import { StockMovementService } from '../stock/stock-movement.service';
 import { canUseStockProduct } from '../stock/stock-scope';
 import {
@@ -28,6 +32,7 @@ import {
   MoneyVoucher,
   FundReceiptPaid,
   FundReceiptReceived,
+  Order,
 } from '../../entities';
 import { CreateStockVoucherDto } from './dto/create-stock-voucher.dto';
 import {
@@ -229,7 +234,7 @@ export class StockVoucherService {
       referenceId: order.id,
       referenceType: 'order',
       reasonCode,
-      note: `Xuất kho theo đơn hàng ${order.orderCode}`,
+      note: `Xuất bán theo đơn ${order.orderCode}`,
       items,
     });
   }
@@ -638,6 +643,22 @@ export class StockVoucherService {
             ? receiptVoucherByOrderId.get(exportReceipt.referenceId)
             : undefined);
         if (receiptVoucher) {
+          if (
+            exportReceipt.reasonCode &&
+            SALE_REASON_CODES.includes(exportReceipt.reasonCode)
+          ) {
+            const code =
+              receiptVoucher.order?.orderCode ||
+              exportReceipt.note?.match(
+                /^Xuất (?:kho theo đơn hàng|bán theo đơn)\s+(\S+)/i,
+              )?.[1] ||
+              exportReceipt.code;
+            exportReceipt.note = saleDescription(
+              'export',
+              code,
+              exportReceipt.note,
+            );
+          }
           (exportReceipt as any).receiptVoucher = receiptVoucher;
           (exportReceipt as any).moneyVoucher = receiptVoucher;
           const receivedReceipt = receivedReceiptByMoneyVoucherId.get(
@@ -837,6 +858,7 @@ export class StockVoucherService {
       | StockReceiptImport
       | StockReceiptExport
       | StockReceiptTransfer;
+    let receiptNote = dto.note;
 
     if (type === STOCK_VOUCHER_TYPE.IMPORT) {
       const code = `NK${Date.now()}`;
@@ -857,6 +879,18 @@ export class StockVoucherService {
       );
     } else if (type === STOCK_VOUCHER_TYPE.EXPORT) {
       const code = `XK${Date.now()}`;
+      let exportNote = dto.note;
+      if (reasonCode && SALE_REASON_CODES.includes(reasonCode)) {
+        const order =
+          dto.referenceType === 'order' && dto.referenceId
+            ? await manager
+                .getRepository(Order)
+                .findOneBy({ id: dto.referenceId })
+            : null;
+        const saleCode = order?.orderCode || code;
+        exportNote = saleDescription('export', saleCode, dto.note);
+        receiptNote = saleDescription('receipt', saleCode, dto.note);
+      }
       headerReceipt = await this.stockReceiptExportRepository.save(
         this.stockReceiptExportRepository.create({
           code,
@@ -869,7 +903,7 @@ export class StockVoucherService {
           reasonCode: reasonCode || undefined,
           totalAmount,
           status: STOCK_VOUCHER_STATUS.COMPLETED,
-          note: dto.note,
+          note: exportNote,
         }),
       );
     } else {
@@ -1039,7 +1073,7 @@ export class StockVoucherService {
               ? ACCOUNTING_SOURCE_TYPE.ORDER
               : ACCOUNTING_SOURCE_TYPE.STOCK_VOUCHER,
           refId: dto.referenceId || headerReceipt.id,
-          note: dto.note,
+          note: receiptNote,
         },
         this.transactionManager,
       );
