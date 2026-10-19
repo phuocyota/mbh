@@ -1,4 +1,5 @@
 import { resolveEndOfDayRange } from './end-of-day-range';
+import { DIRECT_SALES_SQL, DirectSaleRow, mergeProductSales } from './direct-sales-report';
 import { ForbiddenException, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -64,6 +65,10 @@ export class ReportsService {
     from.setHours(0, 0, 0, 0);
 
     return { from, to };
+  }
+
+  private getDirectSales(from: Date, to: Date, branchId?: string): Promise<DirectSaleRow[]> {
+    return this.productRepository.query(DIRECT_SALES_SQL, [from.toISOString(), to.toISOString(), branchId || null]);
   }
 
   private resolveCustomerRange(query: {
@@ -164,19 +169,30 @@ export class ReportsService {
       to,
       branchId,
     });
+    const direct = await this.getDirectSales(from, to, branchId);
+    const directRevenue = direct.reduce((sum, row) => sum + Number(row.total), 0);
+    for (const method of ['CASH', 'BANK_TRANSFER']) {
+      const entries = direct.filter(row => row.method === method);
+      if (!entries.length) continue;
+      const amount = entries.reduce((sum, row) => sum + Number(row.total), 0);
+      const count = new Set(entries.map(row => row.voucherId)).size;
+      const existing = paymentBreakdown.find(row => row.method === method);
+      if (existing) { existing.amount = String(Number(existing.amount) + amount); existing.count = String(Number(existing.count) + count); }
+      else paymentBreakdown.push({ method, amount: String(amount), count: String(count) });
+    }
 
     return {
       from,
       to,
       branchId: branchId || null,
-      orderCount: Number(totalRow?.orderCount || 0),
-      totalRevenue: Number(totalRow?.totalRevenue || 0),
+      orderCount: Number(totalRow?.orderCount || 0) + new Set(direct.map(row => row.voucherId)).size,
+      totalRevenue: Number(totalRow?.totalRevenue || 0) + directRevenue,
       totalDiscount: Number(totalRow?.totalDiscount || 0),
       refundCount: Number(refundedRow?.refundCount || 0),
       refundAmount: Number(refundedRow?.refundAmount || 0),
       netRevenue:
         Number(totalRow?.totalRevenue || 0) -
-        Number(refundedRow?.refundAmount || 0),
+        Number(refundedRow?.refundAmount || 0) + directRevenue,
       paymentBreakdown: paymentBreakdown.map((payment) => ({
         method: payment.method,
         count: Number(payment.count),
@@ -189,7 +205,7 @@ export class ReportsService {
     query: { from?: string; to?: string; branchId?: string },
     user?: ReportUser,
   ) {
-    const { from, to } = this.resolveRange(query);
+    const { from, to } = resolveEndOfDayRange(query);
     const branchId = this.resolveBranchId(query.branchId, user);
     const rows = await this.orderService.getDailyRevenueRows({
       from,
@@ -327,7 +343,7 @@ export class ReportsService {
     },
     user?: ReportUser,
   ) {
-    const { from, to } = this.resolveCustomerRange(query);
+    const { from, to } = query.from || query.to ? resolveEndOfDayRange(query) : this.resolveCustomerRange(query);
     const branchId = this.resolveBranchId(query.branchId, user);
     const reportRows = await this.orderItemService.getCancellationReportRows({
       from,
@@ -425,17 +441,17 @@ export class ReportsService {
       from,
       to,
       branchId,
-      employeeId: query.employeeId,
+      employeeId: undefined,
     };
 
-    const [salesRows, chartRows, cashierRows, profitRows] = await Promise.all([
+    const [salesRows, cashierRows, profitRows, direct] = await Promise.all([
       this.orderService.getEmployeeSalesRows(reportQuery),
-      this.orderService.getEmployeeSalesRows({ ...reportQuery, limit }),
       this.orderItemService.getEmployeeCashierRows(reportQuery),
       this.orderItemService.getEmployeeProfitRows(reportQuery),
+      this.getDirectSales(from, to, branchId),
     ]);
 
-    const sales = salesRows.map((row) => ({
+    let sales = salesRows.map((row) => ({
       id: row.id,
       employee: row.employee,
       orders: Number(row.orders || 0),
@@ -444,14 +460,14 @@ export class ReportsService {
       revenue: Number(row.revenue || 0),
     }));
 
-    const cashier = cashierRows.map((row) => ({
+    let cashier = cashierRows.map((row) => ({
       id: row.id,
       employee: row.employee,
       quantity: Number(row.quantity || 0),
       revenue: Number(row.revenue || 0),
     }));
 
-    const profit = profitRows.map((row) => {
+    let profit = profitRows.map((row) => {
       const revenue = Number(row.revenue || 0);
       const cost = Number(row.cost || 0);
 
@@ -466,13 +482,25 @@ export class ReportsService {
       };
     });
 
-    return {
-      filter: query.filter || null,
-      from,
-      to,
-      branchId: branchId || null,
-      employeeId: query.employeeId || null,
-      employees: sales.map((row) => ({
+    for (const id of new Set(direct.map(row => row.employeeId))) {
+      const entries = direct.filter(row => row.employeeId === id);
+      const revenue = entries.reduce((sum, row) => sum + Number(row.total), 0);
+      const quantity = entries.reduce((sum, row) => sum + Number(row.qty), 0);
+      const cost = entries.reduce((sum, row) => sum + Number(row.cost), 0);
+      const orders = new Set(entries.map(row => row.voucherId)).size;
+      const employee = entries[0].employee;
+      const sale = sales.find(row => row.id === id);
+      if (sale) { sale.orders += orders; sale.revenue += revenue; sale.totalAmount += revenue; }
+      else sales.push({ id, employee, orders, revenue, totalAmount: revenue, discount: 0 });
+      const cash = cashier.find(row => row.id === id);
+      if (cash) { cash.quantity += quantity; cash.revenue += revenue; }
+      else cashier.push({ id, employee, quantity, revenue });
+      const earnings = profit.find(row => row.id === id);
+      if (earnings) { earnings.revenue += revenue; earnings.totalPurchase += revenue; earnings.cost += cost; earnings.profit += revenue - cost; }
+      else profit.push({ id, employee, revenue, totalPurchase: revenue, discount: 0, cost, profit: revenue - cost });
+    }
+    sales.sort((a, b) => b.revenue - a.revenue);
+    const employees = sales.map((row) => ({
         id: row.id,
         code: null,
         name: row.employee,
@@ -485,8 +513,16 @@ export class ReportsService {
         absent: 0,
         salary: 0,
         performance: 0,
-      })),
-      chart: chartRows.map((row) => ({
+      }));
+    if (query.employeeId && query.employeeId !== 'all') {
+      sales = sales.filter(row => row.id === query.employeeId);
+      cashier = cashier.filter(row => row.id === query.employeeId);
+      profit = profit.filter(row => row.id === query.employeeId);
+    }
+    return {
+      filter: query.filter || null, from, to, branchId: branchId || null,
+      employeeId: query.employeeId || null, employees,
+      chart: sales.slice(0, limit).map((row) => ({
         id: row.id,
         name: row.employee,
         revenue: Number(row.revenue || 0),
@@ -518,14 +554,15 @@ export class ReportsService {
     const { from, to } = resolveEndOfDayRange(query);
     const branchId = this.resolveBranchId(query.branchId, user);
     const limit = Math.min(Math.max(Number(query.limit) || 10, 1), 100);
+    const direct = await this.getDirectSales(from, to, branchId);
     const rows = await this.orderItemService.getTopProducts({
       from,
       to,
       branchId,
-      limit,
+      limit: direct.length ? undefined : limit,
     });
 
-    return rows.map((row) => ({
+    return mergeProductSales(rows, direct, limit).map((row) => ({
       productId: row.productId,
       productName: row.productName,
       totalQuantity: Number(row.totalQuantity),
@@ -651,14 +688,15 @@ export class ReportsService {
     const { from, to } = resolveEndOfDayRange(query);
     const branchId = this.resolveBranchId(query.branchId, user);
     const limit = Math.min(Math.max(Number(query.limit) || 10, 1), 100);
+    const direct = await this.getDirectSales(from, to, branchId);
     const rows = await this.orderItemService.getBottomProducts({
       from,
       to,
       branchId,
-      limit,
+      limit: direct.length ? undefined : limit,
     });
 
-    return rows.map((row) => ({
+    return mergeProductSales(rows, direct, limit, true).map((row) => ({
       productId: row.productId,
       productName: row.productName,
       totalQuantity: Number(row.totalQuantity),
@@ -677,22 +715,18 @@ export class ReportsService {
       to,
       branchId,
     });
+    const direct = await this.getDirectSales(from, to, branchId);
+    const data = rows.map(row => ({ ...row, price: Number(row.price), qty: Number(row.qty), total: Number(row.total), gross: Number(row.gross), tax: Number(row.tax), net: Number(row.net) }));
+    const manual = direct.map(row => ({ date: row.date, code: row.code, name: row.name,
+      price: row.qty ? row.total / row.qty : 0, qty: Number(row.qty), total: Number(row.total),
+      gross: Number(row.total), tax: null, net: null,
+    }));
 
     return {
       from,
       to,
       branchId: branchId || null,
-      data: rows.map((row) => ({
-        date: row.date,
-        code: row.code,
-        name: row.name,
-        price: Number(row.price),
-        qty: Number(row.qty),
-        total: Number(row.total),
-        gross: Number(row.gross),
-        tax: Number(row.tax),
-        net: Number(row.net),
-      })),
+      data: [...data, ...manual].sort((a, b) => a.date.localeCompare(b.date) || a.name.localeCompare(b.name)),
     };
   }
 

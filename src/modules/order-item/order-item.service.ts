@@ -93,7 +93,7 @@ export class OrderItemService extends BaseService<OrderItem> {
     from: Date;
     to: Date;
     branchId?: string;
-    limit: number;
+    limit?: number;
   }) {
     const qb = this.orderItemRepository
       .createQueryBuilder('oi')
@@ -133,7 +133,7 @@ export class OrderItemService extends BaseService<OrderItem> {
     from: Date;
     to: Date;
     branchId?: string;
-    limit: number;
+    limit?: number;
   }) {
     const qb = this.orderItemRepository
       .createQueryBuilder('oi')
