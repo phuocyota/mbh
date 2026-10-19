@@ -178,6 +178,7 @@ export class OrderItemService extends BaseService<OrderItem> {
       .createQueryBuilder('oi')
       .innerJoin('orders', 'o', 'o.id = oi.order_id')
       .select(businessDate, 'date')
+      .addSelect('oi.product_id', 'productId')
       .addSelect('p.code', 'code')
       .addSelect('p.category_id', 'categoryId')
       .addSelect('p.product_type', 'productType')

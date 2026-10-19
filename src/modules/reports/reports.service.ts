@@ -816,6 +816,7 @@ export class ReportsService {
       name: row.name,
       categoryId: row.categoryId,
       productType: row.productType,
+      productId: row.productId,
       price: row.qty ? row.total / row.qty : 0,
       qty: Number(row.qty),
       total: Number(row.total),
