@@ -170,10 +170,14 @@ export class OrderItemService extends BaseService<OrderItem> {
   }
 
   async getEndOfDayItems(query: { from: Date; to: Date; branchId?: string }) {
+    // created_at is a legacy timestamp without time zone, populated by DB NOW().
+    // Interpret it in the DB session timezone before grouping in Vietnam time.
+    const businessDate =
+      "TO_CHAR(o.created_at AT TIME ZONE current_setting('TimeZone') AT TIME ZONE 'Asia/Ho_Chi_Minh', 'YYYY-MM-DD')";
     const qb = this.orderItemRepository
       .createQueryBuilder('oi')
       .innerJoin('orders', 'o', 'o.id = oi.order_id')
-      .select('DATE(o.created_at)', 'date')
+      .select(businessDate, 'date')
       .addSelect('p.code', 'code')
       .addSelect('oi.product_name', 'name')
       .addSelect('oi.unit_price', 'price')
@@ -183,22 +187,22 @@ export class OrderItemService extends BaseService<OrderItem> {
       .addSelect('COALESCE(SUM(oi.total_amount) * 0.1, 0)', 'tax')
       .addSelect('COALESCE(SUM(oi.total_amount) * 0.9, 0)', 'net')
       .leftJoin('products', 'p', 'p.id = oi.product_id')
-      .where('o.created_at BETWEEN :from AND :to', {
-        from: query.from,
-        to: query.to,
-      })
+      .where(
+        `o.created_at BETWEEN (CAST(:from AS timestamptz) AT TIME ZONE current_setting('TimeZone')) AND (CAST(:to AS timestamptz) AT TIME ZONE current_setting('TimeZone'))`,
+        { from: query.from.toISOString(), to: query.to.toISOString() },
+      )
       .andWhere('o.payment_status = :paymentStatus', {
         paymentStatus: ORDER_PAYMENT_STATUS.PAID,
       })
       .andWhere('oi.status = :itemStatus', {
         itemStatus: ORDER_ITEM_STATUS.NORMAL,
       })
-      .groupBy('DATE(o.created_at)')
+      .groupBy(businessDate)
       .addGroupBy('oi.product_id')
       .addGroupBy('oi.product_name')
       .addGroupBy('oi.unit_price')
       .addGroupBy('p.code')
-      .orderBy('DATE(o.created_at)', 'ASC')
+      .orderBy(businessDate, 'ASC')
       .addOrderBy('oi.product_name', 'ASC');
 
     if (query.branchId) {

@@ -66,8 +66,8 @@ export class CategoryController {
     type: CategoryDto,
   })
   @ApiResponse({ status: 404, description: 'Category not found' })
-  async findOne(@Param('id') id: string) {
-    return this.categoryService.findOne(id);
+  async findOne(@Req() req: any, @Param('id') id: string) {
+    return this.categoryService.findOneInBranch(id, req.user.branchId);
   }
 
   @Post()
@@ -78,10 +78,11 @@ export class CategoryController {
     description: 'Category created',
     type: CategoryDto,
   })
-  async create(@Body() createCategoryDto: CreateCategoryDto) {
-    return this.categoryService.create(createCategoryDto, {
-      userId: 'system',
-    } as any);
+  async create(@Req() req: any, @Body() createCategoryDto: CreateCategoryDto) {
+    return this.categoryService.create(
+      { ...createCategoryDto, branchId: req.user.branchId || null },
+      req.user,
+    );
   }
 
   @Put(':id')
@@ -94,12 +95,16 @@ export class CategoryController {
   })
   @ApiResponse({ status: 404, description: 'Category not found' })
   async update(
+    @Req() req: any,
     @Param('id') id: string,
     @Body() createCategoryDto: CreateCategoryDto,
   ) {
-    return this.categoryService.update(id, createCategoryDto, {
-      userId: 'system',
-    } as any);
+    await this.categoryService.findOneInBranch(id, req.user.branchId);
+    return this.categoryService.update(
+      id,
+      { ...createCategoryDto, branchId: req.user.branchId || null },
+      req.user,
+    );
   }
 
   @Delete(':id')
@@ -108,7 +113,8 @@ export class CategoryController {
   @ApiParam({ name: 'id', description: 'Category ID' })
   @ApiResponse({ status: 204, description: 'Category deleted' })
   @ApiResponse({ status: 404, description: 'Category not found' })
-  async delete(@Param('id') id: string): Promise<void> {
-    await this.categoryService.delete(id, { userId: 'system' } as any);
+  async delete(@Req() req: any, @Param('id') id: string): Promise<void> {
+    await this.categoryService.findOneInBranch(id, req.user.branchId);
+    await this.categoryService.delete(id, req.user);
   }
 }

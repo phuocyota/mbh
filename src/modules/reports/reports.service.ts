@@ -1,3 +1,4 @@
+import { resolveEndOfDayRange } from './end-of-day-range';
 import { ForbiddenException, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -669,7 +670,7 @@ export class ReportsService {
     query: { from?: string; to?: string; branchId?: string },
     user?: ReportUser,
   ) {
-    const { from, to } = this.resolveRange(query);
+    const { from, to } = resolveEndOfDayRange(query);
     const branchId = this.resolveBranchId(query.branchId, user);
     const rows = await this.orderItemService.getEndOfDayItems({
       from,

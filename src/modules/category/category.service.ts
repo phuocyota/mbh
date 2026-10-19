@@ -1,4 +1,8 @@
-import { Injectable } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { FindOptionsWhere, IsNull, Repository } from 'typeorm';
 import { Category } from '../../entities/category.entity';
@@ -36,7 +40,7 @@ export class CategoryService extends BaseService<Category> {
 
     const [data, total] = await this.categoryRepository.findAndCount({
       where,
-      order: { sortOrder: 'ASC' },
+      order: { sortOrder: 'ASC', name: 'ASC', id: 'ASC' },
       skip: pagination.skip,
       take: pagination.size,
     });
@@ -44,10 +48,30 @@ export class CategoryService extends BaseService<Category> {
     return toPaginationResponse(data, total, pagination.page, pagination.size);
   }
 
+  async findOneInBranch(id: string, branchId?: string | null) {
+    const category = await this.categoryRepository.findOne({
+      where: { id, branchId: branchId || IsNull() },
+    });
+    if (!category)
+      throw new NotFoundException(
+        'Không tìm thấy nhóm hàng trong chi nhánh hiện tại',
+      );
+    return category;
+  }
+
   async delete(id: string, user: JwtPayload): Promise<Category> {
     const item = await this.findOne(id);
     item.updatedBy = user.userId;
-    await this.categoryRepository.remove(item);
+    try {
+      await this.categoryRepository.remove(item);
+    } catch (error) {
+      if (error?.driverError?.code === '23503' || error?.code === '23503') {
+        throw new BadRequestException(
+          'Nhóm hàng đang được sử dụng. Vui lòng chuyển hàng hóa sang nhóm khác trước khi xóa.',
+        );
+      }
+      throw error;
+    }
     return item;
   }
 
@@ -69,7 +93,7 @@ export class CategoryService extends BaseService<Category> {
 
     const [data, total] = await this.categoryRepository.findAndCount({
       where,
-      order: { sortOrder: 'ASC' },
+      order: { sortOrder: 'ASC', name: 'ASC', id: 'ASC' },
       skip: pagination.skip,
       take: pagination.size,
     });
