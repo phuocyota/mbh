@@ -235,6 +235,76 @@ describe('StockVoucherService', () => {
   });
 
   describe('createImportVoucher', () => {
+    it('persists auto serials and replays the same identities without another stock change', async () => {
+      mockRepositories.StockFundReceiptReason.findOne.mockResolvedValueOnce({
+        code: 'NHNCC',
+        isDebt: true,
+        accountingFormula: '{1561:-,331:+}',
+      });
+      const dto = {
+        branchId: 'branch-id-1',
+        sourceId: 'supplier-id-1',
+        sourceType: 'SUPPLIER',
+        requestId: 'serial-request',
+        paymentStatus: 'DEBT',
+        items: [
+          {
+            productId: 'product-id-1',
+            quantity: 2,
+            unitPrice: 100,
+            serialMode: 'AUTO' as const,
+          },
+        ],
+      };
+      const first = await service.createImportVoucher(dto);
+      const created =
+        mockRepositories.StockReceiptDetail.create.mock.calls[0][0][0];
+      expect(created.inputDetails.serialMode).toBe('AUTO');
+      expect(new Set(created.inputDetails.serials).size).toBe(2);
+      expect(mockManager.query).toHaveBeenCalledWith(
+        expect.stringContaining("d.input_details->'serials'"),
+        ['branch-id-1', 'product-id-1', created.inputDetails.serials],
+      );
+      const stored = mockRepositories.StockRequest.save.mock.calls[0][0];
+      mockRepositories.StockRequest.findOneBy.mockResolvedValueOnce(stored);
+      expect(await service.createImportVoucher(dto)).toEqual(first);
+      expect(mockMovements.change).toHaveBeenCalledTimes(1);
+      expect(mockRepositories.StockReceiptDetail.create).toHaveBeenCalledTimes(
+        1,
+      );
+    });
+
+    it('rejects a serial already imported before writing stock or accounting', async () => {
+      // First query locks the branch; second searches its imported serials.
+      mockManager.query
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([{ exists: 1 }]);
+      await expect(
+        service.createImportVoucher({
+          branchId: 'branch-id-1',
+          sourceId: 'supplier-id-1',
+          sourceType: 'SUPPLIER',
+          paymentStatus: 'DEBT',
+          items: [
+            {
+              productId: 'product-id-1',
+              quantity: 1,
+              unitPrice: 100,
+              serialMode: 'MANUAL',
+              serials: [' SN-1 '],
+            },
+          ],
+        }),
+      ).rejects.toThrow('Serial đã được nhập');
+      expect(mockManager.query).toHaveBeenLastCalledWith(
+        expect.stringContaining("d.input_details->'serials'"),
+        ['branch-id-1', 'product-id-1', ['SN-1']],
+      );
+      expect(mockMovements.change).not.toHaveBeenCalled();
+      expect(mockRepositories.StockReceiptImport.save).not.toHaveBeenCalled();
+      expect(mockSupplierService.recordPurchaseDebt).not.toHaveBeenCalled();
+    });
+
     it('imports material lots with supplier debt, returns lot identity and replays without increasing stock twice', async () => {
       mockRepositories.Product.findOneBy.mockResolvedValueOnce({
         id: 'product-id-1',

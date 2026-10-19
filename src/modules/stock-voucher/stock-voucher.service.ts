@@ -1,4 +1,5 @@
 import { DataSource, EntityManager } from 'typeorm';
+import { prepareImportSerials } from './stock-import-serials';
 import {
   Product,
   StockRequest,
@@ -850,11 +851,31 @@ export class StockVoucherService {
       )
         throw new BadRequestException('CROSS_BRANCH_PRODUCT');
       const quantity = await this.movements.normalize(manager, product, item);
+      const serialInput = prepareImportSerials(item, dto.type, quantity);
+      if (serialInput.serials.length) {
+        // The branch advisory lock above serializes imports, including duplicate checks.
+        const duplicates = await manager.query(
+          `SELECT 1 FROM stock_receipt_detail d
+           JOIN stock_receipt_import r ON r.id = d.import_id
+           WHERE r.branch_id = $1 AND d.product_id = $2
+             AND (d.input_details->'serials') ?| $3::text[] LIMIT 1`,
+          [
+            dto.branchId || dto.fromBranchId || DEFAULT_BRANCH_ID,
+            item.productId,
+            serialInput.serials,
+          ],
+        );
+        if (duplicates.length)
+          throw new BadRequestException(
+            'Serial đã được nhập cho sản phẩm này trong chi nhánh.',
+          );
+      }
       normalized.push({
         ...item,
         actorId: dto.actorId,
         quantity,
         inputDetails: {
+          ...serialInput,
           unitId: item.unitId || product.baseUnitId || null,
           quantity: Number(item.quantity),
           unitPrice: Number(item.unitPrice || 0),

@@ -38,6 +38,20 @@
 - Response theo cấu trúc danh sách chi tiết phiếu nhập hiện có, mỗi dòng bổ sung `lot` gồm `id`, `lotCode`, `stockId`, `productId`, `manufacturedAt`, `expiresAt`, `quantity`, `status`. Dùng `lot.id` làm `inputLots[].lotId` khi bắt đầu chế biến. `lot.quantity` là tổng tồn hiện tại của lô theo đơn vị cơ sở; lượng nhập của phiếu nằm ở `detail.quantity`.
 - Tạo phiếu, cộng tồn/lô, movement và thanh toán/công nợ trong cùng transaction. API này không cần migration mới.
 
+## Nhập số lô và serial trên FE
+
+Màn hình `/stock-in/create` cho nhập số lô, ngày sản xuất, hạn sử dụng theo từng dòng hàng và gửi đến `POST /stock-vouchers` hiện có. Sản phẩm bật theo dõi lô bắt buộc số lô; nguyên liệu bật theo dõi lô bắt buộc hạn dùng. Thông tin lô và serial hiển thị lại trong chi tiết phiếu nhập.
+
+Mỗi dòng nhận `serialMode`:
+
+- `NONE` (mặc định): không dùng serial.
+- `MANUAL`: gửi `serials: ["SN-001", "SN-002"]`, mỗi đơn vị một serial; FE cho nhập mỗi dòng một serial.
+- `AUTO`: không gửi `serials`; backend sinh UUID cho từng đơn vị khi lưu phiếu.
+
+Hàng có serial cần nhập theo đơn vị cơ sở, số lượng nguyên 1–10000. Serial được trim, phân biệt hoa/thường, tối đa 128 ký tự; không trùng trong dòng hoặc với các phiếu nhập trước của cùng sản phẩm/chi nhánh. Kiểm tra trùng nằm trong transaction có khóa chi nhánh, trước khi ghi tồn và kế toán. `serialMode` và `serials` lưu ở `detail.inputDetails`, không cần migration. FE giữ cùng `requestId` khi thử lại nội dung phiếu để tránh cộng tồn/sinh serial lần nữa.
+
+Serial nhập kho là thông tin định danh trên phiếu nhập; luồng này chưa quản lý xuất/chuyển kho theo từng serial và chưa in QR serial hàng nhập. Serial/QR thành phẩm sau chế biến tiếp tục dùng API `production-trace` bên dưới.
+
 ## Bắt đầu mẻ
 
 `POST /kitchen/batches/:id/start`

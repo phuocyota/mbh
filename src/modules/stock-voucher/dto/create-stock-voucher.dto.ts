@@ -2,6 +2,8 @@ import { ApiProperty } from '@nestjs/swagger';
 import { Transform, Type } from 'class-transformer';
 import {
   ArrayNotEmpty,
+  ArrayMaxSize,
+  MaxLength,
   IsArray,
   IsIn,
   IsNotEmpty,
@@ -141,6 +143,19 @@ function RequireSupplierImportPaymentStatus(
 }
 
 export class CreateStockVoucherItemDto {
+  @ApiProperty({ required: false, enum: ['NONE', 'MANUAL', 'AUTO'] })
+  @IsOptional()
+  @IsIn(['NONE', 'MANUAL', 'AUTO'])
+  serialMode?: 'NONE' | 'MANUAL' | 'AUTO';
+
+  @ApiProperty({ required: false, type: [String] })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(10000)
+  @IsString({ each: true })
+  @MaxLength(128, { each: true })
+  serials?: string[];
+
   @ApiProperty({ required: false }) @IsOptional() @IsUUID() unitId?: string;
   @ApiProperty({ required: false }) @IsOptional() @IsString() lotCode?: string;
   @ApiProperty({ required: false })
