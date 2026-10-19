@@ -107,10 +107,27 @@ export class ProductService extends BaseService<Product> {
       });
     }
 
-    if (filter.productType)
-      query.andWhere('p.product_type=:productType', {
-        productType: filter.productType,
-      });
+    if (filter.productType) {
+      const productTypes = [
+        ...new Set(
+          filter.productType
+            .split(',')
+            .map((value) => value.trim())
+            .filter(Boolean),
+        ),
+      ];
+      if (
+        !productTypes.length ||
+        productTypes.some(
+          (type) =>
+            !['INGREDIENT', 'FUEL', 'FINISHED_GOOD', 'MERCHANDISE'].includes(
+              type,
+            ),
+        )
+      )
+        throw new BadRequestException('INVALID_PRODUCT_TYPE');
+      query.andWhere('p.product_type IN (:...productTypes)', { productTypes });
+    }
     this.applyPriceFilter(query, 'p', filter);
 
     query.orderBy('category.sortOrder', 'ASC').addOrderBy('p.name', 'ASC');

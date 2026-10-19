@@ -41,7 +41,7 @@
 
 ## Màn quản lý lô hàng hóa
 
-FE có màn `/stock-lots`, truy cập từ **Hàng hóa → Lô hàng** hoặc tab **Lô hàng** trong phần kho. Màn hình dùng `GET /stock-lots`, phân trang phía server và lọc theo `search` (số lô, mã/tên hàng), `productType`, `status`. Danh sách trả thêm `product`, `stock`, `baseUnit`, tối đa 100 dòng/trang. Quyền ADMIN/MANAGER/KITCHEN; dữ liệu theo chi nhánh được kiểm tra bằng JWT như API hiện có.
+FE có màn `/stock-lots`, truy cập từ **Hàng hóa → Kho → tab Lô hàng**. Màn hình dùng `GET /stock-lots`, phân trang phía server và lọc theo `search` (số lô, mã/tên hàng), `productType`, `status`. Danh sách trả thêm `product`, `stock`, `baseUnit`, tối đa 100 dòng/trang. Quyền ADMIN/MANAGER/KITCHEN; dữ liệu theo chi nhánh được kiểm tra bằng JWT như API hiện có.
 
 Trạng thái lọc: `AVAILABLE` (chưa hết hạn và còn tồn), `EXPIRING` (hết hạn trong 7 ngày kể cả hôm nay, còn tồn), `EXPIRED` (đã hết hạn và còn tồn), `DEPLETED` (đã hết hàng). Lô hết hạn hôm nay còn sử dụng được hết ngày UTC+7. Lô hết tồn hiển thị **Đã hết hàng** dù đã qua hạn; không cộng tổng số lượng giữa các đơn vị khác nhau.
 
@@ -58,6 +58,35 @@ Danh mục hàng hóa có dấu chọn **Hàng tươi sống (HSD mặc định 
 Phiếu nhập gửi `purchasedAt` dạng YYYY-MM-DD, lấy từ ô **Ngày mua / nhập kho**. Nếu không gửi, backend dùng ngày hiện tại UTC+7. Với hàng tươi sống, FE mặc định `expiresAt = purchasedAt + 7 ngày`; đổi ngày mua cập nhật các hạn dùng chưa sửa tay. Người dùng có thể nhập hạn dùng thực tế khác; backend giữ ngày được gửi và chỉ điền mặc định khi thiếu. Ngày sản xuất mặc định là ngày hiện tại khi chọn sản phẩm trên FE, có thể sửa theo thông tin thực tế. Ngày mua được lưu tại `detail.inputDetails.purchasedAt`.
 
 Ví dụ: mua ngày 19/10/2026 → hạn dùng mặc định 26/10/2026. Cơ chế này áp dụng cả `POST /stock-vouchers` và `POST /stock-vouchers/material-imports`.
+
+## Cấu hình hàng để nhập nguyên, nhiên liệu
+
+Form tạo/sửa hàng hóa có checkbox **Nguyên, nhiên liệu**, liên kết trực tiếp với `productType`: chọn mặc định `INGREDIENT`, có thể chuyển sang `FUEL` ở phần Phân loại kho; bỏ chọn chuyển về `MERCHANDISE`. Checkbox phản ánh lại đúng phân loại khi mở sửa, độc lập với Hàng tươi sống/Cho phép bán/Bán trú; không phụ thuộc mã category.
+
+Trong **Danh mục → Tạo/Sửa hàng hóa → Phân loại kho**, chọn `productType=INGREDIENT` (Nguyên liệu) hoặc `FUEL` (Nhiên liệu), rồi chọn đơn vị cơ sở (`baseUnitId`, danh sách từ `GET /kitchen/units`). FE lưu đúng hai trường này; Đồ ăn/Đồ uống/Combo và checkbox Hàng tươi sống không thay thế phân loại kho.
+
+Sau khi lưu phân loại, mở sửa hàng để **Bật theo dõi lô (hàng chưa có tồn)**. Nút gọi `opening-preview` rồi `stock-lots/opening` hiện có, chỉ tiếp tục khi tồn đầu bằng 0. Hàng đang có tồn phải phân bổ tồn đầu theo lô, không tự chuyển hay xóa tồn. Backend tiếp tục kiểm tra/khóa dữ liệu trong transaction. Đổi phân loại/đơn vị của hàng đã dùng vẫn bị chặn theo quy tắc hiện có.
+
+Mở lại phiếu nhập sau khi sửa cấu hình để tải metadata mới. Thông báo lỗi trên dòng hàng hướng dẫn đến đúng bước cấu hình; không bỏ kiểm tra loại hàng hoặc tự suy ra nguyên liệu từ cờ tươi sống.
+
+### Bộ lọc danh sách nhập kho
+
+**Loại nhập** dùng chung nhãn từ cấu hình mục đích tạo phiếu: **Tất cả / Nhập hàng / Nhập nguyên, nhiên liệu**. Nhãn phiếu hiển thị theo `reasonCode` (`NHNCC`/`NHNNL`); bộ lọc danh sách đã tải so khớp mã lý do, trạng thái thanh toán và khoảng ngày, kết hợp với tìm kiếm. Nút **Lọc** áp dụng, **Đặt lại** xóa điều kiện; bản bên trái và bản thu gọn dùng chung trạng thái. Khoảng ngày mặc định để trống. Màu lựa chọn, viền khi mở, lịch và nút Lọc dùng indigo thống nhất với giao diện kho.
+
+### Chọn mục đích trước khi tạo phiếu
+
+Danh sách nhập kho `/stock-in` hiển thị hai nút lớn có mô tả và ví dụ:
+
+- **Nhập hàng**: hàng mua từ nhà cung cấp để bán/bổ sung tồn (nước đóng chai, sữa hộp, bánh đóng gói) → `/stock-in/create?reasonCode=NHNCC`.
+- **Nhập nguyên, nhiên liệu**: nguyên liệu/nhiên liệu phục vụ chế biến (thịt, rau, gạo, dầu ăn, gas), quản lý theo lô và hạn dùng → `/stock-in/create?reasonCode=NHNNL`.
+
+Form đọc lý do từ URL, chọn sẵn đúng mục đích, hiển thị mô tả tương ứng và gọi danh sách sản phẩm phù hợp. Người dùng vẫn có thể đổi giữa hai mục đích trên form; URL cập nhật theo lựa chọn. Mở URL cũ không có lý do hoặc lý do không hợp lệ thì mặc định `NHNCC`. Đã bỏ lựa chọn Khác chưa có nghiệp vụ riêng.
+
+### Bộ chọn hàng theo lý do nhập
+
+Khi chọn **Nhập nguyên, nhiên liệu**, cả tìm kiếm nhanh và bộ chọn sản phẩm trên từng dòng gọi `GET /products?productType=INGREDIENT,FUEL&search=...&page=1&size=50`. Backend lọc bằng `IN` trước phân trang/đếm, đồng thời giữ phạm vi chi nhánh và tìm kiếm hiện có. API vẫn nhận một loại như `productType=FUEL`; không truyền thì giữ danh sách thông thường.
+
+Đổi lý do nhập tạo lại bộ chọn/cache theo phạm vi tương ứng, tránh hiển thị gợi ý từ lý do trước. Hàng đã chọn vẫn được kiểm tra khi lưu phiếu. Cần triển khai FE và BE hỗ trợ bộ lọc nhiều loại; không cần migration.
 
 ## Nhập số lô và serial trên FE
 

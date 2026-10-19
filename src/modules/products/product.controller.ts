@@ -44,6 +44,11 @@ export class ProductController {
   @ApiQuery({ name: 'page', required: false, type: Number })
   @ApiQuery({ name: 'size', required: false, type: Number })
   @ApiResponse({ status: 200, description: 'List of products' })
+  @ApiQuery({
+    name: 'productType',
+    required: false,
+    description: 'One type or comma-separated types, e.g. INGREDIENT,FUEL',
+  })
   @Get()
   async findAll(
     @Req() req: any,
