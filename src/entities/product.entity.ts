@@ -59,6 +59,9 @@ export class Product extends BaseEntity {
   @Column('boolean', { default: true, name: 'is_canteen_item' })
   isCanteenItem: boolean;
 
+  @Column('boolean', { name: 'is_boarding', default: false })
+  isBoarding: boolean;
+
   @Column('varchar', { name: 'product_type', nullable: true })
   productType: 'INGREDIENT' | 'FUEL' | 'FINISHED_GOOD' | 'MERCHANDISE' | null;
   @Column('boolean', { name: 'lot_tracking_enabled', default: false })

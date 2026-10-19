@@ -37,6 +37,7 @@ export class ProductWriteDto {
   productType?: string | null;
   @ApiPropertyOptional() @IsOptional() @IsBoolean() isActive?: boolean;
   @ApiPropertyOptional() @IsOptional() @IsBoolean() isCanteenItem?: boolean;
+  @ApiPropertyOptional() @IsOptional() @IsBoolean() isBoarding?: boolean;
   @ApiPropertyOptional({
     description: 'Hàng tươi sống, hạn dùng mặc định 7 ngày sau ngày mua',
   })

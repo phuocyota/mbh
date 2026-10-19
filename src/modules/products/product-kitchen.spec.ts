@@ -66,6 +66,35 @@ describe('Product classification and unit boundaries', () => {
       h.service.updateProduct('product', { lotTrackingEnabled: true }),
     ).rejects.toThrow('USE_STOCK_LOT_OPENING');
   });
+  it('stores product checkboxes independently and allows all to be false', async () => {
+    const h = harness();
+    await h.service.updateProduct('product', {
+      isCanteenItem: true,
+      isBoarding: true,
+      isFreshFood: true,
+    });
+    expect(h.product).toMatchObject({
+      isCanteenItem: true,
+      isBoarding: true,
+      isFreshFood: true,
+    });
+    await h.service.updateProduct('product', {
+      isCanteenItem: false,
+      isBoarding: false,
+      isFreshFood: false,
+    });
+    expect(h.product).toMatchObject({
+      isCanteenItem: false,
+      isBoarding: false,
+      isFreshFood: false,
+    });
+    await h.service.updateProduct('product', { isBoarding: true });
+    expect(h.product).toMatchObject({
+      isCanteenItem: false,
+      isBoarding: true,
+      isFreshFood: false,
+    });
+  });
   it('persists the fresh food flag and allows switching it off', async () => {
     const h = harness();
     await h.service.updateProduct('product', { isFreshFood: true });

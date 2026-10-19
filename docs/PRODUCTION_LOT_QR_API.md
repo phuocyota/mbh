@@ -39,6 +39,10 @@
 - Response theo cấu trúc danh sách chi tiết phiếu nhập hiện có, mỗi dòng bổ sung `lot` gồm `id`, `lotCode`, `stockId`, `productId`, `manufacturedAt`, `expiresAt`, `quantity`, `status`. Dùng `lot.id` làm `inputLots[].lotId` khi bắt đầu chế biến. `lot.quantity` là tổng tồn hiện tại của lô theo đơn vị cơ sở; lượng nhập của phiếu nằm ở `detail.quantity`.
 - Tạo phiếu, cộng tồn/lô, movement và thanh toán/công nợ trong cùng transaction. Phần nhập lô dùng schema hiện có; lý do `NHNNL` cần migration seed nêu trên.
 
+## Các checkbox hàng hóa
+
+**Hàng tươi sống** (`isFreshFood`), **Cho phép bán** (`isCanteenItem`) và **Bán trú** (`isBoarding`) độc lập; được phép bỏ chọn cả ba. `isBoarding` được lưu riêng thay vì suy ra từ `!isCanteenItem`. Migration `1764700000000-AddProductBoardingFlag.ts` bổ sung cột và giữ trạng thái Bán trú hiển thị của hàng cũ theo quy ước trước đây. Cần chạy migration trước khi triển khai backend mới.
+
 ## Hàng tươi sống
 
 Danh mục hàng hóa có dấu chọn **Hàng tươi sống (HSD mặc định 7 ngày)** khi tạo/sửa, lưu qua `isFreshFood` (`products.is_fresh_food`, mặc định false). Cần chạy migration `1764600000000-AddProductFreshFood.ts` trước khi triển khai backend mới. Không tự thay đổi cờ theo dõi lô hay hạn dùng của các lô cũ khi bật/tắt dấu chọn này.
