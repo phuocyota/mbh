@@ -97,7 +97,7 @@ export class StockLotController {
       });
     }
     const [rows, total] = await qb
-      .orderBy('l.expires_at', 'ASC', 'NULLS LAST')
+      .orderBy('l.expiresAt', 'ASC', 'NULLS LAST')
       .addOrderBy('l.id', 'ASC')
       .skip(p.skip)
       .take(p.size)

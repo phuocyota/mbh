@@ -1,4 +1,12 @@
 import { StockLotController } from './stock-lot.controller';
+import { DataSource, SelectQueryBuilder } from 'typeorm';
+import { join } from 'path';
+
+class MetadataSource extends DataSource {
+  async inspect() {
+    await this.buildMetadatas();
+  }
+}
 
 function harness() {
   const qb: any = {};
@@ -26,6 +34,35 @@ function harness() {
 
 describe('stock lot management listing', () => {
   const request = { user: { userType: 'MANAGER', branchId: 'branch' } };
+  it('builds the real TypeORM joined pagination ordering without a database connection', async () => {
+    const db = new MetadataSource({
+      type: 'postgres',
+      entities: [join(__dirname, '../../entities/*.entity.ts')],
+      synchronize: false,
+    });
+    await db.inspect();
+    const execution = jest
+      .spyOn(SelectQueryBuilder.prototype, 'getManyAndCount')
+      .mockImplementation(async function (this: SelectQueryBuilder<any>) {
+        // This is the same metadata lookup TypeORM performs for skip/take with joins.
+        const [selection] = (
+          this as any
+        ).createOrderByCombinedWithSelectExpression('distinctAlias');
+        expect(selection).toContain('l_expires_at');
+        expect(selection).toContain('l_id');
+        expect(this.getQuery()).toContain('NULLS LAST');
+        return [[], 0];
+      });
+    try {
+      const controller = new StockLotController(db, {} as any, {} as any);
+      expect(
+        await controller.list(request, { page: 2, size: 20 }),
+      ).toMatchObject({ data: [], total: 0, page: 2, size: 20 });
+      expect(execution).toHaveBeenCalledTimes(1);
+    } finally {
+      execution.mockRestore();
+    }
+  });
   it('scopes by JWT branch and returns product, warehouse and base unit with pagination', async () => {
     const h = harness();
     const result = await h.controller.list(request, {
