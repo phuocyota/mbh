@@ -435,7 +435,7 @@ export class ReportsService {
     },
     user?: ReportUser,
   ) {
-    const { from, to } = this.resolveCustomerRange(query);
+    const { from, to } = query.from || query.to ? resolveEndOfDayRange(query) : this.resolveCustomerRange(query);
     const branchId = this.resolveBranchId(query.branchId, user);
     const limit = Math.min(Math.max(Number(query.limit) || 10, 1), 100);
     const reportQuery = {
