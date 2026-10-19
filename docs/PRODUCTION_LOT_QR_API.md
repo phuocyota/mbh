@@ -39,6 +39,14 @@
 - Response theo cấu trúc danh sách chi tiết phiếu nhập hiện có, mỗi dòng bổ sung `lot` gồm `id`, `lotCode`, `stockId`, `productId`, `manufacturedAt`, `expiresAt`, `quantity`, `status`. Dùng `lot.id` làm `inputLots[].lotId` khi bắt đầu chế biến. `lot.quantity` là tổng tồn hiện tại của lô theo đơn vị cơ sở; lượng nhập của phiếu nằm ở `detail.quantity`.
 - Tạo phiếu, cộng tồn/lô, movement và thanh toán/công nợ trong cùng transaction. Phần nhập lô dùng schema hiện có; lý do `NHNNL` cần migration seed nêu trên.
 
+## Màn quản lý lô hàng hóa
+
+FE có màn `/stock-lots`, truy cập từ **Hàng hóa → Lô hàng** hoặc tab **Lô hàng** trong phần kho. Màn hình dùng `GET /stock-lots`, phân trang phía server và lọc theo `search` (số lô, mã/tên hàng), `productType`, `status`. Danh sách trả thêm `product`, `stock`, `baseUnit`, tối đa 100 dòng/trang. Quyền ADMIN/MANAGER/KITCHEN; dữ liệu theo chi nhánh được kiểm tra bằng JWT như API hiện có.
+
+Trạng thái lọc: `AVAILABLE` (chưa hết hạn và còn tồn), `EXPIRING` (hết hạn trong 7 ngày kể cả hôm nay, còn tồn), `EXPIRED` (đã hết hạn và còn tồn), `DEPLETED` (đã hết hàng). Lô hết hạn hôm nay còn sử dụng được hết ngày UTC+7. Lô hết tồn hiển thị **Đã hết hàng** dù đã qua hạn; không cộng tổng số lượng giữa các đơn vị khác nhau.
+
+Chi tiết lô gọi `GET /production-trace/lots/:id`, có kiểm tra chi nhánh trước khi trả nguồn nhập/NCC và lịch sử xuất nhập. Nút **Nhập kho** dẫn về luồng tạo phiếu hiện có; lô được tạo từ nghiệp vụ nhập kho/theo dõi lô. Màn này không sửa trực tiếp tồn hoặc metadata lô. Không cần migration mới cho màn quản lý.
+
 ## Các checkbox hàng hóa
 
 **Hàng tươi sống** (`isFreshFood`), **Cho phép bán** (`isCanteenItem`) và **Bán trú** (`isBoarding`) độc lập; được phép bỏ chọn cả ba. `isBoarding` được lưu riêng thay vì suy ra từ `!isCanteenItem`. Migration `1764700000000-AddProductBoardingFlag.ts` bổ sung cột và giữ trạng thái Bán trú hiển thị của hàng cũ theo quy ước trước đây. Cần chạy migration trước khi triển khai backend mới.

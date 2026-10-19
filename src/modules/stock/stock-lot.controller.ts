@@ -51,13 +51,29 @@ export class StockLotController {
   @Roles(UserType.ADMIN, UserType.MANAGER, UserType.KITCHEN)
   async list(@Req() req: any, @Query() q: any) {
     const branchId = resolveStockBranch(req.user, q.branchId);
-    const p = normalizePagination(q.page, q.size);
+    const p = normalizePagination(
+      Math.max(1, Math.floor(Number(q.page) || 1)),
+      Math.min(100, Math.max(1, Math.floor(Number(q.size) || 20))),
+    );
     const qb = this.db
       .getRepository(StockLot)
       .createQueryBuilder('l')
-      .innerJoin(Stock, 's', 's.id=l.stock_id')
-      .innerJoin(Product, 'p', 'p.id=l.product_id')
+      .innerJoinAndMapOne('l.stock', Stock, 's', 's.id=l.stock_id')
+      .innerJoinAndMapOne('l.product', Product, 'p', 'p.id=l.product_id')
+      .leftJoinAndMapOne(
+        'l.baseUnit',
+        MeasurementUnit,
+        'u',
+        'u.id=p.base_unit_id',
+      )
       .where('s.branch_id=:branchId', { branchId });
+    if (typeof q.search === 'string' && q.search.trim())
+      qb.andWhere(
+        '(l.lot_code ILIKE :search OR p.name ILIKE :search OR p.code ILIKE :search)',
+        { search: `%${q.search.trim()}%` },
+      );
+    if (q.productId && !isUUID(q.productId))
+      throw new BadRequestException('INVALID_LOT_PRODUCT');
     if (q.productId)
       qb.andWhere('l.product_id=:productId', { productId: q.productId });
     if (q.productType)
@@ -71,8 +87,18 @@ export class StockLotController {
       qb.andWhere('l.expires_at<:today AND l.quantity>0', {
         today: localDate(),
       });
+    if (q.status === 'DEPLETED') qb.andWhere('l.quantity<=0');
+    if (q.status === 'EXPIRING') {
+      const end = new Date(`${localDate()}T00:00:00Z`);
+      end.setUTCDate(end.getUTCDate() + 7);
+      qb.andWhere('l.expires_at BETWEEN :today AND :until AND l.quantity>0', {
+        today: localDate(),
+        until: end.toISOString().slice(0, 10),
+      });
+    }
     const [rows, total] = await qb
       .orderBy('l.expires_at', 'ASC', 'NULLS LAST')
+      .addOrderBy('l.id', 'ASC')
       .skip(p.skip)
       .take(p.size)
       .getManyAndCount();
