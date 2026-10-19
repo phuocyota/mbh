@@ -204,3 +204,10 @@ Mở **Quản lý kho → Lô hàng → Serial** (`/stock-lots?tab=serial`). B�
 - Cả hai API dùng JWT, quyền ADMIN/MANAGER/KITCHEN và quy tắc chi nhánh như các API kho. Không cần migration.
 - Kho là **kho nhập ban đầu**, trạng thái là **trạng thái phiếu nhập**. Hệ thống chưa ghi nhận serial được chọn khi xuất/chuyển kho nên không suy ra tồn hiện tại, đã bán hoặc lịch sử riêng từng serial. Chi tiết có liên kết xem lịch sử của **toàn bộ lô** nếu có.
 - Kiểm tra: `npm run test -- --runInBand stock-serial warehouse stock-lot.controller`; sau build chạy `WAREHOUSE_PGLITE_PATH=/tmp/mbh-warehouse-pgcheck/node_modules/@electric-sql/pglite node scripts/verify-stock-serials-postgres.cjs` (SQL tách biệt, không kết nối database thật).
+
+
+### Truy xuất đến từng serial
+
+Trong chi tiết lô, bấm một số serial để mở `/warehouse/trace?mode=serial&detailId=<uuid>&position=<n>`. Màn Truy xuất nguồn gốc có hai lựa chọn **Theo lô hàng** và **Theo serial**. Tra serial rồi chọn kết quả sẽ hiển thị chuỗi nhà cung cấp → đúng phiếu nhập → lô → serial; định danh nguồn là cặp dòng phiếu nhập/vị trí, không suy nguồn từ lần nhập đầu tiên của cả lô. Nếu nhiều kết quả trùng chữ serial, người dùng chọn đúng hàng hóa/phiếu nhập. Lịch sử lô vẫn được mở riêng và không được trình bày là lịch sử riêng của serial.
+
+Chi tiết serial ưu tiên hiển thị **Ngày nhập kho** và **Ngày hết hạn** ngay dưới số serial. Ngày nhập dùng `input_details.purchasedAt` khi đã khai báo; bản ghi cũ thiếu trường này hiển thị ngày tạo phiếu nhập. Hạn dùng lấy từ thông tin nhập của chính serial, thiếu thì hiển thị chưa khai báo.

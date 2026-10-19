@@ -12,6 +12,7 @@ export const stockSerialCte = `WITH serials AS (
   SELECT d.id AS "detailId", x.position::int AS position, x.serial,
     p.id AS "productId",p.code AS "productCode",p.name AS "productName",
     r.id AS "receiptId",r.code AS "receiptCode",r.created_at AS "receivedAt",
+    d.input_details->>'purchasedAt' AS "purchasedAt",
     r.status AS "receiptStatus",d.input_details->>'serialMode' AS "serialMode",
     d.input_details->>'lotCode' AS "lotCode",location."lotId",
     location."stockId",location."stockName",supplier.name AS "supplierName",
