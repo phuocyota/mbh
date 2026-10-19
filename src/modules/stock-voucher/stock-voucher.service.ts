@@ -1,4 +1,5 @@
 import { DataSource, EntityManager } from 'typeorm';
+import { defaultFreshFoodExpiry } from './stock-import-expiry';
 import { prepareImportSerials } from './stock-import-serials';
 import {
   Product,
@@ -178,6 +179,7 @@ export class StockVoucherService {
       branchId: dto.branchId,
       actorId,
       requestId: dto.requestId,
+      purchasedAt: dto.purchasedAt,
       sourceId: dto.supplierId,
       sourceType: STOCK_PARTY_TYPE.SUPPLIER,
       paymentStatus: dto.paymentStatus,
@@ -830,11 +832,18 @@ export class StockVoucherService {
       dto.items.map((item) => item.productId),
     );
     const normalized = [] as any[];
-    for (const item of dto.items) {
+    for (const rawItem of dto.items) {
+      const item = { ...rawItem };
       const product = await manager
         .getRepository(Product)
         .findOneBy({ id: item.productId });
       if (!product) throw new BadRequestException('PRODUCT_NOT_FOUND');
+      if (dto.type === 'IMPORT')
+        item.expiresAt = defaultFreshFoodExpiry(
+          product.isFreshFood,
+          dto.purchasedAt || localDate(),
+          item.expiresAt,
+        );
       if (dto.purpose === 'MATERIAL_IMPORT') {
         if (!['INGREDIENT', 'FUEL'].includes(product.productType || ''))
           throw new BadRequestException(
@@ -883,6 +892,8 @@ export class StockVoucherService {
         quantity,
         inputDetails: {
           ...serialInput,
+          purchasedAt:
+            dto.type === 'IMPORT' ? dto.purchasedAt || localDate() : null,
           unitId: item.unitId || product.baseUnitId || null,
           quantity: Number(item.quantity),
           unitPrice: Number(item.unitPrice || 0),

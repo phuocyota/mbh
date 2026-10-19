@@ -63,6 +63,8 @@ export class Product extends BaseEntity {
   productType: 'INGREDIENT' | 'FUEL' | 'FINISHED_GOOD' | 'MERCHANDISE' | null;
   @Column('boolean', { name: 'lot_tracking_enabled', default: false })
   lotTrackingEnabled: boolean;
+  @Column('boolean', { name: 'is_fresh_food', default: false })
+  isFreshFood: boolean;
   @Column('boolean', { name: 'requires_sample', default: false })
   requiresSample: boolean;
   @Column('int', { name: 'cook_duration', default: 30 }) cookDuration: number;

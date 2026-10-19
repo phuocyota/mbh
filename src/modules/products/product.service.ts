@@ -534,6 +534,7 @@ export class ProductService extends BaseService<Product> {
       'baseUnitId',
       'isActive',
       'isCanteenItem',
+      'isFreshFood',
       'productType',
       'requiresSample',
       'cookDuration',

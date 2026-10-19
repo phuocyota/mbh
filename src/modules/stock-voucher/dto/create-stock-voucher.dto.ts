@@ -5,6 +5,7 @@ import {
   ArrayMaxSize,
   MaxLength,
   IsArray,
+  IsDateString,
   IsIn,
   IsNotEmpty,
   IsNumber,
@@ -12,6 +13,7 @@ import {
   IsString,
   IsUUID,
   Min,
+  Matches,
   isUUID,
   registerDecorator,
   ValidateNested,
@@ -194,6 +196,15 @@ export class CreateStockVoucherItemDto {
 }
 
 export class CreateStockVoucherDto {
+  @ApiProperty({
+    required: false,
+    description: 'Ngày mua/nhập kho YYYY-MM-DD; mặc định ngày hiện tại UTC+7',
+  })
+  @IsOptional()
+  @IsDateString({ strict: true })
+  @Matches(/^\d{4}-\d{2}-\d{2}$/)
+  purchasedAt?: string;
+
   @ApiProperty({ required: false, enum: ['CASH', 'BANK_TRANSFER'] })
   @IsOptional()
   @IsIn(['CASH', 'BANK_TRANSFER'])

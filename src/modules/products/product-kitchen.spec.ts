@@ -66,6 +66,13 @@ describe('Product classification and unit boundaries', () => {
       h.service.updateProduct('product', { lotTrackingEnabled: true }),
     ).rejects.toThrow('USE_STOCK_LOT_OPENING');
   });
+  it('persists the fresh food flag and allows switching it off', async () => {
+    const h = harness();
+    await h.service.updateProduct('product', { isFreshFood: true });
+    expect(h.product.isFreshFood).toBe(true);
+    await h.service.updateProduct('product', { isFreshFood: false });
+    expect(h.product.isFreshFood).toBe(false);
+  });
   it('requires an explicit base unit on newly created materials', async () => {
     await expect(
       harness().service.createProduct({ name: 'Fuel', productType: 'FUEL' }),

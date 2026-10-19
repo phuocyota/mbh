@@ -4,6 +4,7 @@ import {
   ArrayMaxSize,
   ArrayNotEmpty,
   IsArray,
+  IsDateString,
   IsIn,
   IsNotEmpty,
   IsNumber,
@@ -50,6 +51,15 @@ export class MaterialImportItemDto {
 }
 
 export class CreateMaterialImportDto {
+  @ApiProperty({
+    required: false,
+    description: 'Ngày mua/nhập kho YYYY-MM-DD; mặc định ngày hiện tại UTC+7',
+  })
+  @IsOptional()
+  @IsDateString({ strict: true })
+  @Matches(/^\d{4}-\d{2}-\d{2}$/)
+  purchasedAt?: string;
+
   @ApiProperty({
     description:
       'UUID chống nhập trùng khi gửi lại yêu cầu; dùng UUID mới cho mỗi phiếu',

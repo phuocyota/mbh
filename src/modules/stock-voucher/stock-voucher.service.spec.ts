@@ -235,6 +235,46 @@ describe('StockVoucherService', () => {
   });
 
   describe('createImportVoucher', () => {
+    it('defaults fresh food expiry from purchase date, persists it, and replays without mutating the request', async () => {
+      mockRepositories.Product.findOneBy.mockResolvedValueOnce({
+        id: 'product-id-1',
+        isFreshFood: true,
+      });
+      mockRepositories.StockFundReceiptReason.findOne.mockResolvedValueOnce({
+        code: 'NHNCC',
+        isDebt: true,
+        accountingFormula: '{152:-,331:+}',
+      });
+      const dto = {
+        branchId: 'branch-id-1',
+        sourceId: 'supplier-id-1',
+        sourceType: 'SUPPLIER',
+        requestId: 'fresh-food-request',
+        purchasedAt: '2099-01-28',
+        paymentStatus: 'DEBT',
+        items: [{ productId: 'product-id-1', quantity: 2, unitPrice: 100 }],
+      };
+      const first = await service.createImportVoucher(dto);
+      expect(
+        mockRepositories.StockReceiptDetail.create.mock.calls[0][0][0]
+          .inputDetails,
+      ).toMatchObject({ purchasedAt: '2099-01-28', expiresAt: '2099-02-04' });
+      expect(mockMovements.change).toHaveBeenCalledWith(
+        mockManager,
+        'stock-id-1',
+        'product-id-1',
+        2,
+        'import-id',
+        expect.objectContaining({ expiresAt: '2099-02-04' }),
+      );
+      expect(dto.items[0]).not.toHaveProperty('expiresAt');
+      mockRepositories.StockRequest.findOneBy.mockResolvedValueOnce(
+        mockRepositories.StockRequest.save.mock.calls[0][0],
+      );
+      expect(await service.createImportVoucher(dto)).toEqual(first);
+      expect(mockMovements.change).toHaveBeenCalledTimes(1);
+    });
+
     it('applies material product restrictions when selecting the NHNNL reason on a normal import', async () => {
       mockRepositories.Product.findOneBy.mockResolvedValueOnce({
         id: 'product-id-1',
