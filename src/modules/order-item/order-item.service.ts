@@ -102,10 +102,10 @@ export class OrderItemService extends BaseService<OrderItem> {
       .addSelect('oi.product_name', 'productName')
       .addSelect('SUM(oi.quantity)', 'totalQuantity')
       .addSelect('COALESCE(SUM(oi.total_amount), 0)', 'totalRevenue')
-      .where('o.created_at BETWEEN :from AND :to', {
-        from: query.from,
-        to: query.to,
-      })
+      .where(
+        `o.created_at BETWEEN (CAST(:from AS timestamptz) AT TIME ZONE current_setting('TimeZone')) AND (CAST(:to AS timestamptz) AT TIME ZONE current_setting('TimeZone'))`,
+        { from: query.from.toISOString(), to: query.to.toISOString() },
+      )
       .andWhere('o.payment_status = :paymentStatus', {
         paymentStatus: ORDER_PAYMENT_STATUS.PAID,
       })
@@ -142,10 +142,10 @@ export class OrderItemService extends BaseService<OrderItem> {
       .addSelect('oi.product_name', 'productName')
       .addSelect('SUM(oi.quantity)', 'totalQuantity')
       .addSelect('COALESCE(SUM(oi.total_amount), 0)', 'totalRevenue')
-      .where('o.created_at BETWEEN :from AND :to', {
-        from: query.from,
-        to: query.to,
-      })
+      .where(
+        `o.created_at BETWEEN (CAST(:from AS timestamptz) AT TIME ZONE current_setting('TimeZone')) AND (CAST(:to AS timestamptz) AT TIME ZONE current_setting('TimeZone'))`,
+        { from: query.from.toISOString(), to: query.to.toISOString() },
+      )
       .andWhere('o.payment_status = :paymentStatus', {
         paymentStatus: ORDER_PAYMENT_STATUS.PAID,
       })
@@ -244,10 +244,10 @@ export class OrderItemService extends BaseService<OrderItem> {
       .addSelect('COALESCE(SUM(oi.total_amount), 0)', 'revenue')
       .addSelect('o.branch_id', 'branchId')
       .addSelect('b.name', 'branchName')
-      .where('o.created_at BETWEEN :from AND :to', {
-        from: query.from,
-        to: query.to,
-      })
+      .where(
+        `o.created_at BETWEEN (CAST(:from AS timestamptz) AT TIME ZONE current_setting('TimeZone')) AND (CAST(:to AS timestamptz) AT TIME ZONE current_setting('TimeZone'))`,
+        { from: query.from.toISOString(), to: query.to.toISOString() },
+      )
       .andWhere('o.payment_status = :paymentStatus', {
         paymentStatus: ORDER_PAYMENT_STATUS.PAID,
       })

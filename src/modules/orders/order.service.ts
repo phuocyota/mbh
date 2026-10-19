@@ -545,10 +545,10 @@ export class OrderService {
   }) {
     const orderQb = this.orderRepository
       .createQueryBuilder('o')
-      .where('o.created_at BETWEEN :from AND :to', {
-        from: query.from,
-        to: query.to,
-      })
+      .where(
+        `o.created_at BETWEEN (CAST(:from AS timestamptz) AT TIME ZONE current_setting('TimeZone')) AND (CAST(:to AS timestamptz) AT TIME ZONE current_setting('TimeZone'))`,
+        { from: query.from.toISOString(), to: query.to.toISOString() },
+      )
       .andWhere('o.payment_status = :paymentStatus', {
         paymentStatus: ORDER_PAYMENT_STATUS.PAID,
       });
@@ -571,10 +571,10 @@ export class OrderService {
 
     const refundQb = this.orderRepository
       .createQueryBuilder('o')
-      .where('o.created_at BETWEEN :from AND :to', {
-        from: query.from,
-        to: query.to,
-      })
+      .where(
+        `o.created_at BETWEEN (CAST(:from AS timestamptz) AT TIME ZONE current_setting('TimeZone')) AND (CAST(:to AS timestamptz) AT TIME ZONE current_setting('TimeZone'))`,
+        { from: query.from.toISOString(), to: query.to.toISOString() },
+      )
       .andWhere('o.payment_status = :paymentStatus', {
         paymentStatus: ORDER_PAYMENT_STATUS.REFUNDED,
       });

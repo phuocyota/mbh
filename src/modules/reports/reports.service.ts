@@ -112,7 +112,7 @@ export class ReportsService {
     month?: string;
   }): ResolvedDateRange {
     if (query.from || query.to) {
-      return this.resolveRange(query);
+      return resolveEndOfDayRange(query);
     }
 
     const now = new Date();
@@ -151,7 +151,7 @@ export class ReportsService {
     },
     user?: ReportUser,
   ) {
-    const { from, to } = this.resolveRange(query);
+    const { from, to } = resolveEndOfDayRange(query);
     const branchId = this.resolveBranchId(query.branchId, user);
     const { totalRow, refundedRow } =
       await this.orderService.getRevenueSummaryRows({
@@ -515,7 +515,7 @@ export class ReportsService {
     },
     user?: ReportUser,
   ) {
-    const { from, to } = this.resolveRange(query);
+    const { from, to } = resolveEndOfDayRange(query);
     const branchId = this.resolveBranchId(query.branchId, user);
     const limit = Math.min(Math.max(Number(query.limit) || 10, 1), 100);
     const rows = await this.orderItemService.getTopProducts({
@@ -648,7 +648,7 @@ export class ReportsService {
     },
     user?: ReportUser,
   ) {
-    const { from, to } = this.resolveRange(query);
+    const { from, to } = resolveEndOfDayRange(query);
     const branchId = this.resolveBranchId(query.branchId, user);
     const limit = Math.min(Math.max(Number(query.limit) || 10, 1), 100);
     const rows = await this.orderItemService.getBottomProducts({
