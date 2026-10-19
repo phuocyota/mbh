@@ -20,6 +20,8 @@ interface ErrorResponse {
   method: string;
   code?: string;
   shortages?: unknown[];
+  matches?: unknown[];
+  total?: number;
 }
 
 interface ContractErrorResponse {
@@ -48,6 +50,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
     let contractError: ContractErrorResponse | null = null;
     let code: string | undefined;
     let shortages: unknown[] | undefined;
+    let traceChoices: { matches: unknown[]; total: number } | undefined;
 
     if (exception instanceof HttpException) {
       statusCode = exception.getStatus();
@@ -59,6 +62,16 @@ export class AllExceptionsFilter implements ExceptionFilter {
         const responseObj = exceptionResponse as Record<string, unknown>;
         code =
           typeof responseObj.code === 'string' ? responseObj.code : undefined;
+        if (
+          statusCode === 409 &&
+          code === 'TRACE_ID_AMBIGUOUS' &&
+          Array.isArray(responseObj.matches) &&
+          typeof responseObj.total === 'number'
+        )
+          traceChoices = {
+            matches: responseObj.matches,
+            total: responseObj.total,
+          };
         shortages = Array.isArray(responseObj.shortages)
           ? responseObj.shortages
           : undefined;
@@ -94,6 +107,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
       method: request.method,
       ...(code ? { code } : {}),
       ...(shortages ? { shortages } : {}),
+      ...traceChoices,
     };
 
     // Log lỗi với đầy đủ thông tin

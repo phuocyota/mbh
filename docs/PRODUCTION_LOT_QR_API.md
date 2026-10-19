@@ -211,3 +211,16 @@ Mở **Quản lý kho → Lô hàng → Serial** (`/stock-lots?tab=serial`). B�
 Trong chi tiết lô, bấm một số serial để mở `/warehouse/trace?mode=serial&detailId=<uuid>&position=<n>`. Màn Truy xuất nguồn gốc có hai lựa chọn **Theo lô hàng** và **Theo serial**. Tra serial rồi chọn kết quả sẽ hiển thị chuỗi nhà cung cấp → đúng phiếu nhập → lô → serial; định danh nguồn là cặp dòng phiếu nhập/vị trí, không suy nguồn từ lần nhập đầu tiên của cả lô. Nếu nhiều kết quả trùng chữ serial, người dùng chọn đúng hàng hóa/phiếu nhập. Lịch sử lô vẫn được mở riêng và không được trình bày là lịch sử riêng của serial.
 
 Chi tiết serial ưu tiên hiển thị **Ngày nhập kho** và **Ngày hết hạn** ngay dưới số serial. Ngày nhập dùng `input_details.purchasedAt` khi đã khai báo; bản ghi cũ thiếu trường này hiển thị ngày tạo phiếu nhập. Hạn dùng lấy từ thông tin nhập của chính serial, thiếu thì hiển thị chưa khai báo.
+
+
+## API truy xuất bằng một ID
+
+`GET /production-trace/lookup?id=<ID-lô-hoặc-số-serial>` (JWT, quyền ADMIN/MANAGER/KITCHEN; phạm vi chi nhánh theo JWT, ADMIN có thể chọn `branchId`). Chỉ có một trường định danh `id`, chuỗi tối đa 128 ký tự. Dùng query param và URL-encode để hỗ trợ serial có dấu `/`, `#`, `+`.
+
+- ID lô: UUID của `stock_lots.id`, trả `{ type: "LOT", id, trace }`.
+- Số serial: so khớp chính xác, phân biệt hoa/thường, trả `{ type: "SERIAL", id, serial, lotTrace }`. `serial` có ngày nhập (`purchasedAt`, fallback `receivedAt`), hạn dùng (`expiresAt`), hàng hóa, đúng phiếu nhập và NCC của serial đó. `lotTrace` là lịch sử chung của lô hoặc `null`, không phải lịch sử xuất/chuyển riêng của serial.
+- Serial AUTO dạng UUID vẫn được tra như serial; không suy loại chỉ từ định dạng UUID.
+- Không tìm thấy trong chi nhánh: 404. Trùng nhiều serial hoặc vừa khớp UUID lô vừa khớp serial: 409, `code=TRACE_ID_AMBIGUOUS`, `matches` (tối đa 20 serial và 1 lô), `total`. Không tự chọn nguồn gốc đầu tiên. Chọn bản ghi trong kết quả rồi dùng API chi tiết cũ `detailId/position` hoặc API lô để phân biệt chính xác.
+- FE mặc định có một ô nhập ID lô/serial; bấm serial trong lô cũng gửi chuỗi serial tới API này. Các đường dẫn và API chi tiết cũ vẫn hoạt động.
+
+Ví dụ: `/production-trace/lookup?id=DEMO-SERIAL-20261019-001` hoặc `/production-trace/lookup?id=<stock_lots.id>`.

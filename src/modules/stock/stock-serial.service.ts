@@ -46,9 +46,14 @@ export class StockSerialService {
       params.push(value);
       clauses.push(sql.replaceAll('?', `$${params.length}`));
     };
-    for (const key of ['search', 'lotCode']) {
+    for (const key of ['search', 'lotCode', 'serial']) {
       if (q[key] !== undefined && typeof q[key] !== 'string')
         throw new BadRequestException('Bộ lọc serial không hợp lệ.');
+    }
+    if (q.serial !== undefined) {
+      if (!q.serial.trim() || q.serial.trim().length > 128)
+        throw new BadRequestException('Số serial không hợp lệ.');
+      add('serial=?', q.serial.trim());
     }
     if (q.search?.trim())
       add(
