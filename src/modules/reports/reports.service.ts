@@ -213,16 +213,21 @@ export class ReportsService {
       to,
       branchId,
     });
+    const direct = await this.getDirectSales(from, to, branchId);
+    const days = new Map(rows.map(row => [row.day, { day: row.day, orderCount: Number(row.orderCount), revenue: Number(row.revenue) }]));
+    for (const day of new Set(direct.map(row => row.date))) {
+      const entries = direct.filter(row => row.date === day);
+      const value = days.get(day) || { day, orderCount: 0, revenue: 0 };
+      value.orderCount += new Set(entries.map(row => row.voucherId)).size;
+      value.revenue += entries.reduce((sum, row) => sum + Number(row.total), 0);
+      days.set(day, value);
+    }
 
     return {
       from,
       to,
       branchId: branchId || null,
-      data: rows.map((row) => ({
-        day: row.day,
-        orderCount: Number(row.orderCount),
-        revenue: Number(row.revenue),
-      })),
+      data: [...days.values()].sort((a, b) => a.day.localeCompare(b.day)),
     };
   }
 

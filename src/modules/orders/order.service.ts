@@ -599,12 +599,12 @@ export class OrderService {
   }) {
     const qb = this.orderRepository
       .createQueryBuilder('o')
-      .select("TO_CHAR(o.created_at, 'YYYY-MM-DD')", 'day')
+      .select("TO_CHAR(o.created_at AT TIME ZONE current_setting('TimeZone') AT TIME ZONE 'Asia/Ho_Chi_Minh', 'YYYY-MM-DD')", 'day')
       .addSelect('COUNT(o.id)', 'orderCount')
       .addSelect('COALESCE(SUM(o.total_amount), 0)', 'revenue')
-      .where('o.created_at BETWEEN :from AND :to', {
-        from: query.from,
-        to: query.to,
+      .where("o.created_at BETWEEN (CAST(:from AS timestamptz) AT TIME ZONE current_setting('TimeZone')) AND (CAST(:to AS timestamptz) AT TIME ZONE current_setting('TimeZone'))", {
+        from: query.from.toISOString(),
+        to: query.to.toISOString(),
       })
       .andWhere('o.payment_status = :paymentStatus', {
         paymentStatus: ORDER_PAYMENT_STATUS.PAID,
@@ -722,9 +722,9 @@ export class OrderService {
       .addSelect('COALESCE(SUM(o.subtotal), 0)', 'totalAmount')
       .addSelect('COALESCE(SUM(o.discount_amount), 0)', 'discount')
       .addSelect('COALESCE(SUM(o.total_amount), 0)', 'revenue')
-      .where('o.created_at BETWEEN :from AND :to', {
-        from: query.from,
-        to: query.to,
+      .where("o.created_at BETWEEN (CAST(:from AS timestamptz) AT TIME ZONE current_setting('TimeZone')) AND (CAST(:to AS timestamptz) AT TIME ZONE current_setting('TimeZone'))", {
+        from: query.from.toISOString(),
+        to: query.to.toISOString(),
       })
       .andWhere('o.payment_status = :paymentStatus', {
         paymentStatus: ORDER_PAYMENT_STATUS.PAID,

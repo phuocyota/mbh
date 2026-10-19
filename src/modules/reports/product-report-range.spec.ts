@@ -18,7 +18,7 @@ function harness() {
     payments as any,
     {} as any,
     {} as any,
-    {} as any,
+    { query: jest.fn().mockResolvedValue([]) } as any,
     {} as any,
     {} as any,
   );

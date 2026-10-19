@@ -299,9 +299,9 @@ export class OrderItemService extends BaseService<OrderItem> {
       .addSelect("COALESCE(u.full_name, 'Hệ thống')", 'employee')
       .addSelect('COALESCE(SUM(oi.quantity), 0)', 'quantity')
       .addSelect('COALESCE(SUM(oi.total_amount), 0)', 'revenue')
-      .where('o.created_at BETWEEN :from AND :to', {
-        from: query.from,
-        to: query.to,
+      .where("o.created_at BETWEEN (CAST(:from AS timestamptz) AT TIME ZONE current_setting('TimeZone')) AND (CAST(:to AS timestamptz) AT TIME ZONE current_setting('TimeZone'))", {
+        from: query.from.toISOString(),
+        to: query.to.toISOString(),
       })
       .andWhere('o.payment_status = :paymentStatus', {
         paymentStatus: ORDER_PAYMENT_STATUS.PAID,
@@ -351,9 +351,9 @@ export class OrderItemService extends BaseService<OrderItem> {
         'COALESCE(SUM(COALESCE(p.cost_price, 0) * oi.quantity), 0)',
         'cost',
       )
-      .where('o.created_at BETWEEN :from AND :to', {
-        from: query.from,
-        to: query.to,
+      .where("o.created_at BETWEEN (CAST(:from AS timestamptz) AT TIME ZONE current_setting('TimeZone')) AND (CAST(:to AS timestamptz) AT TIME ZONE current_setting('TimeZone'))", {
+        from: query.from.toISOString(),
+        to: query.to.toISOString(),
       })
       .andWhere('o.payment_status = :paymentStatus', {
         paymentStatus: ORDER_PAYMENT_STATUS.PAID,
