@@ -43,7 +43,7 @@
 
 Danh mục hàng hóa có dấu chọn **Hàng tươi sống (HSD mặc định 7 ngày)** khi tạo/sửa, lưu qua `isFreshFood` (`products.is_fresh_food`, mặc định false). Cần chạy migration `1764600000000-AddProductFreshFood.ts` trước khi triển khai backend mới. Không tự thay đổi cờ theo dõi lô hay hạn dùng của các lô cũ khi bật/tắt dấu chọn này.
 
-Phiếu nhập gửi `purchasedAt` dạng YYYY-MM-DD, lấy từ ô **Ngày mua / nhập kho**. Nếu không gửi, backend dùng ngày hiện tại UTC+7. Với hàng tươi sống, FE mặc định `expiresAt = purchasedAt + 7 ngày`; đổi ngày mua cập nhật các hạn dùng chưa sửa tay. Người dùng có thể nhập hạn dùng thực tế khác; backend giữ ngày được gửi và chỉ điền mặc định khi thiếu. Ngày sản xuất vẫn nhập theo thông tin thực tế. Ngày mua được lưu tại `detail.inputDetails.purchasedAt`.
+Phiếu nhập gửi `purchasedAt` dạng YYYY-MM-DD, lấy từ ô **Ngày mua / nhập kho**. Nếu không gửi, backend dùng ngày hiện tại UTC+7. Với hàng tươi sống, FE mặc định `expiresAt = purchasedAt + 7 ngày`; đổi ngày mua cập nhật các hạn dùng chưa sửa tay. Người dùng có thể nhập hạn dùng thực tế khác; backend giữ ngày được gửi và chỉ điền mặc định khi thiếu. Ngày sản xuất mặc định là ngày hiện tại khi chọn sản phẩm trên FE, có thể sửa theo thông tin thực tế. Ngày mua được lưu tại `detail.inputDetails.purchasedAt`.
 
 Ví dụ: mua ngày 19/10/2026 → hạn dùng mặc định 26/10/2026. Cơ chế này áp dụng cả `POST /stock-vouchers` và `POST /stock-vouchers/material-imports`.
 
@@ -51,7 +51,7 @@ Ví dụ: mua ngày 19/10/2026 → hạn dùng mặc định 26/10/2026. Cơ ch�
 
 Màn hình `/stock-in/create` có lựa chọn **Nhập nguyên, nhiên liệu** bên cạnh **Nhập hàng từ nhà cung cấp**, gửi `reasonCode=NHNNL` đến `POST /stock-vouchers`. Backend tự áp dụng kiểm tra `MATERIAL_IMPORT` cho lý do này (chỉ INGREDIENT/FUEL, bật theo dõi lô, có đơn vị cơ sở, mã lô và hạn dùng hợp lệ). Chi tiết phiếu hiển thị loại phiếu theo lý do đã lưu.
 
-Màn hình `/stock-in/create` tự sinh số lô dạng `LO-<UUID>` khi chọn sản phẩm (cả tìm kiếm nhanh và thêm dòng). Số lô chỉ đọc, được giữ trong dòng hàng khi thay đổi số lượng hoặc thử lưu lại; ngày sản xuất và hạn sử dụng do người dùng nhập. FE gửi các trường này đến `POST /stock-vouchers` hiện có. Sản phẩm bật theo dõi lô bắt buộc số lô; nguyên liệu bật theo dõi lô bắt buộc hạn dùng. Thông tin lô và serial hiển thị lại trong chi tiết phiếu nhập.
+Màn hình `/stock-in/create` tự sinh số lô dạng `LO-<UUID>` khi chọn sản phẩm (cả tìm kiếm nhanh và thêm dòng). Số lô chỉ đọc, được giữ trong dòng hàng khi thay đổi số lượng hoặc thử lưu lại; ngày sản xuất mặc định hôm nay và có thể sửa; hạn sử dụng do người dùng nhập hoặc mặc định theo quy tắc hàng tươi sống. FE gửi các trường này đến `POST /stock-vouchers` hiện có. Sản phẩm bật theo dõi lô bắt buộc số lô; nguyên liệu bật theo dõi lô bắt buộc hạn dùng. Thông tin lô và serial hiển thị lại trong chi tiết phiếu nhập.
 
 Mỗi dòng nhận `serialMode`:
 
