@@ -35,6 +35,19 @@ export class CustomerService extends BaseService<Customer> {
     return 'Customer';
   }
 
+  async generateCode(): Promise<string> {
+    // nextval reserves each number atomically across concurrent API requests.
+    // Skip codes created manually after the sequence migration was applied.
+    let customerCode: string;
+    do {
+      const [row] = await this.customerRepository.query(
+        "SELECT nextval('customer_code_seq')::text AS value",
+      );
+      customerCode = `KH${String(row.value).padStart(6, '0')}`;
+    } while (await this.customerRepository.existsBy({ customerCode }));
+    return customerCode;
+  }
+
   async findAll(page?: any, size?: any, branchId?: string, getDebt = false) {
     const pagination = normalizePagination(page, size);
     const qb = this.customerRepository

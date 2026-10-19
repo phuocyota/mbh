@@ -1,5 +1,6 @@
 import {
   Controller,
+  ConflictException,
   Get,
   Post,
   Body,
@@ -100,6 +101,25 @@ export class CustomerController {
     return this.customerService.findByCardUid(cardUid);
   }
 
+  @Post('generate-code')
+  @UseGuards(JwtAuthGuard)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Sinh mã khách hàng mới',
+    description:
+      'Cấp mã KH000001, KH000002... Mỗi lần gọi cấp một mã mới; chưa tạo khách hàng.',
+  })
+  @ApiResponse({
+    status: 200,
+    schema: {
+      type: 'object',
+      properties: { customerCode: { type: 'string', example: 'KH000001' } },
+    },
+  })
+  async generateCode() {
+    return { customerCode: await this.customerService.generateCode() };
+  }
+
   @Get(':id')
   @ApiOperation({ summary: 'Get customer by ID' })
   @ApiParam({ name: 'id', description: 'Customer ID' })
@@ -122,9 +142,18 @@ export class CustomerController {
     type: CustomerDto,
   })
   async create(@Body() createCustomerDto: CreateCustomerDto) {
-    return this.customerService.create(createCustomerDto, {
-      userId: 'system',
-    } as any);
+    try {
+      return await this.customerService.create(createCustomerDto, {
+        userId: 'system',
+      } as any);
+    } catch (error) {
+      if (error?.driverError?.code === '23505' || error?.code === '23505') {
+        throw new ConflictException(
+          'Mã khách hàng đã tồn tại. Vui lòng lấy mã mới rồi thử lại.',
+        );
+      }
+      throw error;
+    }
   }
 
   @Put(':id')
