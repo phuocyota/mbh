@@ -173,6 +173,28 @@ const uuid = (n) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
         detail: await service.detail(branch, uuid(21), {}), stocks: await service.stocks(branch),
       }));
     }
+    // A global catalog copy with the same code must not create a synthetic
+    // zero-balance row in a branch that already has its own product.
+    await pg.exec(`
+      INSERT INTO products VALUES
+        ('${uuid(25)}','NL01','Thịt dùng chung','INGREDIENT','${uuid(30)}','kg','${uuid(40)}',NULL,100,false,true,NULL);
+      INSERT INTO stock_items VALUES ('${uuid(56)}','${uuid(13)}','${uuid(25)}',8);
+    `);
+    const scoped = await service.inventory(branch, { size: 100 });
+    assert.equal(scoped.total, 6);
+    assert.ok(scoped.data.every((row) => row.productId !== uuid(25)));
+    assert.equal((await service.overview(branch, { from: clock.yesterday, to: clock.today })).summary.totalProducts, 3);
+    await assert.rejects(service.detail(branch, uuid(25), {}), /Không tìm thấy/);
+    // Actual stock in this branch keeps the original global ID visible.
+    await pg.exec(`INSERT INTO stock_items VALUES ('${uuid(57)}','${uuid(11)}','${uuid(25)}',4);`);
+    const shared = await service.inventory(branch, { productId: uuid(25) });
+    assert.equal(shared.total, 2);
+    assert.equal(shared.data.find((row) => row.stockId === uuid(11)).quantity, 4);
+    // Foreign-branch IDs received through transfers remain visible as well.
+    await pg.exec(`INSERT INTO stock_items VALUES ('${uuid(58)}','${uuid(12)}','${uuid(24)}',6);`);
+    const transferred = await service.inventory(branch, { productId: uuid(24) });
+    assert.equal(transferred.total, 2);
+    assert.equal(transferred.data.find((row) => row.stockId === uuid(12)).quantity, 6);
     console.log(
       'PASS: isolated PostgreSQL warehouse checks (real SQL, branch isolation, totals, units, expiry, paging, filters, consumption, value reconstruction, adjustments).',
     );

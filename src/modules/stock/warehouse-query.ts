@@ -1,6 +1,7 @@
 import { BadRequestException } from '@nestjs/common';
 import { isUUID } from 'class-validator';
 import { localDate } from './stock-movement.service';
+import { stockProductCondition } from './stock-scope';
 
 export function warehouseDate(value: unknown, fallback: string) {
   if (value === undefined || value === '') return fallback;
@@ -98,6 +99,10 @@ export function warehouseFilters(q: any, branchId: string) {
   };
 }
 
+// Match the product picker: global/foreign catalog entries only belong here
+// once a stock record exists in this branch (including transferred products).
+const inventoryProductScope = stockProductCondition('p').replaceAll(':branchId', '$1');
+
 /** Each row is one product in one warehouse; all joins below are one-to-one. */
 export const warehouseInventoryCte = `WITH inventory AS (
   SELECT COALESCE(si.id::text,s.id::text || ':' || p.id::text) AS id, s.id AS "stockId", s.name AS "stockName", p.id AS "productId", p.code, p.name,
@@ -109,9 +114,7 @@ export const warehouseInventoryCte = `WITH inventory AS (
     p.minimum_stock AS "minimumStock", p.cost_price AS "costPrice",
     CASE WHEN p.cost_price IS NOT NULL THEN COALESCE(si.quantity,0)*p.cost_price END AS "inventoryValue",
     l.nearest_expiry AS "nearestExpiry", p.lot_tracking_enabled AS "lotTrackingEnabled", p.is_active AS "isActive"
-  FROM stocks s JOIN products p ON (p.branch_id=s.branch_id OR p.branch_id IS NULL OR EXISTS(
-    SELECT 1 FROM stock_items scope_item JOIN stocks scope_stock ON scope_stock.id=scope_item.stock_id
-    WHERE scope_item.product_id=p.id AND scope_stock.branch_id=s.branch_id))
+  FROM stocks s JOIN products p ON ${inventoryProductScope}
   LEFT JOIN stock_items si ON si.stock_id=s.id AND si.product_id=p.id
   LEFT JOIN categories c ON c.id=p.category_id LEFT JOIN measurement_units u ON u.id=p.base_unit_id
   LEFT JOIN LATERAL (
