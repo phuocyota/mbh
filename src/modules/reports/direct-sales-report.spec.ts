@@ -18,23 +18,19 @@ const manual = {
 
 function harness() {
   const orders = {
-    getRevenueSummaryRows: jest
-      .fn()
-      .mockResolvedValue({
-        totalRow: { orderCount: '1', totalRevenue: '10000' },
-        refundedRow: { refundAmount: '1000' },
-      }),
-    getEmployeeSalesRows: jest
-      .fn()
-      .mockResolvedValue([
-        {
-          id: 'seller-2',
-          employee: 'Nhân viên 2',
-          orders: '1',
-          revenue: '10000',
-          totalAmount: '10000',
-        },
-      ]),
+    getRevenueSummaryRows: jest.fn().mockResolvedValue({
+      totalRow: { orderCount: '1', totalRevenue: '10000' },
+      refundedRow: { refundAmount: '1000' },
+    }),
+    getEmployeeSalesRows: jest.fn().mockResolvedValue([
+      {
+        id: 'seller-2',
+        employee: 'Nhân viên 2',
+        orders: '1',
+        revenue: '10000',
+        totalAmount: '10000',
+      },
+    ]),
     getDailyRevenueRows: jest
       .fn()
       .mockResolvedValue([
@@ -43,17 +39,28 @@ function harness() {
   };
   const items = {
     getEndOfDayItems: jest.fn().mockResolvedValue([]),
-    getTopProducts: jest
-      .fn()
-      .mockResolvedValue([
-        {
-          productId: 'product-1',
-          productName: 'Sữa',
-          totalQuantity: '1',
-          totalRevenue: '20000',
-        },
-      ]),
+    getTopProducts: jest.fn().mockResolvedValue([
+      {
+        productId: 'product-1',
+        productName: 'Sữa',
+        totalQuantity: '1',
+        totalRevenue: '20000',
+      },
+    ]),
     getBottomProducts: jest.fn().mockResolvedValue([]),
+    getMonthlyOrderPlanRows: jest.fn().mockResolvedValue([
+      {
+        productId: 'product-1',
+        code: 'SP1',
+        name: 'Sữa',
+        unit: 'Hộp',
+        groupName: 'Đồ uống',
+        monthlyUsage: '1',
+        revenue: '20000',
+        branchId: 'branch-1',
+        branchName: 'Chi nhánh 1',
+      },
+    ]),
     getEmployeeCashierRows: jest.fn().mockResolvedValue([]),
     getEmployeeProfitRows: jest.fn().mockResolvedValue([]),
   };
@@ -80,11 +87,30 @@ function harness() {
     {} as any,
     {} as any,
   );
+  jest
+    .spyOn(service as any, 'getStockOnHandByProduct')
+    .mockResolvedValue([{ productId: 'product-1', quantity: '1' }]);
   return { service, orders, items, repo };
 }
 
 describe('Direct sales in reports', () => {
   const query = { from: '2026-10-19', to: '2026-10-19', branchId: 'branch-1' };
+  it('feeds direct sales into the existing Usage, stock and Min/Max form', async () => {
+    const { service } = harness();
+    const report = await service.monthlyOrderPlan(query);
+    expect(report.revenueMonth).toBe(90000);
+    expect(
+      report.data.find((row) => row.productId === 'product-1'),
+    ).toMatchObject({
+      monthlyUsage: 3,
+      stockOnHand: 1,
+      planSales: { min: 4, max: 5 },
+      suggestedOrderQuantity: 4,
+    });
+    expect(
+      report.data.find((row) => row.productId === 'product-2'),
+    ).toMatchObject({ monthlyUsage: 2 });
+  });
   it('adds revenue but counts a multi-line export only once', async () => {
     const { service, repo } = harness();
     const report = await service.revenueSummary(query);
