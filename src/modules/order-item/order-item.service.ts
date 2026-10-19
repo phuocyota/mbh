@@ -179,6 +179,8 @@ export class OrderItemService extends BaseService<OrderItem> {
       .innerJoin('orders', 'o', 'o.id = oi.order_id')
       .select(businessDate, 'date')
       .addSelect('p.code', 'code')
+      .addSelect('p.category_id', 'categoryId')
+      .addSelect('p.product_type', 'productType')
       .addSelect('oi.product_name', 'name')
       .addSelect('oi.unit_price', 'price')
       .addSelect('SUM(oi.quantity)', 'qty')
@@ -202,6 +204,8 @@ export class OrderItemService extends BaseService<OrderItem> {
       .addGroupBy('oi.product_name')
       .addGroupBy('oi.unit_price')
       .addGroupBy('p.code')
+      .addGroupBy('p.category_id')
+      .addGroupBy('p.product_type')
       .orderBy(businessDate, 'ASC')
       .addOrderBy('oi.product_name', 'ASC');
 

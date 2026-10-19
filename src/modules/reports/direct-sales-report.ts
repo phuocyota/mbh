@@ -2,7 +2,7 @@ export const DIRECT_SALES_SQL = `
   SELECT e.id AS "voucherId", COALESCE(e.created_by, 'system') AS "employeeId",
     COALESCE(u.full_name, 'Hệ thống') AS employee,
     TO_CHAR(e.created_at AT TIME ZONE current_setting('TimeZone') AT TIME ZONE 'Asia/Ho_Chi_Minh', 'YYYY-MM-DD') AS date,
-    p.id AS "productId", p.code, p.name, p.unit,
+    p.id AS "productId", p.code, p.name, p.unit, p.category_id AS "categoryId", p.product_type AS "productType",
     d.quantity::float8 AS qty,
     COALESCE((d.input_details->>'quantity')::numeric * (d.input_details->>'unitPrice')::numeric, 0)::float8 AS total,
     (d.quantity * COALESCE(p.cost_price, 0))::float8 AS cost,
@@ -28,6 +28,8 @@ export interface DirectSaleRow {
   code: string;
   name: string;
   unit: string;
+  categoryId?: string;
+  productType?: string;
   qty: number;
   total: number;
   cost: number;

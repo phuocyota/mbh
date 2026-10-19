@@ -1,4 +1,5 @@
 import { resolveEndOfDayRange } from './end-of-day-range';
+import { stockProductCondition } from '../stock/stock-scope';
 import { DIRECT_SALES_SQL, DirectSaleRow, mergeProductSales } from './direct-sales-report';
 import { ForbiddenException, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -642,6 +643,8 @@ export class ReportsService {
       .addSelect('product.code', 'code')
       .addSelect('product.name', 'name')
       .addSelect('product.unit', 'unit')
+      .addSelect('product.category_id', 'categoryId')
+      .addSelect('product.product_type', 'productType')
       .addSelect(
         'MAX(COALESCE(stockItem.updated_at, product.updated_at))',
         'updatedAt',
@@ -651,10 +654,13 @@ export class ReportsService {
       .addGroupBy('product.code')
       .addGroupBy('product.name')
       .addGroupBy('product.unit')
+      .addGroupBy('product.category_id')
+      .addGroupBy('product.product_type')
       .orderBy('product.name', 'ASC');
 
     if (resolvedBranchId) {
       query
+        .andWhere(stockProductCondition('product'), { branchId: resolvedBranchId })
         .addSelect(
           'COALESCE(SUM(CASE WHEN stock.branch_id = :branchId THEN stockItem.quantity ELSE 0 END), 0)',
           'quantity',
@@ -671,6 +677,8 @@ export class ReportsService {
       code: row.code,
       name: row.name,
       unit: row.unit,
+      categoryId: row.categoryId,
+      productType: row.productType,
       quantity: Number(row.quantity || 0),
       updatedAt: row.updatedAt,
     }));
@@ -717,7 +725,7 @@ export class ReportsService {
     });
     const direct = await this.getDirectSales(from, to, branchId);
     const data = rows.map(row => ({ ...row, price: Number(row.price), qty: Number(row.qty), total: Number(row.total), gross: Number(row.gross), tax: Number(row.tax), net: Number(row.net) }));
-    const manual = direct.map(row => ({ date: row.date, code: row.code, name: row.name,
+    const manual = direct.map(row => ({ date: row.date, code: row.code, name: row.name, categoryId: row.categoryId, productType: row.productType,
       price: row.qty ? row.total / row.qty : 0, qty: Number(row.qty), total: Number(row.total),
       gross: Number(row.total), tax: null, net: null,
     }));
