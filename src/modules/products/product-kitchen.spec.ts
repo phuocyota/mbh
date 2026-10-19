@@ -95,6 +95,14 @@ describe('Product classification and unit boundaries', () => {
       isFreshFood: false,
     });
   });
+  it('stores and clears the minimum stock without changing stock balances', async () => {
+    const h = harness();
+    await h.service.updateProduct('product', { minimumStock: 10 });
+    expect(h.product.minimumStock).toBe(10);
+    await h.service.updateProduct('product', { clearMinimumStock: true });
+    expect(h.product.minimumStock).toBeNull();
+    expect(h.product.quantity).toBeUndefined();
+  });
   it('persists the fresh food flag and allows switching it off', async () => {
     const h = harness();
     await h.service.updateProduct('product', { isFreshFood: true });

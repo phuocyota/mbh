@@ -74,6 +74,14 @@ export class Product extends BaseEntity {
   @Column('int', { name: 'recommended_use_minutes', default: 120 })
   recommendedUseMinutes: number;
 
+  @Column('numeric', {
+    name: 'minimum_stock',
+    precision: 18,
+    scale: 4,
+    nullable: true,
+  })
+  minimumStock: number | null;
+
   // Relations
   @ManyToOne(() => Category, (category) => category.products)
   @JoinColumn({ name: 'category_id' })

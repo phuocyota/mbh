@@ -11,6 +11,15 @@ import {
 } from 'class-validator';
 
 export class ProductWriteDto {
+  @ApiPropertyOptional() @IsOptional() @IsBoolean() clearMinimumStock?: boolean;
+  @ApiPropertyOptional({
+    description: 'Định mức tồn tối thiểu theo đơn vị cơ sở, áp dụng từng kho',
+    nullable: true,
+  })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  minimumStock?: number | null;
   @ApiPropertyOptional() @IsOptional() @IsUUID() branchId?: string;
   @ApiPropertyOptional() @IsOptional() @IsUUID() categoryId?: string;
   @ApiPropertyOptional() @IsOptional() @IsUUID() baseUnitId?: string | null;

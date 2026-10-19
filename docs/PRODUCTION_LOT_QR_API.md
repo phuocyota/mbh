@@ -39,6 +39,41 @@
 - Response theo cấu trúc danh sách chi tiết phiếu nhập hiện có, mỗi dòng bổ sung `lot` gồm `id`, `lotCode`, `stockId`, `productId`, `manufacturedAt`, `expiresAt`, `quantity`, `status`. Dùng `lot.id` làm `inputLots[].lotId` khi bắt đầu chế biến. `lot.quantity` là tổng tồn hiện tại của lô theo đơn vị cơ sở; lượng nhập của phiếu nằm ở `detail.quantity`.
 - Tạo phiếu, cộng tồn/lô, movement và thanh toán/công nợ trong cùng transaction. Phần nhập lô dùng schema hiện có; lý do `NHNNL` cần migration seed nêu trên.
 
+## Quản lý kho ERP: tổng quan và tồn kho
+
+Menu **Hàng hóa → Kho** mở `/warehouse`. Navigation gồm: **Tổng quan**, **Tồn kho**, **Nhập kho**, **Xuất kho**, **Chuyển kho**, **Lô hàng**, **Kiểm kê**, **Truy xuất nguồn gốc**. Nút **Xuất bán** vẫn hiển thị và giữ nguyên `/stock-sale`, `/stock-sale/create` cùng luồng xử lý cũ; khi mở, mục Xuất kho được đánh dấu đang hoạt động.
+
+### API mới
+
+Bearer token; ADMIN/MANAGER/KITCHEN. Mọi endpoint dùng `resolveStockBranch`: chi nhánh lấy từ JWT, chỉ ADMIN được yêu cầu chi nhánh khác.
+
+- `GET /warehouse/overview?from=YYYY-MM-DD&to=YYYY-MM-DD`: thống kê hiện tại, số lượng theo đơn vị, giá trị tồn, lô hoạt động/sắp hết hạn/đã hết hạn, mặt hàng dưới định mức, phiếu DRAFT chờ xử lý. Kèm biến động nhập/xuất, giá trị tồn tái dựng theo ngày, tỷ trọng giá trị theo nhóm, nguyên liệu xuất thực tế cho mẻ/phiên tiêu hao bếp, phân bố lô hết hạn trong 7 ngày và 12 lô cần ưu tiên xử lý. Khoảng biểu đồ tối đa 366 ngày, không vượt hôm nay; mặc định 30 ngày.
+- `GET /warehouse/stocks`: kho thuộc chi nhánh.
+- `GET /warehouse/inventory`: bảng tồn theo sản phẩm × kho; gồm hàng đang hoạt động chưa có số dư (tồn 0) và hàng ngừng hoạt động còn tồn. Lọc `search`, `stockId`, `productId`, `categoryId`, `productType`, `lotCode`, `expiresFrom`, `expiresTo`, `status=AVAILABLE|LOW|OUT|EXPIRING|EXPIRED`. Phân trang `page`, `size` tối đa 100. Lọc ở PostgreSQL trước khi đếm/phân trang; trang rỗng vẫn trả đúng total.
+- `GET /warehouse/inventory/:productId`: thông tin hàng hóa, tồn từng kho, các lô/hạn dùng và lịch sử biến động trong chi nhánh. Lịch sử phân trang qua `page`, `size`; `historyKind=ADJUSTMENT` chỉ trả biến động liên kết phiếu kiểm kê. Các điều chỉnh cũ không có chứng từ nhận diện vẫn nằm trong lịch sử chung ở nhóm Khác; không tự suy đoán loại giao dịch.
+
+Dashboard dùng snapshot transaction REPEATABLE READ để thống kê nhất quán. Không dùng dữ liệu mẫu làm fallback. Biểu đồ lượng nhập/xuất và tiêu thụ chọn từng đơn vị; tổng lượng tồn hiển thị từng đơn vị, không cộng kg với chai. Lô còn tồn hết hạn hôm nay vẫn hợp lệ đến hết ngày UTC+7. Công nợ không được tính là phiếu chờ xử lý; chỉ trạng thái DRAFT.
+
+### Giá trị tồn và giữ chỗ
+
+Giá trị = số dư × `products.cost_price` hiện tại. Hàng thiếu giá vốn được cảnh báo và không góp giá trị; tỷ trọng nhóm chỉ tính phần giá trị dương. Biểu đồ quá khứ tái dựng số dư cuối ngày từ số dư hiện tại trừ biến động sau ngày đó, dùng cùng giá vốn hiện tại; đây là ước tính, chưa phải sổ định giá lịch sử/FIFO. Ngày trước lần ghi biến động đầu tiên không có giá trị tái dựng (null).
+
+Hệ thống hiện chưa có nghiệp vụ giữ chỗ: `reservedQuantity=null`, `reservationsSupported=false`, UI hiển thị **Chưa thiết lập**/dấu —. `availableQuantity` hiện là `max(0, tồn thực tế − tồn lô hết hạn)`, **chưa trừ giữ chỗ**; chú thích và Excel nêu rõ cơ sở này. Chưa thêm giữ chỗ theo đơn hàng hay phiếu xuất nháp.
+
+### Định mức và UX
+
+Migration `1764800000000-AddProductMinimumStock.ts` thêm `products.minimum_stock` nullable numeric(18,4), ràng buộc không âm và index biến động theo kho/thời gian. Form hàng hóa có **Định mức tồn tối thiểu mỗi kho** theo đơn vị cơ sở. Để trống nghĩa là chưa cấu hình, không áp dụng ngưỡng cảnh báo tự đặt. API nhận `minimumStock` hoặc `clearMinimumStock=true` để xóa cấu hình (tương thích client loại bỏ null trong request). Thay đổi định mức không đổi tồn thực tế.
+
+Màn `/warehouse/inventory` có bảng theo kho, lọc thêm theo lô/hạn dùng, chi tiết theo kho/lô/lịch sử/điều chỉnh/truy xuất, và xuất Excel tất cả trang phù hợp bộ lọc. `/warehouse/trace` tra theo mã/tên/UUID lô; chi tiết tái sử dụng API `/production-trace/lots/:id` có kiểm tra chi nhánh. Nguồn nhập/NCC và đầu ra chế biến chỉ hiển thị dữ liệu đã ghi nhận. Màn hình có loading, empty/error/retry, tooltip và bảng cuộn ngang trên tablet. Navigation không bỏ các route nghiệp vụ cũ.
+
+### Kiểm tra và triển khai
+
+Chạy migration trước khi triển khai backend có trường mới; chưa thực thi migration hay deploy production trong lần sửa source này.
+
+- `npm run test -- --runInBand warehouse product-kitchen stock-lot.controller kitchen-metadata`
+- `npm run build`
+- Kiểm tra SQL trên PostgreSQL tách biệt, không đọc `.env` hoặc kết nối server thật: cài `@electric-sql/pglite` trong `/tmp/mbh-warehouse-pgcheck`, rồi chạy `WAREHOUSE_PGLITE_PATH=/tmp/mbh-warehouse-pgcheck/node_modules/@electric-sql/pglite node scripts/verify-warehouse-postgres.cjs` sau build. Script kiểm tra cách ly chi nhánh, số dư/giá trị, đơn vị, lô hết hạn, phân trang, bộ lọc, tiêu thụ và điều chỉnh.
+
 ## Màn quản lý lô hàng hóa
 
 FE có màn `/stock-lots`, truy cập từ **Hàng hóa → Kho → tab Lô hàng**. Màn hình dùng `GET /stock-lots`, phân trang phía server và lọc theo `search` (số lô, mã/tên hàng), `productType`, `status`. Danh sách trả thêm `product`, `stock`, `baseUnit`, tối đa 100 dòng/trang. Quyền ADMIN/MANAGER/KITCHEN; dữ liệu theo chi nhánh được kiểm tra bằng JWT như API hiện có.

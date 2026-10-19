@@ -547,6 +547,7 @@ export class ProductService extends BaseService<Product> {
       'imageUrl',
       'price',
       'costPrice',
+      'minimumStock',
       'unit',
       'baseUnitId',
       'isActive',
@@ -565,6 +566,7 @@ export class ProductService extends BaseService<Product> {
     );
     if (dto.lotTrackingEnabled !== undefined)
       productDto.lotTrackingEnabled = dto.lotTrackingEnabled;
+    if (dto.clearMinimumStock === true) productDto.minimumStock = null;
     delete productDto.quantity;
     return productDto;
   }
