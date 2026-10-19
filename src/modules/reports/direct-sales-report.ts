@@ -36,20 +36,35 @@ export interface DirectSaleRow {
   method: string;
 }
 
-export function mergeProductSales(rows: any[], direct: DirectSaleRow[], limit: number, ascending = false) {
+export function mergeProductSales(
+  rows: any[],
+  direct: DirectSaleRow[],
+  limit: number,
+  ascending = false,
+) {
   const products = new Map<string, any>();
-  for (const row of rows) products.set(row.productId, {
-    ...row, totalQuantity: Number(row.totalQuantity), totalRevenue: Number(row.totalRevenue),
-  });
+  for (const row of rows)
+    products.set(row.productId, {
+      ...row,
+      totalQuantity: Number(row.totalQuantity),
+      totalRevenue: Number(row.totalRevenue),
+    });
   for (const row of direct) {
     const item = products.get(row.productId) || {
-      productId: row.productId, productName: row.name, totalQuantity: 0, totalRevenue: 0,
+      productId: row.productId,
+      productName: row.name,
+      totalQuantity: 0,
+      totalRevenue: 0,
     };
     item.totalQuantity += Number(row.qty);
     item.totalRevenue += Number(row.total);
     products.set(row.productId, item);
   }
-  return [...products.values()].sort((a, b) =>
-    (ascending ? 1 : -1) * (a.totalQuantity - b.totalQuantity) || a.productName.localeCompare(b.productName),
-  ).slice(0, limit);
+  return [...products.values()]
+    .sort(
+      (a, b) =>
+        (ascending ? 1 : -1) * (a.totalQuantity - b.totalQuantity) ||
+        a.productName.localeCompare(b.productName),
+    )
+    .slice(0, limit);
 }

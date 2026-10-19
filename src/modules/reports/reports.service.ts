@@ -1,6 +1,10 @@
 import { resolveEndOfDayRange } from './end-of-day-range';
 import { stockProductCondition } from '../stock/stock-scope';
-import { DIRECT_SALES_SQL, DirectSaleRow, mergeProductSales } from './direct-sales-report';
+import {
+  DIRECT_SALES_SQL,
+  DirectSaleRow,
+  mergeProductSales,
+} from './direct-sales-report';
 import { ForbiddenException, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -68,8 +72,16 @@ export class ReportsService {
     return { from, to };
   }
 
-  private getDirectSales(from: Date, to: Date, branchId?: string): Promise<DirectSaleRow[]> {
-    return this.productRepository.query(DIRECT_SALES_SQL, [from.toISOString(), to.toISOString(), branchId || null]);
+  private getDirectSales(
+    from: Date,
+    to: Date,
+    branchId?: string,
+  ): Promise<DirectSaleRow[]> {
+    return this.productRepository.query(DIRECT_SALES_SQL, [
+      from.toISOString(),
+      to.toISOString(),
+      branchId || null,
+    ]);
   }
 
   private resolveCustomerRange(query: {
@@ -171,29 +183,42 @@ export class ReportsService {
       branchId,
     });
     const direct = await this.getDirectSales(from, to, branchId);
-    const directRevenue = direct.reduce((sum, row) => sum + Number(row.total), 0);
+    const directRevenue = direct.reduce(
+      (sum, row) => sum + Number(row.total),
+      0,
+    );
     for (const method of ['CASH', 'BANK_TRANSFER']) {
-      const entries = direct.filter(row => row.method === method);
+      const entries = direct.filter((row) => row.method === method);
       if (!entries.length) continue;
       const amount = entries.reduce((sum, row) => sum + Number(row.total), 0);
-      const count = new Set(entries.map(row => row.voucherId)).size;
-      const existing = paymentBreakdown.find(row => row.method === method);
-      if (existing) { existing.amount = String(Number(existing.amount) + amount); existing.count = String(Number(existing.count) + count); }
-      else paymentBreakdown.push({ method, amount: String(amount), count: String(count) });
+      const count = new Set(entries.map((row) => row.voucherId)).size;
+      const existing = paymentBreakdown.find((row) => row.method === method);
+      if (existing) {
+        existing.amount = String(Number(existing.amount) + amount);
+        existing.count = String(Number(existing.count) + count);
+      } else
+        paymentBreakdown.push({
+          method,
+          amount: String(amount),
+          count: String(count),
+        });
     }
 
     return {
       from,
       to,
       branchId: branchId || null,
-      orderCount: Number(totalRow?.orderCount || 0) + new Set(direct.map(row => row.voucherId)).size,
+      orderCount:
+        Number(totalRow?.orderCount || 0) +
+        new Set(direct.map((row) => row.voucherId)).size,
       totalRevenue: Number(totalRow?.totalRevenue || 0) + directRevenue,
       totalDiscount: Number(totalRow?.totalDiscount || 0),
       refundCount: Number(refundedRow?.refundCount || 0),
       refundAmount: Number(refundedRow?.refundAmount || 0),
       netRevenue:
         Number(totalRow?.totalRevenue || 0) -
-        Number(refundedRow?.refundAmount || 0) + directRevenue,
+        Number(refundedRow?.refundAmount || 0) +
+        directRevenue,
       paymentBreakdown: paymentBreakdown.map((payment) => ({
         method: payment.method,
         count: Number(payment.count),
@@ -214,11 +239,20 @@ export class ReportsService {
       branchId,
     });
     const direct = await this.getDirectSales(from, to, branchId);
-    const days = new Map(rows.map(row => [row.day, { day: row.day, orderCount: Number(row.orderCount), revenue: Number(row.revenue) }]));
-    for (const day of new Set(direct.map(row => row.date))) {
-      const entries = direct.filter(row => row.date === day);
+    const days = new Map(
+      rows.map((row) => [
+        row.day,
+        {
+          day: row.day,
+          orderCount: Number(row.orderCount),
+          revenue: Number(row.revenue),
+        },
+      ]),
+    );
+    for (const day of new Set(direct.map((row) => row.date))) {
+      const entries = direct.filter((row) => row.date === day);
       const value = days.get(day) || { day, orderCount: 0, revenue: 0 };
-      value.orderCount += new Set(entries.map(row => row.voucherId)).size;
+      value.orderCount += new Set(entries.map((row) => row.voucherId)).size;
       value.revenue += entries.reduce((sum, row) => sum + Number(row.total), 0);
       days.set(day, value);
     }
@@ -349,7 +383,10 @@ export class ReportsService {
     },
     user?: ReportUser,
   ) {
-    const { from, to } = query.from || query.to ? resolveEndOfDayRange(query) : this.resolveCustomerRange(query);
+    const { from, to } =
+      query.from || query.to
+        ? resolveEndOfDayRange(query)
+        : this.resolveCustomerRange(query);
     const branchId = this.resolveBranchId(query.branchId, user);
     const reportRows = await this.orderItemService.getCancellationReportRows({
       from,
@@ -440,7 +477,10 @@ export class ReportsService {
     },
     user?: ReportUser,
   ) {
-    const { from, to } = query.from || query.to ? resolveEndOfDayRange(query) : this.resolveCustomerRange(query);
+    const { from, to } =
+      query.from || query.to
+        ? resolveEndOfDayRange(query)
+        : this.resolveCustomerRange(query);
     const branchId = this.resolveBranchId(query.branchId, user);
     const limit = Math.min(Math.max(Number(query.limit) || 10, 1), 100);
     const reportQuery = {
@@ -488,46 +528,76 @@ export class ReportsService {
       };
     });
 
-    for (const id of new Set(direct.map(row => row.employeeId))) {
-      const entries = direct.filter(row => row.employeeId === id);
+    for (const id of new Set(direct.map((row) => row.employeeId))) {
+      const entries = direct.filter((row) => row.employeeId === id);
       const revenue = entries.reduce((sum, row) => sum + Number(row.total), 0);
       const quantity = entries.reduce((sum, row) => sum + Number(row.qty), 0);
       const cost = entries.reduce((sum, row) => sum + Number(row.cost), 0);
-      const orders = new Set(entries.map(row => row.voucherId)).size;
+      const orders = new Set(entries.map((row) => row.voucherId)).size;
       const employee = entries[0].employee;
-      const sale = sales.find(row => row.id === id);
-      if (sale) { sale.orders += orders; sale.revenue += revenue; sale.totalAmount += revenue; }
-      else sales.push({ id, employee, orders, revenue, totalAmount: revenue, discount: 0 });
-      const cash = cashier.find(row => row.id === id);
-      if (cash) { cash.quantity += quantity; cash.revenue += revenue; }
-      else cashier.push({ id, employee, quantity, revenue });
-      const earnings = profit.find(row => row.id === id);
-      if (earnings) { earnings.revenue += revenue; earnings.totalPurchase += revenue; earnings.cost += cost; earnings.profit += revenue - cost; }
-      else profit.push({ id, employee, revenue, totalPurchase: revenue, discount: 0, cost, profit: revenue - cost });
+      const sale = sales.find((row) => row.id === id);
+      if (sale) {
+        sale.orders += orders;
+        sale.revenue += revenue;
+        sale.totalAmount += revenue;
+      } else
+        sales.push({
+          id,
+          employee,
+          orders,
+          revenue,
+          totalAmount: revenue,
+          discount: 0,
+        });
+      const cash = cashier.find((row) => row.id === id);
+      if (cash) {
+        cash.quantity += quantity;
+        cash.revenue += revenue;
+      } else cashier.push({ id, employee, quantity, revenue });
+      const earnings = profit.find((row) => row.id === id);
+      if (earnings) {
+        earnings.revenue += revenue;
+        earnings.totalPurchase += revenue;
+        earnings.cost += cost;
+        earnings.profit += revenue - cost;
+      } else
+        profit.push({
+          id,
+          employee,
+          revenue,
+          totalPurchase: revenue,
+          discount: 0,
+          cost,
+          profit: revenue - cost,
+        });
     }
     sales.sort((a, b) => b.revenue - a.revenue);
     const employees = sales.map((row) => ({
-        id: row.id,
-        code: null,
-        name: row.employee,
-        department: null,
-        position: 'Thu ngân',
-        workDays: 0,
-        workHours: 0,
-        overtime: 0,
-        late: 0,
-        absent: 0,
-        salary: 0,
-        performance: 0,
-      }));
+      id: row.id,
+      code: null,
+      name: row.employee,
+      department: null,
+      position: 'Thu ngân',
+      workDays: 0,
+      workHours: 0,
+      overtime: 0,
+      late: 0,
+      absent: 0,
+      salary: 0,
+      performance: 0,
+    }));
     if (query.employeeId && query.employeeId !== 'all') {
-      sales = sales.filter(row => row.id === query.employeeId);
-      cashier = cashier.filter(row => row.id === query.employeeId);
-      profit = profit.filter(row => row.id === query.employeeId);
+      sales = sales.filter((row) => row.id === query.employeeId);
+      cashier = cashier.filter((row) => row.id === query.employeeId);
+      profit = profit.filter((row) => row.id === query.employeeId);
     }
     return {
-      filter: query.filter || null, from, to, branchId: branchId || null,
-      employeeId: query.employeeId || null, employees,
+      filter: query.filter || null,
+      from,
+      to,
+      branchId: branchId || null,
+      employeeId: query.employeeId || null,
+      employees,
       chart: sales.slice(0, limit).map((row) => ({
         id: row.id,
         name: row.employee,
@@ -665,7 +735,9 @@ export class ReportsService {
 
     if (resolvedBranchId) {
       query
-        .andWhere(stockProductCondition('product'), { branchId: resolvedBranchId })
+        .andWhere(stockProductCondition('product'), {
+          branchId: resolvedBranchId,
+        })
         .addSelect(
           'COALESCE(SUM(CASE WHEN stock.branch_id = :branchId THEN stockItem.quantity ELSE 0 END), 0)',
           'quantity',
@@ -729,17 +801,36 @@ export class ReportsService {
       branchId,
     });
     const direct = await this.getDirectSales(from, to, branchId);
-    const data = rows.map(row => ({ ...row, price: Number(row.price), qty: Number(row.qty), total: Number(row.total), gross: Number(row.gross), tax: Number(row.tax), net: Number(row.net) }));
-    const manual = direct.map(row => ({ date: row.date, code: row.code, name: row.name, categoryId: row.categoryId, productType: row.productType,
-      price: row.qty ? row.total / row.qty : 0, qty: Number(row.qty), total: Number(row.total),
-      gross: Number(row.total), tax: null, net: null,
+    const data = rows.map((row) => ({
+      ...row,
+      price: Number(row.price),
+      qty: Number(row.qty),
+      total: Number(row.total),
+      gross: Number(row.gross),
+      tax: Number(row.tax),
+      net: Number(row.net),
+    }));
+    const manual = direct.map((row) => ({
+      date: row.date,
+      code: row.code,
+      name: row.name,
+      categoryId: row.categoryId,
+      productType: row.productType,
+      price: row.qty ? row.total / row.qty : 0,
+      qty: Number(row.qty),
+      total: Number(row.total),
+      gross: Number(row.total),
+      tax: null,
+      net: null,
     }));
 
     return {
       from,
       to,
       branchId: branchId || null,
-      data: [...data, ...manual].sort((a, b) => a.date.localeCompare(b.date) || a.name.localeCompare(b.name)),
+      data: [...data, ...manual].sort(
+        (a, b) => a.date.localeCompare(b.date) || a.name.localeCompare(b.name),
+      ),
     };
   }
 
