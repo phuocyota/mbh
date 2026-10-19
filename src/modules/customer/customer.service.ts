@@ -62,7 +62,10 @@ export class CustomerService extends BaseService<Customer> {
     }
 
     if (branchId) {
-      qb.andWhere('customerUser.branch_id = :branchId', { branchId });
+      qb.andWhere(
+        'COALESCE(customer.branch_id, customerUser.branch_id) = :branchId',
+        { branchId },
+      );
     }
 
     const [data, total] = await qb.getManyAndCount();
@@ -296,7 +299,9 @@ export class CustomerService extends BaseService<Customer> {
     }
 
     if (branchId) {
-      qb.andWhere('customerUser.branch_id = :branchId', { branchId });
+      qb.andWhere('COALESCE(c.branch_id, customerUser.branch_id) = :branchId', {
+        branchId,
+      });
     }
 
     qb.orderBy('c.createdAt', 'DESC')

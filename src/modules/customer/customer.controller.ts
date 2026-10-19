@@ -12,6 +12,7 @@ import {
   HttpStatus,
   Req,
   UseGuards,
+  BadRequestException,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -134,6 +135,7 @@ export class CustomerController {
   }
 
   @Post()
+  @UseGuards(JwtAuthGuard)
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Create new customer' })
   @ApiResponse({
@@ -141,11 +143,17 @@ export class CustomerController {
     description: 'Customer created',
     type: CustomerDto,
   })
-  async create(@Body() createCustomerDto: CreateCustomerDto) {
+  async create(@Body() createCustomerDto: CreateCustomerDto, @Req() req: any) {
+    if (!req.user?.branchId) {
+      throw new BadRequestException(
+        'Vui lòng chọn chi nhánh trước khi tạo khách hàng.',
+      );
+    }
     try {
-      return await this.customerService.create(createCustomerDto, {
-        userId: 'system',
-      } as any);
+      return await this.customerService.create(
+        { ...createCustomerDto, branchId: req.user.branchId },
+        req.user,
+      );
     } catch (error) {
       if (error?.driverError?.code === '23505' || error?.code === '23505') {
         throw new ConflictException(

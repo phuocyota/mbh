@@ -179,6 +179,10 @@ export class CreateStockVoucherItemDto {
 }
 
 export class CreateStockVoucherDto {
+  @ApiProperty({ required: false, enum: ['CASH', 'BANK_TRANSFER'] })
+  @IsOptional()
+  @IsIn(['CASH', 'BANK_TRANSFER'])
+  paymentMethod?: string;
   /** Assigned by the controller after validation, never accepted from clients. */
   actorId?: string;
   @ApiProperty({ required: false }) @IsOptional() @IsUUID() requestId?: string;

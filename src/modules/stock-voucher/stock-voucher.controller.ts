@@ -43,13 +43,26 @@ export class StockVoucherController {
     @Query('size') size?: string,
     @Query('productType') productType?: string,
     @Query('receiptType') receiptType?: string,
+    @Query('salesOnly') salesOnly?: string,
   ) {
     return this.stockVoucherService.findAll(
       page,
       size,
       req.user?.branchId || branchId,
-      { productType, receiptType },
+      { productType, receiptType, salesOnly: salesOnly === 'true' },
     );
+  }
+
+  @UseGuards(RolesGuard)
+  @Roles(UserType.ADMIN, UserType.MANAGER)
+  @Post('sales')
+  @ApiOperation({ summary: 'Create a sale export and receipt atomically' })
+  createSale(@Req() req: any, @Body() dto: CreateStockVoucherDto) {
+    return this.stockVoucherService.createSaleVoucher({
+      ...dto,
+      branchId: resolveStockBranch(req.user, dto.branchId),
+      actorId: req.user.userId,
+    });
   }
 
   @UseGuards(RolesGuard)

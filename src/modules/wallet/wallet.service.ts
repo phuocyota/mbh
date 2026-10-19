@@ -72,7 +72,10 @@ export class WalletService extends BaseService<Wallet> {
       .take(pagination.size);
 
     if (branchId) {
-      query.andWhere('customerUser.branch_id = :branchId', { branchId });
+      query.andWhere(
+        'COALESCE(customer.branch_id, customerUser.branch_id) = :branchId',
+        { branchId },
+      );
     }
 
     const [data, total] = await query.getManyAndCount();

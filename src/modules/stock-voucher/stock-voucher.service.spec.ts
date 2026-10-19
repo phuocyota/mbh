@@ -30,6 +30,11 @@ describe('StockVoucherService', () => {
   let service: StockVoucherService;
 
   const mockRepositories: any = {
+    Customer: {
+      findOneBy: jest
+        .fn()
+        .mockResolvedValue({ id: 'customer-id-1', branchId: 'branch-id-1' }),
+    },
     Supplier: {
       findOneBy: jest
         .fn()
@@ -617,6 +622,108 @@ describe('StockVoucherService', () => {
   });
 
   describe('createExportVoucher', () => {
+    it('filters sales before pagination and excludes unrelated warehouse transactions', async () => {
+      const qb: any = {};
+      for (const method of [
+        'leftJoinAndSelect',
+        'orderBy',
+        'skip',
+        'take',
+        'andWhere',
+      ])
+        qb[method] = jest.fn().mockReturnValue(qb);
+      qb.getManyAndCount = jest.fn().mockResolvedValue([[], 0]);
+      mockRepositories.StockReceiptDetail.createQueryBuilder = jest
+        .fn()
+        .mockReturnValue(qb);
+      await service.findAll(2, 100, 'branch-id-1', { salesOnly: true });
+      expect(qb.andWhere).toHaveBeenCalledWith(
+        'detail.receiptType = :saleType AND exportReceipt.reasonCode IN (:...saleReasons)',
+        expect.objectContaining({
+          saleType: 'EXPORT',
+          saleReasons: expect.arrayContaining(['BH_CASH', 'BH_BANK']),
+        }),
+      );
+      expect(qb.skip).toHaveBeenCalledWith(100);
+      expect(qb.andWhere).toHaveBeenCalledWith(
+        expect.stringContaining('exportReceipt.branchId = :branchId'),
+        { branchId: 'branch-id-1' },
+      );
+    });
+
+    const sale = {
+      branchId: 'branch-id-1',
+      sourceId: 'customer-id-1',
+      sourceType: 'CUSTOMER',
+      paymentMethod: 'CASH',
+      items: [{ productId: 'product-id-2', quantity: 2, unitPrice: 150 }],
+    };
+
+    it.each([
+      ['CASH', 'BH_CASH'],
+      ['BANK_TRANSFER', 'BH_BANK'],
+    ])(
+      'creates both export and receipt for a %s sale',
+      async (paymentMethod, reasonCode) => {
+        mockRepositories.StockFundReceiptReason.findOne.mockResolvedValueOnce({
+          code: reasonCode,
+        });
+        await service.createSaleVoucher({ ...sale, paymentMethod });
+        expect(mockRepositories.StockReceiptExport.create).toHaveBeenCalledWith(
+          expect.objectContaining({ totalAmount: 300, reasonCode }),
+        );
+        expect(mockFinanceService.createMoneyVoucher).toHaveBeenCalledWith(
+          expect.objectContaining({
+            type: 'RECEIPT',
+            amount: 300,
+            reasonCode,
+            branchId: 'branch-id-1',
+            refId: 'export-id',
+          }),
+          mockManager,
+        );
+      },
+    );
+
+    it('rejects a customer from another branch before writing stock', async () => {
+      mockRepositories.Customer.findOneBy.mockResolvedValueOnce({
+        id: 'customer-id-1',
+        branchId: 'other-branch',
+      });
+      await expect(service.createSaleVoucher(sale)).rejects.toThrow(
+        'Khách hàng không thuộc chi nhánh',
+      );
+      expect(mockRepositories.StockReceiptExport.save).not.toHaveBeenCalled();
+      expect(mockFinanceService.createMoneyVoucher).not.toHaveBeenCalled();
+    });
+
+    it('rejects a zero-total sale before starting any stock write', () => {
+      expect(() =>
+        service.createSaleVoucher({
+          ...sale,
+          items: [{ productId: 'p', quantity: 1, unitPrice: 0 }],
+        }),
+      ).toThrow(BadRequestException);
+      expect(mockRepositories.StockReceiptExport.save).not.toHaveBeenCalled();
+    });
+
+    it('propagates receipt failure through the enclosing transaction', async () => {
+      mockRepositories.StockFundReceiptReason.findOne.mockResolvedValueOnce({
+        code: 'BH_CASH',
+      });
+      mockFinanceService.createMoneyVoucher.mockRejectedValueOnce(
+        new Error('fund unavailable'),
+      );
+      await expect(service.createSaleVoucher(sale)).rejects.toThrow(
+        'fund unavailable',
+      );
+      expect(mockFinanceService.createMoneyVoucher).toHaveBeenCalledWith(
+        expect.any(Object),
+        mockManager,
+      );
+      expect(mockSocketService.emitDashboardUpdated).not.toHaveBeenCalled();
+    });
+
     it('should create a StockReceiptExport header and corresponding details', async () => {
       mockRepositories.StockFundReceiptReason.findOne.mockResolvedValueOnce({
         code: 'BH_CASH',

@@ -9,6 +9,9 @@ import { COMMON_STATUS } from '../common/constant/constant';
 
 @Entity('customers')
 export class Customer extends BaseEntity {
+  @Column('uuid', { nullable: true, name: 'branch_id' })
+  branchId: string | null;
+
   @Column('varchar', { unique: true, name: 'customer_code' })
   customerCode: string;
 

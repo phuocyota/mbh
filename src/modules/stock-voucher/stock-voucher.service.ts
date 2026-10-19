@@ -1,5 +1,12 @@
 import { DataSource, EntityManager } from 'typeorm';
-import { Product, StockRequest, StockLot, Supplier } from '../../entities';
+import {
+  Product,
+  StockRequest,
+  StockLot,
+  Supplier,
+  Customer,
+  User,
+} from '../../entities';
 import { requestFingerprint } from '../../common/utils/request-fingerprint';
 import { StockMovementService } from '../stock/stock-movement.service';
 import { canUseStockProduct } from '../stock/stock-scope';
@@ -81,7 +88,11 @@ export class StockVoucherService {
     page?: number | string,
     size?: number | string,
     branchId?: string,
-    filters: { productType?: string; receiptType?: string } = {},
+    filters: {
+      productType?: string;
+      receiptType?: string;
+      salesOnly?: boolean;
+    } = {},
   ) {
     const pagination = normalizePagination(page, size);
     const query = this.stockReceiptDetailRepository
@@ -115,6 +126,21 @@ export class StockVoucherService {
         receiptType: filters.receiptType,
       });
 
+    if (filters.salesOnly) {
+      query.andWhere(
+        'detail.receiptType = :saleType AND exportReceipt.reasonCode IN (:...saleReasons)',
+        {
+          saleType: STOCK_VOUCHER_TYPE.EXPORT,
+          saleReasons: [
+            'BH_CASH',
+            'BH_BANK',
+            'BH_WALLET',
+            'BH_CARD',
+            DEFERRED_SALE_REASON_CODE,
+          ],
+        },
+      );
+    }
     const [data, total] = await query.getManyAndCount();
     const hydratedData = await this.attachMoneyVouchers(data);
 
@@ -132,6 +158,36 @@ export class StockVoucherService {
 
   createExportVoucher(dto: Omit<CreateStockVoucherDto, 'type'>) {
     return this.createVoucher({ ...dto, type: STOCK_VOUCHER_TYPE.EXPORT });
+  }
+
+  createSaleVoucher(dto: CreateStockVoucherDto) {
+    if (!['CASH', 'BANK_TRANSFER'].includes(dto.paymentMethod || ''))
+      throw new BadRequestException('Vui lòng chọn phương thức thanh toán.');
+    if (!dto.sourceId || dto.sourceType !== STOCK_PARTY_TYPE.CUSTOMER)
+      throw new BadRequestException('Vui lòng chọn khách hàng.');
+    if (
+      !dto.items?.length ||
+      dto.items.some(
+        (item) =>
+          !Number.isFinite(Number(item.quantity)) ||
+          Number(item.quantity) <= 0 ||
+          !Number.isFinite(Number(item.unitPrice)) ||
+          Number(item.unitPrice) < 0,
+      ) ||
+      !dto.items.some((item) => Number(item.unitPrice) > 0)
+    )
+      throw new BadRequestException(
+        'Số lượng và đơn giá xuất bán không hợp lệ.',
+      );
+    return this.createVoucher({
+      ...dto,
+      type: STOCK_VOUCHER_TYPE.EXPORT,
+      purpose: 'SALE',
+      referenceId: undefined,
+      referenceType: undefined,
+      fundId: undefined,
+      reasonCode: this.getSalesReasonCode(dto.paymentMethod),
+    });
   }
 
   async createExportFromOrder(order: any, payment: any) {
@@ -664,6 +720,22 @@ export class StockVoucherService {
         ['stock-branch:' + branch],
       );
     const originalItems = dto.items;
+    if (dto.purpose === 'SALE') {
+      const customer = await manager
+        .getRepository(Customer)
+        .findOneBy({ id: dto.sourceId });
+      const linkedUser =
+        customer?.userId && !customer.branchId
+          ? await manager.getRepository(User).findOneBy({ id: customer.userId })
+          : null;
+      if (
+        !customer ||
+        (customer.branchId || linkedUser?.branchId) !== dto.branchId
+      )
+        throw new BadRequestException(
+          'Khách hàng không thuộc chi nhánh xuất bán.',
+        );
+    }
     await this.movements.lockProducts(
       manager,
       dto.items.map((item) => item.productId),
@@ -957,6 +1029,10 @@ export class StockVoucherService {
           amount: totalAmount,
           orderId: dto.referenceType === 'order' ? dto.referenceId : undefined,
           purpose: ACCOUNTING_PURPOSE.STOCK_EXPORT,
+          customerId:
+            sourceType === STOCK_PARTY_TYPE.CUSTOMER
+              ? sourceId || undefined
+              : undefined,
           reasonCode,
           refType:
             dto.referenceType === 'order'
