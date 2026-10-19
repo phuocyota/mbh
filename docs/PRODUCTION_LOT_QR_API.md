@@ -193,3 +193,14 @@ Thay đổi này triển khai backend và SVG cho in tem; chưa bổ sung màn h
 ## Triển khai
 
 Có migration `1764400000000-CreateFinishedUnits.ts` cho thành phẩm và `1764500000000-SeedMaterialImportReason.ts` cho lý do nhập nguyên, nhiên liệu. Chạy migration bằng quy trình triển khai hiện có trước khi dùng luồng mới. Cập nhật client gửi `inputLots` khi start FINISHED_GOOD. Chưa chạy migration hay thay đổi dữ liệu production trong lần sửa mã này.
+
+
+## Quản lý serial nhập kho
+
+Mở **Quản lý kho → Lô hàng → Serial** (`/stock-lots?tab=serial`). Chi tiết lô có liên kết lọc danh sách serial theo `lotId`. Danh sách đọc từ `stock_receipt_detail.input_details.serials`, không tạo bản sao hoặc thay đổi tồn kho. Serial thành phẩm `finished_units` vẫn thuộc luồng QR/truy xuất thành phẩm riêng.
+
+- `GET /warehouse/serials`: phân trang `page`, `size` (tối đa 100), tìm `search` theo serial/mã/tên hàng/số lô/phiếu nhập; lọc `stockId` (kho nhập), `productId`, `lotId`, `lotCode`, `serialMode=MANUAL|AUTO`, `receiptStatus=COMPLETED|CANCELLED|DRAFT`. Trả `{ data, total, page, size, serialMovementTrackingSupported: false }` trong response wrapper hiện có.
+- `GET /warehouse/serials/:detailId/:position`: chi tiết nguồn nhập của một serial. `position` bắt đầu từ 1 trong danh sách serial của dòng phiếu nhập; cặp `detailId + position` xác định đúng bản ghi kể cả serial lặp lại giữa các sản phẩm. Không tìm thấy trong chi nhánh trả 404.
+- Cả hai API dùng JWT, quyền ADMIN/MANAGER/KITCHEN và quy tắc chi nhánh như các API kho. Không cần migration.
+- Kho là **kho nhập ban đầu**, trạng thái là **trạng thái phiếu nhập**. Hệ thống chưa ghi nhận serial được chọn khi xuất/chuyển kho nên không suy ra tồn hiện tại, đã bán hoặc lịch sử riêng từng serial. Chi tiết có liên kết xem lịch sử của **toàn bộ lô** nếu có.
+- Kiểm tra: `npm run test -- --runInBand stock-serial warehouse stock-lot.controller`; sau build chạy `WAREHOUSE_PGLITE_PATH=/tmp/mbh-warehouse-pgcheck/node_modules/@electric-sql/pglite node scripts/verify-stock-serials-postgres.cjs` (SQL tách biệt, không kết nối database thật).

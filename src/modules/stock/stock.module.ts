@@ -1,3 +1,5 @@
+import { StockSerialController } from './stock-serial.controller';
+import { StockSerialService } from './stock-serial.service';
 import { StockMovementService } from './stock-movement.service';
 import { WarehouseController } from './warehouse.controller';
 import { WarehouseService } from './warehouse.service';
@@ -9,8 +11,13 @@ import { StockService } from './stock.service';
 
 @Module({
   imports: [TypeOrmModule.forFeature([Stock])],
-  controllers: [StockLotController, WarehouseController],
-  providers: [StockService, StockMovementService, WarehouseService],
+  controllers: [StockLotController, WarehouseController, StockSerialController],
+  providers: [
+    StockService,
+    StockMovementService,
+    WarehouseService,
+    StockSerialService,
+  ],
   exports: [StockService, StockMovementService],
 })
 export class StockModule {}
