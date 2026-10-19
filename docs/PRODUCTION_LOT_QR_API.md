@@ -197,7 +197,7 @@ Có migration `1764400000000-CreateFinishedUnits.ts` cho thành phẩm và `1764
 
 ## Quản lý serial nhập kho
 
-Mở **Quản lý kho → Lô hàng → Serial** (`/stock-lots?tab=serial`). Chi tiết lô có liên kết lọc danh sách serial theo `lotId`. Danh sách đọc từ `stock_receipt_detail.input_details.serials`, không tạo bản sao hoặc thay đổi tồn kho. Serial thành phẩm `finished_units` vẫn thuộc luồng QR/truy xuất thành phẩm riêng.
+Mở **Quản lý kho → Lô hàng → Serial** (`/stock-lots?tab=serial`). Bấm số lô hoặc Chi tiết sẽ hiển thị trực tiếp danh sách serial đã nhập thuộc lô đó (lọc `lotId` và phiếu COMPLETED), kèm tìm kiếm và phân trang. Ví dụ lô có 10 đơn vị đã khai báo serial sẽ hiện 10 số serial trong chi tiết lô; không sinh thêm serial từ số lượng tồn. Danh sách đọc từ `stock_receipt_detail.input_details.serials`, không tạo bản sao hoặc thay đổi tồn kho. Serial thành phẩm `finished_units` vẫn thuộc luồng QR/truy xuất thành phẩm riêng.
 
 - `GET /warehouse/serials`: phân trang `page`, `size` (tối đa 100), tìm `search` theo serial/mã/tên hàng/số lô/phiếu nhập; lọc `stockId` (kho nhập), `productId`, `lotId`, `lotCode`, `serialMode=MANUAL|AUTO`, `receiptStatus=COMPLETED|CANCELLED|DRAFT`. Trả `{ data, total, page, size, serialMovementTrackingSupported: false }` trong response wrapper hiện có.
 - `GET /warehouse/serials/:detailId/:position`: chi tiết nguồn nhập của một serial. `position` bắt đầu từ 1 trong danh sách serial của dòng phiếu nhập; cặp `detailId + position` xác định đúng bản ghi kể cả serial lặp lại giữa các sản phẩm. Không tìm thấy trong chi nhánh trả 404.
