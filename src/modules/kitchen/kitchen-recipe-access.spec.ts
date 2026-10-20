@@ -14,6 +14,9 @@ describe('Kitchen recipe and menu setup permissions', () => {
     method:
       | 'createRecipe'
       | 'activateRecipe'
+      | 'submitRecipe'
+      | 'approveRecipe'
+      | 'requestRecipeChanges'
       | 'createStation'
       | 'taskList'
       | 'taskDetail'
@@ -37,7 +40,7 @@ describe('Kitchen recipe and menu setup permissions', () => {
         );
     },
   );
-  it.each(['createRecipe', 'activateRecipe'] as const)(
+  it.each(['createRecipe', 'submitRecipe'] as const)(
     'allows head chefs to %s',
     (method) => {
       expect(guard.canActivate(context(method, 'HEAD_CHEF'))).toBe(true);
@@ -47,6 +50,16 @@ describe('Kitchen recipe and menu setup permissions', () => {
       expect(() => guard.canActivate(context(method, 'CASHIER'))).toThrow(
         ForbiddenException,
       );
+    },
+  );
+  it.each(['activateRecipe', 'approveRecipe', 'requestRecipeChanges'] as const)(
+    'allows only admin to %s',
+    (method) => {
+      expect(guard.canActivate(context(method, 'ADMIN'))).toBe(true);
+      for (const role of ['HEAD_CHEF', 'KITCHEN', 'MANAGER', 'CASHIER'])
+        expect(() => guard.canActivate(context(method, role))).toThrow(
+          ForbiddenException,
+        );
     },
   );
   it('does not grant kitchen staff general configuration or manual plan approval rights', () => {

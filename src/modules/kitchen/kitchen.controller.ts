@@ -133,16 +133,38 @@ export class KitchenController {
   }
 
   @Post('recipes')
-  @Roles(...MANAGERS, UserType.HEAD_CHEF)
+  @Roles(UserType.ADMIN, UserType.HEAD_CHEF)
   @ApiOperation({ summary: 'Create a new immutable recipe version' })
   createRecipe(@Req() req: any, @Body() dto: any) {
     return this.kitchen.createRecipe(req.user, dto);
   }
 
   @Post('recipes/:id/activate')
-  @Roles(...MANAGERS, UserType.HEAD_CHEF)
+  @Roles(UserType.ADMIN)
   activateRecipe(@Req() req: any, @Param('id') id: string) {
     return this.kitchen.activateRecipe(req.user, id);
+  }
+
+  @Post('recipes/:id/submit')
+  @Roles(UserType.ADMIN, UserType.HEAD_CHEF)
+  submitRecipe(@Req() req: any, @Param('id') id: string) {
+    return this.kitchen.reviewRecipe(req.user, id, 'submit');
+  }
+
+  @Post('recipes/:id/approve')
+  @Roles(UserType.ADMIN)
+  approveRecipe(@Req() req: any, @Param('id') id: string) {
+    return this.kitchen.reviewRecipe(req.user, id, 'approve');
+  }
+
+  @Post('recipes/:id/request-changes')
+  @Roles(UserType.ADMIN)
+  requestRecipeChanges(
+    @Req() req: any,
+    @Param('id') id: string,
+    @Body('reason') reason: string,
+  ) {
+    return this.kitchen.reviewRecipe(req.user, id, 'request-changes', reason);
   }
 
   @Delete('recipes/:id')

@@ -9,6 +9,7 @@ const { DataSource } = require('typeorm');
 const { PGlite } = require(process.env.WAREHOUSE_PGLITE_PATH || '/tmp/mbh-warehouse-pgcheck/node_modules/@electric-sql/pglite');
 const E = { ...require('../dist/src/entities'), ...require('../dist/src/entities/finished-unit.entity') };
 const { KitchenTaskService } = require('../dist/src/modules/kitchen/kitchen-task.service');
+const { KitchenService } = require('../dist/src/modules/kitchen/kitchen.service');
 const { KitchenOperationsService } = require('../dist/src/modules/kitchen/kitchen-operations.service');
 const { StockMovementService, localDate } = require('../dist/src/modules/stock/stock-movement.service');
 const { SocketService } = require('../dist/src/modules/socket/socket.service');
@@ -56,6 +57,42 @@ class Pool extends EventEmitter {
     await save(E.KitchenOrderTicketItem, { ticketId: ticket.id, productId: dish.id, productName: dish.name, quantity: 1 });
     const movements = new StockMovementService();
     const ops = new KitchenOperationsService(db, { get: () => undefined }, new SocketService(), movements);
+    const kitchen = Object.assign(Object.create(KitchenService.prototype), {
+      dataSource: db, recipes: db.getRepository(E.KitchenRecipe), units: db.getRepository(E.MeasurementUnit),
+      products: db.getRepository(E.Product), operations: ops, movements,
+    });
+    const chef = { ...actor, userType: 'HEAD_CHEF' }, admin = { ...actor, userId: randomUUID(), userType: 'ADMIN' };
+    for (const [index, costPrice] of [2000, 100, 50].entries()) await db.getRepository(E.Product).update(inputs[index].product.id, { costPrice });
+    const recipeBody = { productId: dish.id, branchId: branch.id, yieldQuantity: 1, yieldUnitId: piece.id, expectedWastePercent: 5,
+      items: inputs.map(input => ({ ingredientProductId: input.product.id, unitId: input.unit.id, quantity: input.requirement })) };
+    await assert.rejects(kitchen.createRecipe(actor, recipeBody), /Chỉ bếp trưởng/);
+    await assert.rejects(kitchen.createRecipe(chef, { ...recipeBody, activate: true }), /gửi duyệt/);
+    const draft = await kitchen.createRecipe(chef, recipeBody);
+    assert.equal(draft.status, 'DRAFT'); assert.equal(draft.version, 2);
+    await assert.rejects(kitchen.activateRecipe(admin, draft.id), /Trạng thái/);
+    await assert.rejects(kitchen.reviewRecipe({ ...chef, branchId: randomUUID() }, draft.id, 'submit'), /CROSS_BRANCH/);
+    let review = await kitchen.reviewRecipe(chef, draft.id, 'submit');
+    assert.equal(review.status, 'PENDING_REVIEW'); assert.equal(review.approval.costing.totalCost, 8000);
+    assert.equal(review.approval.costing.estimatedWasteCost, 400);
+    assert.equal((await db.getRepository(E.KitchenRecipe).findOneByOrFail({ id: recipe.id })).status, 'ACTIVE');
+    await assert.rejects(kitchen.activateRecipe(chef, draft.id), /quyền/);
+    await assert.rejects(kitchen.reviewRecipe({ ...chef, userType: 'MANAGER' }, draft.id, 'approve'), /quyền/);
+    await assert.rejects(kitchen.reviewRecipe(admin, draft.id, 'request-changes', '  '), /lý do/);
+    review = await kitchen.reviewRecipe(admin, draft.id, 'request-changes', 'Kiểm tra hao hụt');
+    assert.equal(review.status, 'REVISION_REQUESTED'); assert.equal(review.approval.reason, 'Kiểm tra hao hụt');
+    await db.getRepository(E.Product).update(inputs[0].product.id, { costPrice: null });
+    await assert.rejects(kitchen.reviewRecipe(chef, draft.id, 'submit'), /giá vốn/);
+    await db.getRepository(E.Product).update(inputs[0].product.id, { costPrice: 2000 });
+    review = await kitchen.reviewRecipe(chef, draft.id, 'submit');
+    await db.getRepository(E.Product).update(inputs[1].product.id, { costPrice: 200 });
+    const pending = (await kitchen.listRecipes(admin, branch.id, dish.id)).find(row => row.id === draft.id);
+    assert.equal(pending.costing.totalCost, 8000, 'submitted cost remains pinned when product cost changes');
+    review = await kitchen.reviewRecipe(admin, draft.id, 'approve');
+    assert.equal(review.status, 'ACTIVE'); assert.equal(review.approval.approvedBy, admin.userId);
+    assert.equal((await db.getRepository(E.KitchenRecipe).findOneByOrFail({ id: recipe.id })).status, 'INACTIVE');
+    assert.equal((await kitchen.listRecipes(actor, branch.id)).length, 1, 'staff sees active approved recipe only');
+    await assert.rejects(kitchen.reviewRecipe(admin, draft.id, 'approve'), /Trạng thái/);
+    console.log('PASS isolated recipe approval: role/branch guards, draft → submit → request changes → resubmit → approve, cost conversion/snapshot, previous active preserved until approval.');
     const tasks = new KitchenTaskService(db, ops, movements);
     let state = await tasks.get(actor, 'ticket', ticket.id);
     assert.equal(state.status, 'WAITING'); assert.equal(state.dishes[0].requirements.length, 3);

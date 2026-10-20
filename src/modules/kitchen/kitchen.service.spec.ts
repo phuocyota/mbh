@@ -18,20 +18,18 @@ describe('KitchenService authorization and concurrency', () => {
   it('does not count a ticket again through its generated production batch', async () => {
     const service = createService();
     service.mealPlans = {
-      find: jest
-        .fn()
-        .mockResolvedValue([
-          {
-            batches: [
-              {
-                productId: 'bread',
-                plannedQuantity: 1,
-                adjustmentQuantity: 0,
-                details: { workflowTicketId: 'ticket' },
-              },
-            ],
-          },
-        ]),
+      find: jest.fn().mockResolvedValue([
+        {
+          batches: [
+            {
+              productId: 'bread',
+              plannedQuantity: 1,
+              adjustmentQuantity: 0,
+              details: { workflowTicketId: 'ticket' },
+            },
+          ],
+        },
+      ]),
     };
     const builder: any = {};
     for (const method of ['innerJoinAndSelect', 'where', 'andWhere'])
@@ -67,7 +65,7 @@ describe('KitchenService authorization and concurrency', () => {
     async (description) => {
       await expect(
         createService().createRecipe(
-          { userId: 'u', userType: 'KITCHEN', branchId: 'b' },
+          { userId: 'u', userType: 'HEAD_CHEF', branchId: 'b' },
           { description },
         ),
       ).rejects.toThrow('500 ký tự');

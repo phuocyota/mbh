@@ -1,3 +1,4 @@
+import { recipeCosting } from './recipe-costing';
 import { KitchenOperationsService } from './kitchen-operations.service';
 import { canUseStockProduct } from '../stock/stock-scope';
 import {
@@ -219,7 +220,9 @@ export class KitchenService {
   async listRecipes(actor: Actor, branchId?: string, productId?: string) {
     const where: any = { branchId: this.resolveBranch(actor, branchId) };
     if (productId) where.productId = productId;
-    return this.recipes.find({
+    const editor = ['ADMIN', 'HEAD_CHEF'].includes(actor.userType);
+    if (!editor) where.status = 'ACTIVE';
+    const rows = await this.recipes.find({
       where,
       relations: [
         'product',
@@ -230,9 +233,39 @@ export class KitchenService {
       ],
       order: { productId: 'ASC', version: 'DESC' },
     });
+    const units = editor ? await this.units.find() : [];
+    return rows.map((row) => ({
+      ...row,
+      ...(editor
+        ? {
+            costing: ['DRAFT', 'REVISION_REQUESTED'].includes(row.status)
+              ? recipeCosting(row, units)
+              : row.approval?.costing || recipeCosting(row, units),
+          }
+        : {}),
+    }));
   }
 
   async createRecipe(actor: Actor, dto: any) {
+    if (!['HEAD_CHEF', 'ADMIN'].includes(actor.userType))
+      throw new ForbiddenException(
+        'Chỉ bếp trưởng hoặc admin được tạo công thức.',
+      );
+    if (dto.activate)
+      throw new BadRequestException(
+        'Cần gửi duyệt công thức; không được áp dụng ngay khi tạo.',
+      );
+    const expectedWastePercent = Number(dto.expectedWastePercent ?? 0);
+    if (
+      !Number.isFinite(expectedWastePercent) ||
+      expectedWastePercent < 0 ||
+      expectedWastePercent >= 100 ||
+      Math.abs(expectedWastePercent - Number(expectedWastePercent.toFixed(2))) >
+        1e-9
+    )
+      throw new BadRequestException(
+        'Hao hụt dự kiến từ 0 đến dưới 100%, tối đa 2 chữ số thập phân.',
+      );
     const branchId = this.resolveBranch(actor, dto.branchId);
     if (
       dto.description != null &&
@@ -244,6 +277,7 @@ export class KitchenService {
       );
     const description = dto.description?.trim() || null;
     if (
+      !Number.isFinite(Number(dto.yieldQuantity)) ||
       !(Number(dto.yieldQuantity) > 0) ||
       !Array.isArray(dto.items) ||
       !dto.items.length
@@ -293,6 +327,7 @@ export class KitchenService {
         ? await this.units.findOne({ where: { id: ingredient.baseUnitId } })
         : null;
       if (
+        !Number.isFinite(Number(item.quantity)) ||
         !(Number(item.quantity) > 0) ||
         !unit ||
         !baseUnit ||
@@ -340,25 +375,21 @@ export class KitchenService {
           description,
           yieldQuantity: dto.yieldQuantity,
           yieldUnitId: dto.yieldUnitId,
-          status: dto.activate ? 'ACTIVE' : 'DRAFT',
-          effectiveFrom: dto.activate ? new Date() : null,
+          status: 'DRAFT',
+          expectedWastePercent,
+          approval: {},
+          effectiveFrom: null,
           createdBy: actor.userId,
         }),
       );
-      if (dto.activate)
-        await manager.update(
-          KitchenRecipe,
-          { branchId, productId: dto.productId, status: 'ACTIVE' },
-          { status: 'INACTIVE', updatedBy: actor.userId },
-        );
-      recipe.status = dto.activate ? 'ACTIVE' : 'DRAFT';
-      await manager.save(KitchenRecipe, recipe);
       await manager.save(
         KitchenRecipeItem,
         dto.items.map((item: any) =>
           manager.create(KitchenRecipeItem, {
             recipeId: recipe.id,
-            ...item,
+            ingredientProductId: item.ingredientProductId,
+            quantity: Number(item.quantity),
+            unitId: item.unitId,
             createdBy: actor.userId,
           }),
         ),
@@ -376,39 +407,150 @@ export class KitchenService {
   }
 
   async activateRecipe(actor: Actor, id: string) {
-    const recipe = await this.recipes.findOne({ where: { id } });
-    if (!recipe) throw new NotFoundException('Recipe not found');
-    this.resolveBranch(actor, recipe.branchId);
-    await this.dataSource.transaction(async (manager) => {
-      await manager.update(
-        KitchenRecipe,
-        {
-          branchId: recipe.branchId,
-          productId: recipe.productId,
-          status: 'ACTIVE',
-        },
-        { status: 'INACTIVE', updatedBy: actor.userId },
-      );
-      await manager.update(KitchenRecipe, id, {
-        status: 'ACTIVE',
-        effectiveFrom: new Date(),
-        updatedBy: actor.userId,
+    // Compatibility URL now follows the exact same approval checks.
+    return this.reviewRecipe(actor, id, 'approve');
+  }
+
+  async reviewRecipe(
+    actor: Actor,
+    id: string,
+    action: string,
+    reason?: string,
+  ) {
+    const submit = action === 'submit';
+    if (!['submit', 'approve', 'request-changes'].includes(action))
+      throw new BadRequestException('Thao tác duyệt không hợp lệ.');
+    if (
+      submit
+        ? !['HEAD_CHEF', 'ADMIN'].includes(actor.userType)
+        : actor.userType !== 'ADMIN'
+    )
+      throw new ForbiddenException('Bạn không có quyền duyệt công thức.');
+    if (
+      action === 'request-changes' &&
+      (typeof reason !== 'string' ||
+        !reason.trim() ||
+        reason.trim().length > 1000)
+    )
+      throw new BadRequestException('Cần lý do chỉnh sửa tối đa 1000 ký tự.');
+    const reference = await this.recipes.findOne({ where: { id } });
+    if (!reference) throw new NotFoundException('Không tìm thấy công thức.');
+    this.resolveBranch(actor, reference.branchId);
+    return this.dataSource.transaction(async (manager) => {
+      await this.operations.lock(manager, reference.branchId);
+      const repo = manager.getRepository(KitchenRecipe);
+      const row = await repo.findOne({
+        where: { id },
+        lock: { mode: 'pessimistic_write' },
       });
-    });
-    return this.recipes.findOne({
-      where: { id },
-      relations: ['items', 'items.unit'],
+      if (!row) throw new NotFoundException('Không tìm thấy công thức.');
+      if (
+        submit &&
+        actor.userType !== 'ADMIN' &&
+        row.createdBy !== actor.userId
+      )
+        throw new ForbiddenException(
+          'Chỉ được gửi duyệt công thức do bạn tạo.',
+        );
+      if (
+        submit
+          ? !['DRAFT', 'REVISION_REQUESTED'].includes(row.status)
+          : row.status !== 'PENDING_REVIEW'
+      )
+        throw new ConflictException(
+          'Trạng thái công thức đã thay đổi. Hãy làm mới.',
+        );
+      const approval: Record<string, any> = {
+        ...row.approval,
+        history: [...(row.approval?.history || [])],
+      };
+      if (submit) {
+        const full = await repo.findOne({
+          where: { id },
+          relations: ['items', 'items.ingredientProduct', 'items.unit'],
+        });
+        await this.movements.lockProducts(
+          manager,
+          full!.items.map((item) => item.ingredientProductId),
+        );
+        // Reload prices after product locks, then pin the submitted costing.
+        const current = await repo.findOne({
+          where: { id },
+          relations: ['items', 'items.ingredientProduct', 'items.unit'],
+        });
+        const costing = recipeCosting(
+          current,
+          await manager.getRepository(MeasurementUnit).find(),
+        );
+        if (!costing.complete)
+          throw new BadRequestException(
+            `Cần khai báo giá vốn theo đơn vị tồn chuẩn: ${costing.missing.join(', ')}.`,
+          );
+        approval.costing = costing;
+        approval.submittedBy = actor.userId;
+        approval.submittedAt = new Date().toISOString();
+        approval.reason = null;
+        row.status = 'PENDING_REVIEW';
+      } else if (action === 'approve') {
+        if (!approval.costing?.complete)
+          throw new ConflictException(
+            'Cần gửi lại công thức với giá vốn hợp lệ.',
+          );
+        await manager.update(
+          KitchenRecipe,
+          {
+            branchId: row.branchId,
+            productId: row.productId,
+            status: 'ACTIVE',
+          },
+          { status: 'INACTIVE', updatedBy: actor.userId },
+        );
+        row.status = 'ACTIVE';
+        row.effectiveFrom = new Date();
+        approval.approvedBy = actor.userId;
+        approval.approvedAt = new Date().toISOString();
+      } else {
+        row.status = 'REVISION_REQUESTED';
+        approval.reason = reason!.trim();
+        approval.reviewedBy = actor.userId;
+        approval.reviewedAt = new Date().toISOString();
+      }
+      approval.history.push({
+        action,
+        actorId: actor.userId,
+        at: new Date().toISOString(),
+        ...(action === 'request-changes' ? { reason: reason!.trim() } : {}),
+      });
+      row.approval = approval;
+      row.updatedBy = actor.userId;
+      await repo.save(row);
+      return repo.findOne({
+        where: { id },
+        relations: ['items', 'items.unit'],
+      });
     });
   }
 
   async deleteDraftRecipe(actor: Actor, id: string) {
+    if (!['ADMIN', 'MANAGER'].includes(actor.userType))
+      throw new ForbiddenException('Bạn không có quyền xóa bản nháp.');
     const recipe = await this.recipes.findOne({ where: { id } });
     if (!recipe) throw new NotFoundException('Recipe not found');
     this.resolveBranch(actor, recipe.branchId);
-    if (recipe.status !== 'DRAFT')
-      throw new BadRequestException('ACTIVE_RECIPE_IS_IMMUTABLE');
-    await this.recipes.remove(recipe);
-    return { deleted: true };
+    return this.dataSource.transaction(async (manager) => {
+      await this.operations.lock(manager, recipe.branchId);
+      const repo = manager.getRepository(KitchenRecipe);
+      const current = await repo.findOne({
+        where: { id },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (!current || current.status !== 'DRAFT')
+        throw new BadRequestException(
+          'Chỉ xóa công thức ở trạng thái bản nháp.',
+        );
+      await repo.remove(current);
+      return { deleted: true };
+    });
   }
 
   async listPeriods(actor: Actor, branchId?: string) {

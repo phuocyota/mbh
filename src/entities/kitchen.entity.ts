@@ -74,6 +74,15 @@ export class KitchenRecipe extends BaseEntity {
   yieldQuantity: number;
   @Column('uuid', { name: 'yield_unit_id' }) yieldUnitId: string;
   @Column('varchar', { default: 'DRAFT' }) status: string;
+  @Column('numeric', {
+    name: 'expected_waste_percent',
+    precision: 5,
+    scale: 2,
+    default: 0,
+  })
+  expectedWastePercent: number;
+  @Column('jsonb', { default: () => "'{}'::jsonb" })
+  approval: Record<string, any>;
   @Column('timestamptz', { nullable: true, name: 'effective_from' })
   effectiveFrom?: Date | null;
   @ManyToOne(() => Product)
