@@ -11,6 +11,126 @@ function createService() {
 }
 
 describe('KitchenService authorization and concurrency', () => {
+  it('aggregates staff work from real batches and checks demand once for the whole day', async () => {
+    const service = createService();
+    service.mealPlans = {
+      find: jest.fn().mockResolvedValue([
+        {
+          mealPeriod: 'LUNCH',
+          batches: [
+            {
+              id: 'b1',
+              productId: 'dish1',
+              plannedQuantity: 100,
+              adjustmentQuantity: 5,
+              status: 'COMPLETED',
+              startedAt: '2026-10-20T01:00:00Z',
+            },
+            {
+              id: 'b2',
+              productId: 'dish2',
+              plannedQuantity: 50,
+              adjustmentQuantity: 0,
+              status: 'PREPARING',
+              startedAt: '2026-10-20T02:00:00Z',
+            },
+          ],
+        },
+        {
+          mealPeriod: 'DINNER',
+          batches: [
+            {
+              id: 'b3',
+              productId: 'dish1',
+              plannedQuantity: 20,
+              adjustmentQuantity: 0,
+              status: 'WAITING',
+            },
+          ],
+        },
+      ]),
+    };
+    service.getDemand = jest
+      .fn()
+      .mockResolvedValue([
+        { productId: 'rice', quantity: 10, availableQuantity: 6, unitId: 'kg' },
+      ]);
+    service.products = {
+      find: jest.fn().mockResolvedValue([
+        { id: 'dish1', name: 'Cơm', unit: 'phần', requiresSample: true },
+        { id: 'dish2', name: 'Canh', unit: 'phần', requiresSample: true },
+        { id: 'rice', name: 'Gạo' },
+      ]),
+    };
+    service.units = {
+      find: jest.fn().mockResolvedValue([{ id: 'kg', code: 'kg' }]),
+    };
+    service.dataSource = {
+      getRepository: () => ({
+        find: jest.fn().mockResolvedValue([
+          {
+            parentId: 'b1',
+            payload: { quantity: 1, sampledAt: '2026-10-20T01:30:00Z' },
+          },
+          {
+            parentId: 'b2',
+            payload: { quantity: 1, sampledAt: '2026-10-19T02:30:00Z' },
+          },
+        ]),
+      }),
+    };
+    const result = await service.staffOverview(
+      { userId: 'u', userType: 'KITCHEN', branchId: 'branch1' },
+      { date: '2026-10-20' },
+    );
+    expect(result).toMatchObject({
+      portionQuantity: 175,
+      planCount: 2,
+      dishCount: 2,
+      completedCount: 1,
+      taskCount: 3,
+      inProgressCount: 1,
+      missingSampleCount: 1,
+    });
+    expect(result.shortages).toEqual([
+      expect.objectContaining({ name: 'Gạo', shortageQuantity: 4, unit: 'kg' }),
+    ]);
+    expect(service.getDemand).toHaveBeenCalledTimes(1);
+    expect(service.getDemand).toHaveBeenCalledWith(expect.anything(), {
+      branchId: 'branch1',
+      date: '2026-10-20',
+    });
+  });
+
+  it('returns a truthful empty staff overview without fetching unrelated products or samples', async () => {
+    const service = createService();
+    service.mealPlans = { find: jest.fn().mockResolvedValue([]) };
+    service.getDemand = jest.fn().mockResolvedValue([]);
+    service.products = { find: jest.fn() };
+    service.units = { find: jest.fn() };
+    const result = await service.staffOverview(
+      { userId: 'u', userType: 'KITCHEN', branchId: 'branch1' },
+      { date: '2026-10-20' },
+    );
+    expect(result).toMatchObject({
+      portionQuantity: 0,
+      taskCount: 0,
+      shortages: [],
+      batches: [],
+      missingSampleCount: 0,
+    });
+    expect(service.products.find).not.toHaveBeenCalled();
+    expect(service.units.find).not.toHaveBeenCalled();
+  });
+
+  it('prevents staff overview access across branches', async () => {
+    await expect(
+      createService().staffOverview(
+        { userId: 'u', userType: 'KITCHEN', branchId: 'branch1' },
+        { branchId: 'branch2' },
+      ),
+    ).rejects.toThrow(ForbiddenException);
+  });
   it.each([undefined, 'station-1'])(
     'binds the demand date without corrupting the PostgreSQL cast (station %s)',
     async (stationId) => {

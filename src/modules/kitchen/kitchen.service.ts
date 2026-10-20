@@ -22,6 +22,7 @@ import {
   KitchenConsumptionLine,
   KitchenConsumptionSession,
   KitchenMealPlan,
+  KitchenOperation,
   KitchenOrderTicket,
   KitchenOrderTicketItem,
   KitchenProductStation,
@@ -783,7 +784,11 @@ export class KitchenService {
 
   async ensureMealPlan(branchId: string, date: string, mealPeriod: string) {
     let plan = await this.mealPlans.findOne({
-      where: { branchId, planDate: date, mealPeriod },
+      where: {
+        branchId,
+        planDate: date,
+        ...(mealPeriod ? { mealPeriod } : {}),
+      },
     });
     if (!plan) {
       await this.mealPlans.upsert(
@@ -791,7 +796,11 @@ export class KitchenService {
         ['branchId', 'planDate', 'mealPeriod'],
       );
       plan = await this.mealPlans.findOneOrFail({
-        where: { branchId, planDate: date, mealPeriod },
+        where: {
+          branchId,
+          planDate: date,
+          ...(mealPeriod ? { mealPeriod } : {}),
+        },
       });
     }
     return plan;
@@ -913,7 +922,11 @@ export class KitchenService {
   ) {
     const productQuantities = new Map<string, number>();
     const plans = await this.mealPlans.find({
-      where: { branchId, planDate: date, mealPeriod },
+      where: {
+        branchId,
+        planDate: date,
+        ...(mealPeriod ? { mealPeriod } : {}),
+      },
       relations: ['batches'],
     });
     for (const plan of plans)
@@ -979,6 +992,116 @@ export class KitchenService {
       }
     }
     return [...result.values()];
+  }
+
+  async staffOverview(actor: Actor, query: any) {
+    const branchId = this.resolveBranch(actor, query.branchId);
+    const date = query.date || localDate();
+    if (
+      !/^\d{4}-\d{2}-\d{2}$/.test(date) ||
+      !Number.isFinite(Date.parse(`${date}T00:00:00+07:00`))
+    )
+      throw new BadRequestException('INVALID_DATE');
+    const plans = await this.mealPlans.find({
+      where: { branchId, planDate: date },
+      relations: ['batches'],
+    });
+    const batches = plans.flatMap((plan) =>
+      (plan.batches || []).map((batch) => ({
+        ...batch,
+        mealPeriod: plan.mealPeriod,
+      })),
+    );
+    const demand = await this.getDemand(actor, { branchId, date });
+    const ingredients = new Map<string, any>(
+      demand.map((line) => [line.productId, line]),
+    );
+    const ids = [
+      ...new Set([
+        ...batches.map((batch) => batch.productId),
+        ...ingredients.keys(),
+      ]),
+    ];
+    const products = ids.length
+      ? await this.products.find({
+          where: { id: In(ids) },
+          select: ['id', 'name', 'unit', 'requiresSample'],
+        })
+      : [];
+    const byId = new Map(products.map((product) => [product.id, product]));
+    const samples = batches.length
+      ? await this.dataSource.getRepository(KitchenOperation).find({
+          where: {
+            branchId,
+            kind: 'samples',
+            parentId: In(batches.map((batch) => batch.id)),
+          },
+        })
+      : [];
+    const pendingSamples = batches.filter(
+      (batch) =>
+        byId.get(batch.productId)?.requiresSample &&
+        ['PREPARING', 'READY', 'COMPLETED'].includes(batch.status) &&
+        !samples.some(
+          (sample) =>
+            sample.parentId === batch.id &&
+            Number(sample.payload.quantity) > 0 &&
+            Date.parse(sample.payload.sampledAt) >=
+              new Date(batch.startedAt!).getTime(),
+        ),
+    );
+    const shortages = [...ingredients.values()]
+      .map((line) => ({
+        ...line,
+        name: byId.get(line.productId)?.name || line.productId,
+        shortageQuantity: Math.max(
+          0,
+          line.quantity - Number(line.availableQuantity || 0),
+        ),
+      }))
+      .filter((line) => line.shortageQuantity > 0);
+    const unitIds = [
+      ...new Set(shortages.map((line) => line.unitId).filter(Boolean)),
+    ];
+    const units = unitIds.length
+      ? await this.units.find({ where: { id: In(unitIds) } })
+      : [];
+    return {
+      date,
+      planCount: plans.length,
+      portionQuantity: batches.reduce(
+        (total, batch) =>
+          total +
+          Math.max(
+            0,
+            Number(batch.plannedQuantity) + Number(batch.adjustmentQuantity),
+          ),
+        0,
+      ),
+      dishCount: new Set(batches.map((batch) => batch.productId)).size,
+      inProgressCount: batches.filter((batch) =>
+        ['PREPARING', 'READY'].includes(batch.status),
+      ).length,
+      completedCount: batches.filter((batch) => batch.status === 'COMPLETED')
+        .length,
+      taskCount: batches.length,
+      batches: batches.map((batch) => ({
+        id: batch.id,
+        name: byId.get(batch.productId)?.name || batch.productId,
+        quantity: Math.max(
+          0,
+          Number(batch.plannedQuantity) + Number(batch.adjustmentQuantity),
+        ),
+        unit: byId.get(batch.productId)?.unit || 'suất',
+        status: batch.status,
+        shift: batch.shift,
+      })),
+      shortages: shortages.map((line) => ({
+        ...line,
+        unit: units.find((unit) => unit.id === line.unitId)?.code || '',
+      })),
+      missingSampleCount: pendingSamples.length,
+    };
   }
 
   async getDemand(actor: Actor, query: any) {

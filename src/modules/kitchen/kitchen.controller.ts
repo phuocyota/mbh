@@ -230,6 +230,12 @@ export class KitchenController {
     return this.operations.transition(req.user, id, dto, 'COMPLETED');
   }
 
+  @Get('staff-overview')
+  @Roles(...OPERATORS)
+  staffOverview(@Req() req: any, @Query() query: any) {
+    return this.kitchen.staffOverview(req.user, query);
+  }
+
   @Get('demand')
   @Roles(...OPERATORS)
   demand(@Req() req: any, @Query() query: any) {
