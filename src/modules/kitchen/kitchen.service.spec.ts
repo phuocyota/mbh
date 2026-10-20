@@ -280,6 +280,7 @@ describe('KitchenService authorization and concurrency', () => {
     expect(service.getDemand).toHaveBeenCalledWith(expect.anything(), {
       branchId: 'branch1',
       date: '2026-10-20',
+      remainingOnly: true,
     });
   });
 

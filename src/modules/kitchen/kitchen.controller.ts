@@ -62,14 +62,31 @@ export class KitchenController {
 
   @Post('tasks/:type/:id/:action')
   @Roles(...TASK_OPERATORS)
-  taskAction(
+  async taskAction(
     @Req() req: any,
     @Param('type') type: string,
     @Param('id') id: string,
     @Param('action') action: string,
     @Body() dto: any,
   ) {
-    return this.tasks.action(req.user, type, id, action, dto);
+    const task = await this.tasks.action(req.user, type, id, action, dto);
+    if (
+      type === 'ticket' &&
+      ['wait', 'receive', 'start', 'complete'].includes(action)
+    ) {
+      try {
+        await this.kitchen.syncShortageRequests(req.user, {
+          branchId: task.branchId,
+        });
+      } catch {
+        return {
+          ...task,
+          shortageNotificationError:
+            'Đã lưu tiến độ. Chưa gửi được yêu cầu bổ sung cho Admin; vui lòng thử gửi lại.',
+        };
+      }
+    }
+    return task;
   }
 
   @Put('staff/:userId/employee-link')

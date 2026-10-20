@@ -34,6 +34,11 @@ import {
 } from './kitchen-task.rules';
 import { requestFingerprint } from '../../common/utils/request-fingerprint';
 import {
+  planTaskRound,
+  remainingTaskSnapshot,
+  selectTaskRound,
+} from './kitchen-task-planning';
+import {
   ORDER_STATUS,
   ORDER_PAYMENT_STATUS,
 } from '../../common/constant/constant';
@@ -172,6 +177,7 @@ export class KitchenTaskService {
           productId: line.ingredientProductId,
           name: line.ingredientProduct.name,
           unit: unit.code,
+          unitId: unit.id,
           quantity: calculateRecipeRequirement(
             Number(line.quantity),
             line.unit,
@@ -212,13 +218,22 @@ export class KitchenTaskService {
     ] as string[];
     const lots = productIds.length
       ? await m.query(
-          `SELECT l.id,l.product_id AS "productId",l.lot_code AS "lotCode",l.quantity,l.expires_at AS "expiresAt",s.name AS "stockName" FROM stock_lots l JOIN stocks s ON s.id=l.stock_id WHERE s.branch_id=$1 AND l.product_id=ANY($2::uuid[]) AND l.quantity>0 AND (l.expires_at IS NULL OR l.expires_at >= $3::date) ORDER BY l.expires_at ASC NULLS LAST,l.id`,
+          `SELECT l.id,l.product_id AS "productId",l.lot_code AS "lotCode",
+            GREATEST(0, LEAST(l.quantity, COALESCE(si.quantity,0) - COALESCE(SUM(l.quantity) OVER (
+              PARTITION BY l.stock_id,l.product_id ORDER BY l.expires_at ASC NULLS LAST,l.created_at,l.id
+              ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING),0))) AS quantity,
+            l.expires_at AS "expiresAt",s.name AS "stockName"
+           FROM stock_lots l JOIN stocks s ON s.id=l.stock_id
+           LEFT JOIN stock_items si ON si.stock_id=l.stock_id AND si.product_id=l.product_id
+           WHERE s.branch_id=$1 AND l.product_id=ANY($2::uuid[]) AND l.quantity>0 AND (l.expires_at IS NULL OR l.expires_at >= $3::date)
+           ORDER BY l.expires_at ASC NULLS LAST,l.created_at,l.id`,
           [source.branchId, productIds, localDate()],
         )
       : [];
     return {
       id,
       type,
+      branchId: source.branchId,
       date: source.date,
       shift: source.shift,
       sourceStatus: source.row.status,
@@ -232,13 +247,61 @@ export class KitchenTaskService {
         (source.row.status === 'WAITING' ? 'WAITING' : 'LEGACY'),
       version: flow?.version || 0,
       ...snapshot,
-      lots,
+      lots: lots.filter((lot: any) => Number(lot.quantity) > 0),
+      suggestedRound: type === 'ticket' ? planTaskRound(snapshot, lots) : [],
+      waitingForStock: Boolean(flow?.payload.waitingForStock),
+      progress: (flow?.payload.originalSnapshot || snapshot).dishes.map(
+        (dish: any) => {
+          const rounds = flow?.payload.rounds || [];
+          const completed = rounds.reduce(
+            (sum: number, round: any) =>
+              sum +
+              Number(
+                round.snapshot.dishes.find(
+                  (row: any) => row.productId === dish.productId,
+                )?.quantity || 0,
+              ),
+            0,
+          );
+          const current = ['COMPLETED', 'HANDED_OVER'].includes(
+            flow?.status || '',
+          )
+            ? Number(
+                snapshot.dishes.find(
+                  (row: any) => row.productId === dish.productId,
+                )?.quantity || 0,
+              )
+            : 0;
+          return {
+            productId: dish.productId,
+            name: dish.name,
+            quantity: dish.quantity,
+            completedQuantity: completed + current,
+            remainingQuantity: Math.max(0, dish.quantity - completed - current),
+          };
+        },
+      ),
       history: flow?.payload.history || [],
       received: flow?.payload.received || [],
       actuals: flow?.payload.actuals || [],
       ownerId: flow?.payload.ownerId,
       ownerName: flow?.payload.ownerName,
       handover: flow?.payload.handover,
+      partialHandovers: flow?.payload.partialHandovers || [],
+      pendingHandover: (flow?.status === 'WAITING'
+        ? flow.payload.rounds || []
+        : []
+      )
+        .filter((round: any) => !round.handover)
+        .flatMap((round: any) =>
+          round.actuals.map((actual: any) => ({
+            batchId: actual.batchId,
+            quantity: actual.quantity,
+            name: round.received.find(
+              (entry: any) => entry.batchId === actual.batchId,
+            )?.name,
+          })),
+        ),
       items:
         type === 'ticket'
           ? source.row.items.map((item) => ({
@@ -314,7 +377,10 @@ export class KitchenTaskService {
       if ((flow?.version || 0) !== dto.expectedVersion)
         throw new ConflictException('Nhiệm vụ vừa được cập nhật. Hãy làm mới.');
       assertTaskAction(status, action);
-      if (source.date !== localDate() && action !== 'handover')
+      if (
+        source.date !== localDate() &&
+        !['handover', 'handover-partial'].includes(action)
+      )
         throw new ConflictException(
           'Chỉ thao tác chế biến cho nhiệm vụ trong ngày hôm nay.',
         );
@@ -339,25 +405,40 @@ export class KitchenTaskService {
           payload: { history: [], requests: {} },
           createdBy: actor.userId,
         });
+      if (action === 'wait') {
+        if (type !== 'ticket')
+          throw new BadRequestException('Chỉ chia đợt cho đơn căn tin.');
+        flow.payload.waitingForStock = true;
+      }
       if (action === 'receive') {
-        if (source.row.status !== 'WAITING')
+        if (
+          source.row.status !== 'WAITING' &&
+          !(
+            type === 'ticket' &&
+            source.row.status === 'PREPARING' &&
+            flow.payload.rounds?.length
+          )
+        )
           throw new ConflictException(
             'Nhiệm vụ đã bắt đầu ở luồng khác. Hãy làm mới.',
           );
-        const snapshot = await this.requirements(m, source, type);
-        if (snapshot.missingRecipes.length)
+        const outstanding = flow.payload.originalSnapshot
+          ? remainingTaskSnapshot(
+              flow.payload.originalSnapshot,
+              flow.payload.rounds || [],
+            )
+          : await this.requirements(m, source, type);
+        if (outstanding.missingRecipes.length)
           throw new BadRequestException(
-            `Chưa có công thức đang áp dụng: ${snapshot.missingRecipes.join(', ')}.`,
+            `Chưa có công thức đang áp dụng: ${outstanding.missingRecipes.join(', ')}.`,
           );
-        if (!snapshot.dishes.length)
+        if (!outstanding.dishes.length)
           throw new BadRequestException('Đơn không có món phải chế biến.');
-        if (
-          !Array.isArray(dto.dishes) ||
-          dto.dishes.length !== snapshot.dishes.length
-        )
-          throw new BadRequestException(
-            'Cần xác nhận nguyên liệu cho đủ các món.',
-          );
+        const snapshot = selectTaskRound(
+          outstanding,
+          dto.dishes,
+          type === 'ticket',
+        );
         const batchIds: string[] = [],
           received: any[] = [],
           allTotals = new Map<string, number>();
@@ -467,6 +548,8 @@ export class KitchenTaskService {
         }
         flow.payload = {
           ...flow.payload,
+          originalSnapshot: flow.payload.originalSnapshot || outstanding,
+          waitingForStock: false,
           ownerId: actor.userId,
           ownerName:
             (
@@ -504,7 +587,7 @@ export class KitchenTaskService {
             { id },
             {
               status: 'PREPARING',
-              startedAt: new Date(),
+              startedAt: source.row.startedAt || new Date(),
               updatedBy: actor.userId,
             },
           );
@@ -535,9 +618,9 @@ export class KitchenTaskService {
           const dish = flow.payload.snapshot.dishes.find(
             (row) => row.productId === entry.productId,
           );
-          if (type === 'ticket' && quantity < dish.quantity)
+          if (type === 'ticket' && quantity !== dish.quantity)
             throw new BadRequestException(
-              'Sản lượng đạt cần đủ số lượng đơn. Có thể ghi chú hao hụt để bếp trưởng xử lý.',
+              'Sản lượng đạt phải bằng số suất đã nhận của đợt này. Ghi chú hao hụt để bếp trưởng xử lý.',
             );
           if (!Number.isSafeInteger(quantity) || quantity > 10000)
             throw new BadRequestException(
@@ -567,6 +650,10 @@ export class KitchenTaskService {
             if (used <= 0)
               throw new BadRequestException(
                 `Cần ghi nhận lượng thực dùng của ${requirement.name}.`,
+              );
+            if (type === 'ticket' && used + 0.00005 < requirement.quantity)
+              throw new BadRequestException(
+                `Lượng thực dùng của ${requirement.name} chưa đủ định lượng đợt này.`,
               );
           }
           const batch = await m
@@ -624,7 +711,10 @@ export class KitchenTaskService {
           const dish = flow.payload.snapshot.dishes.find(
             (row) => row.productId === entry.productId,
           );
-          if (type === 'ticket' && Number(batch.actualQuantity) < dish.quantity)
+          if (
+            type === 'ticket' &&
+            Number(batch.actualQuantity) !== dish.quantity
+          )
             throw new ConflictException(
               'Sản lượng đạt chưa đủ số lượng đơn hàng.',
             );
@@ -658,7 +748,18 @@ export class KitchenTaskService {
           });
           await ops.action(actor, 'finished-imports', imported.id, 'confirm');
         }
-        if (type === 'ticket') {
+        const rounds = flow.payload.rounds || [];
+        const outstanding = remainingTaskSnapshot(
+          flow.payload.originalSnapshot || flow.payload.snapshot,
+          [
+            ...rounds,
+            {
+              snapshot: flow.payload.snapshot,
+            },
+          ],
+        );
+        const hasRemaining = type === 'ticket' && outstanding.dishes.length > 0;
+        if (type === 'ticket' && !hasRemaining) {
           await m
             .getRepository(KitchenOrderTicket)
             .update(
@@ -677,16 +778,72 @@ export class KitchenTaskService {
           checkedBy: actor.userId,
           checkedAt: new Date().toISOString(),
         };
-        flow.status = 'COMPLETED';
+        if (hasRemaining) {
+          flow.payload.rounds = [
+            ...rounds,
+            {
+              snapshot: flow.payload.snapshot,
+              received: flow.payload.received,
+              actuals: flow.payload.actuals,
+              completedAt: new Date().toISOString(),
+              quality: flow.payload.quality,
+            },
+          ];
+          flow.payload.snapshot = outstanding;
+          flow.payload.received = [];
+          flow.payload.actuals = [];
+          flow.payload.batchIds = [];
+          flow.payload.waitingForStock = true;
+          flow.status = 'WAITING';
+        } else {
+          flow.payload.received = [
+            ...rounds
+              .filter((round: any) => !round.handover)
+              .flatMap((round: any) => round.received),
+            ...flow.payload.received,
+          ];
+          flow.payload.actuals = [
+            ...rounds
+              .filter((round: any) => !round.handover)
+              .flatMap((round: any) => round.actuals),
+            ...flow.payload.actuals,
+          ];
+          flow.payload.batchIds = flow.payload.received.map(
+            (entry: any) => entry.batchId,
+          );
+          flow.status = 'COMPLETED';
+        }
       }
-      if (action === 'handover') {
+      if (action === 'handover' || action === 'handover-partial') {
+        const partial = action === 'handover-partial';
+        if (
+          partial &&
+          (type !== 'ticket' ||
+            !['ADMIN', 'MANAGER', 'HEAD_CHEF'].includes(actor.userType) ||
+            dto.confirmPartial !== true)
+        )
+          throw new BadRequestException(
+            'Bếp trưởng/Quản lý cần xác nhận bàn giao một phần đơn.',
+          );
+        const pendingRounds = (flow.payload.rounds || []).filter(
+          (round: any) => !round.handover,
+        );
+        const batchIds: string[] = partial
+          ? pendingRounds.flatMap((round: any) =>
+              round.received.map((entry: any) => entry.batchId),
+            )
+          : flow.payload.batchIds;
+        if (!batchIds.length)
+          throw new BadRequestException(
+            'Không có đợt đã hoàn thành chờ bàn giao.',
+          );
         const receivedBy = String(dto.receivedBy || '').trim();
         if (!receivedBy || receivedBy.length > 200 || !Array.isArray(dto.items))
           throw new BadRequestException('Cần ghi số lượng giao và người nhận.');
-        if (dto.items.length !== flow.payload.batchIds.length)
+        if (dto.items.length !== batchIds.length)
           throw new BadRequestException('Cần bàn giao đủ các món.');
         const handed: any[] = [];
-        for (const batchId of flow.payload.batchIds) {
+        for (const batchId of batchIds) {
           const batch = await m
             .getRepository(KitchenProductionBatch)
             .findOneByOrFail({ id: batchId });
@@ -713,7 +870,7 @@ export class KitchenTaskService {
           });
           handed.push({ batchId, quantity: Number(item.quantity) });
         }
-        if (type === 'ticket') {
+        if (type === 'ticket' && !partial) {
           await m.getRepository(KitchenOrderTicket).update(
             { id },
             {
@@ -739,13 +896,22 @@ export class KitchenTaskService {
             createdBy: actor.userId,
           });
         }
-        flow.payload.handover = {
+        const handover = {
           items: handed,
           receivedBy,
           deliveredBy: actor.userId,
           deliveredAt: new Date().toISOString(),
         };
-        flow.status = 'HANDED_OVER';
+        if (partial) {
+          for (const round of pendingRounds) round.handover = handover;
+          flow.payload.partialHandovers = [
+            ...(flow.payload.partialHandovers || []),
+            handover,
+          ];
+        } else {
+          flow.payload.handover = handover;
+          flow.status = 'HANDED_OVER';
+        }
       }
       flow.payload.history.push({
         action,

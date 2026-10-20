@@ -1,11 +1,13 @@
 import { BadRequestException, ConflictException } from '@nestjs/common';
 
 export const TASK_FLOW = {
+  wait: 'WAITING',
   receive: 'WAITING',
   start: 'RECEIVED',
   record: 'PREPARING',
   complete: 'RECORDED',
   handover: 'COMPLETED',
+  'handover-partial': 'WAITING',
 } as const;
 export function assertTaskAction(status: string, action: string) {
   if (status === 'RECORDED' && action === 'record') return;

@@ -357,6 +357,121 @@ class Pool extends EventEmitter {
     }), /tồn chưa phân lô/);
     assert.equal((await db.getRepository(E.Product).findOneByOrFail({ id: legacyProduct.id })).lotTrackingEnabled, false);
     console.log('PASS automatic material lots: zero-stock preparation and actual lot receipt, transaction rollback, legacy unallocated stock blocked.');
+    // Complete-portion split: 100 ordered, only enough pork for 75, then replenish 25.
+    const splitBranch = await save(E.Branch, { name: 'Partial production branch' });
+    const splitChef = await save(E.User, { fullName: 'Split chef', role: 'HEAD_CHEF', branchId: splitBranch.id, passwordHash: 'not-a-login' });
+    const splitAdmin = await save(E.User, { fullName: 'Split admin', role: 'ADMIN', status: 'ACTIVE', branchId: splitBranch.id, passwordHash: 'not-a-login' });
+    const splitActor = { userId: splitChef.id, userType: 'HEAD_CHEF', branchId: splitBranch.id };
+    const splitStock = await save(E.Stock, { name: 'Split stock', branchId: splitBranch.id });
+    const splitDish = await save(E.Product, { name: 'Bánh mì chia đợt', categoryId: category.id, branchId: splitBranch.id, productType: 'FINISHED_GOOD', requiresCooking: true, requiresSample: false, baseUnitId: piece.id, unit: 'cái', price: 20000, recommendedUseMinutes: 120 });
+    const splitRecipe = await save(E.KitchenRecipe, { branchId: splitBranch.id, productId: splitDish.id, version: 1, status: 'ACTIVE', yieldQuantity: 1, yieldUnitId: piece.id });
+    const splitInputs = [];
+    for (const [name, quantity, requirement, unit] of [['Vỏ', 100, 1, piece], ['Chả', 3000, 40, gram], ['Rau', 2000, 20, gram]]) {
+      const product = await save(E.Product, { name, categoryId: category.id, branchId: splitBranch.id, productType: 'INGREDIENT', baseUnitId: unit.id, lotTrackingEnabled: true, unit: unit.code, price: 0 });
+      const lot = await save(E.StockLot, { stockId: splitStock.id, productId: product.id, lotCode: `SPLIT-${name}`, expiresAt: '2099-01-01', quantity });
+      await save(E.StockItem, { stockId: splitStock.id, productId: product.id, quantity });
+      await save(E.KitchenRecipeItem, { recipeId: splitRecipe.id, ingredientProductId: product.id, unitId: unit.id, quantity: requirement });
+      splitInputs.push({ product, lot, requirement });
+    }
+    await save(E.StockLot, { stockId: splitStock.id, productId: splitInputs[1].product.id, lotCode: 'SPLIT-EXPIRED', expiresAt: '2000-01-01', quantity: 9999 });
+    await db.getRepository(E.StockItem).update({ stockId: splitStock.id, productId: splitInputs[1].product.id }, { quantity: 12999 });
+    const splitOrder = await save(E.Order, { branchId: splitBranch.id, orderCode: 'SPLIT-100', orderNumber: 100, status: 1, paymentStatus: 'PAID', paidAmount: 2000000, totalAmount: 2000000 });
+    const splitTicket = await save(E.KitchenOrderTicket, { orderId: splitOrder.id, branchId: splitBranch.id, status: 'WAITING' });
+    await save(E.KitchenOrderTicketItem, { ticketId: splitTicket.id, productId: splitDish.id, productName: splitDish.name, quantity: 100 });
+    const realKitchen = Object.assign(Object.create(KitchenService.prototype), {
+      dataSource: db, recipes: db.getRepository(E.KitchenRecipe), units: db.getRepository(E.MeasurementUnit), products: db.getRepository(E.Product),
+      tickets: db.getRepository(E.KitchenOrderTicket), mealPlans: db.getRepository(E.KitchenMealPlan), operations: ops, movements,
+    });
+    const { KitchenController } = require('../dist/src/modules/kitchen/kitchen.controller');
+    const taskController = new KitchenController(realKitchen, ops, tasks);
+    let splitState = await tasks.get(splitActor, 'ticket', splitTicket.id);
+    const splitAct = async (action, body = {}, requestId = randomUUID(), version = splitState.version) => {
+      splitState = await taskController.taskAction({ user: splitActor }, 'ticket', splitTicket.id, action, { ...body, requestId, expectedVersion: version });
+      assert.equal(splitState.shortageNotificationError, undefined);
+      return splitState;
+    };
+    assert.equal(splitState.suggestedRound[0].quantity, 75);
+    assert.equal(splitState.suggestedRound[0].inputLots.length, 3, 'expired lot excluded');
+    await db.getRepository(E.StockItem).update({ stockId: splitStock.id, productId: splitInputs[1].product.id }, { quantity: 2000 });
+    assert.equal((await tasks.get(splitActor, 'ticket', splitTicket.id)).suggestedRound[0].quantity, 50, 'plan capped by stock balance as well as lot balance');
+    await db.getRepository(E.StockItem).update({ stockId: splitStock.id, productId: splitInputs[1].product.id }, { quantity: 12999 });
+    await splitAct('wait');
+    assert.equal(splitState.waitingForStock, true);
+    const splitNotifications = () => realKitchen.listKitchenNotifications({ userId: splitAdmin.id, userType: 'ADMIN', branchId: splitBranch.id });
+    assert.equal((await splitNotifications()).items.find(row => row.productId === splitInputs[1].product.id).shortageQuantity, 1000);
+    const firstSplit = { dishes: splitState.suggestedRound.filter(row => row.quantity > 0) };
+    const movementCount = await db.getRepository(E.StockMovement).count();
+    await splitAct('receive', firstSplit);
+    assert.equal(await db.getRepository(E.StockMovement).count(), movementCount, 'planning and receiving do not reserve or consume');
+    await splitAct('start');
+    const shortageAfterStart = await realKitchen.staffOverview(splitActor, { date: localDate() });
+    assert.equal(shortageAfterStart.shortages.length, 1);
+    assert.equal(shortageAfterStart.shortages[0].shortageQuantity, 1000, 'do not request already issued ingredients again');
+    const splitActuals = () => ({ actuals: splitState.received.map(entry => ({ batchId: entry.batchId, quantity: splitState.dishes.find(row => row.productId === entry.productId).quantity, note: '', lots: entry.inputLots.map(line => ({ lotId: line.lotId, used: line.quantity, waste: 0 })) })) });
+    const invalidActuals = splitActuals(); invalidActuals.actuals[0].lots[1].used = 1;
+    await assert.rejects(splitAct('record', invalidActuals), /chưa đủ định lượng/);
+    await splitAct('record', splitActuals());
+    const roundCompleteVersion = splitState.version, roundCompleteRequest = randomUUID();
+    await splitAct('complete', { qualityPassed: true }, roundCompleteRequest);
+    assert.equal(splitState.status, 'WAITING');
+    assert.equal(splitState.progress[0].completedQuantity, 75);
+    assert.equal(splitState.progress[0].remainingQuantity, 25);
+    assert.equal(splitState.dishes[0].requirements.find(row => row.productId === splitInputs[1].product.id).quantity, 1000);
+    assert.equal((await db.getRepository(E.KitchenOrderTicket).findOneByOrFail({ id: splitTicket.id })).status, 'PREPARING');
+    assert.notEqual((await db.getRepository(E.Order).findOneByOrFail({ id: splitOrder.id })).status, 5);
+    const countAfterFirstRound = await db.getRepository(E.FinishedUnit).count();
+    await splitAct('complete', { qualityPassed: true }, roundCompleteRequest, roundCompleteVersion);
+    assert.equal(await db.getRepository(E.FinishedUnit).count(), countAfterFirstRound, 'completion replay cannot duplicate 75 finished units');
+    await assert.rejects(splitAct('handover', { receivedBy: 'Quầy', items: [] }), /trạng thái/);
+    const partialHandoverBody = { receivedBy: 'Quầy đợt 1', confirmPartial: true, items: splitState.pendingHandover.map(row => ({ batchId: row.batchId, quantity: row.quantity })) };
+    await assert.rejects(tasks.action({ ...splitActor, userType: 'KITCHEN' }, 'ticket', splitTicket.id, 'handover-partial', { ...partialHandoverBody, expectedVersion: splitState.version, requestId: randomUUID() }), /Bếp trưởng/);
+    await assert.rejects(splitAct('handover-partial', { ...partialHandoverBody, confirmPartial: false }), /xác nhận/);
+    await splitAct('handover-partial', partialHandoverBody);
+    assert.equal(splitState.status, 'WAITING');
+    assert.equal(splitState.pendingHandover.length, 0);
+    assert.equal(splitState.partialHandovers[0].items[0].quantity, 75);
+    assert.notEqual((await db.getRepository(E.Order).findOneByOrFail({ id: splitOrder.id })).status, 5, 'partial handover never completes the order');
+    await assert.rejects(splitAct('handover-partial', partialHandoverBody), /Không có đợt/);
+    await assert.rejects(splitAct('receive', { dishes: [{ productId: splitDish.id, quantity: 26, inputLots: [] }] }), /không vượt/);
+    await db.getRepository(E.KitchenRecipeItem).update({ recipeId: splitRecipe.id, ingredientProductId: splitInputs[1].product.id }, { quantity: 80 });
+    await db.transaction(manager => movements.change(manager, splitStock.id, splitInputs[1].product.id, 1000, randomUUID(), { lotCode: 'SPLIT-REPLENISH', expiresAt: '2099-02-01', actorId: splitActor.userId }));
+    splitState = await tasks.get(splitActor, 'ticket', splitTicket.id);
+    assert.equal(splitState.suggestedRound[0].quantity, 25);
+    assert.equal(splitState.dishes[0].requirements.find(row => row.productId === splitInputs[1].product.id).quantity, 1000, 'later recipe edits cannot change the pinned 40g per portion for this order');
+    await splitAct('receive', { dishes: splitState.suggestedRound });
+    await splitAct('start');
+    await splitAct('record', splitActuals());
+    await splitAct('complete', { qualityPassed: true });
+    assert.equal(splitState.status, 'COMPLETED');
+    assert.equal(splitState.progress[0].completedQuantity, 100);
+    assert.equal(splitState.batchIds.length, 1, 'the first 75 were already handed over, only the final 25 remain');
+    assert.equal((await db.getRepository(E.Order).findOneByOrFail({ id: splitOrder.id })).status, 4, 'ready for pickup only after all 100 portions');
+    assert.equal((await realKitchen.staffOverview(splitActor, { date: localDate() })).shortages.length, 0);
+    const splitHandover = { receivedBy: 'Quầy', items: splitState.actuals.map(row => ({ batchId: row.batchId, quantity: row.quantity })) };
+    await splitAct('handover', splitHandover);
+    assert.equal(splitState.status, 'HANDED_OVER');
+    assert.equal((await db.getRepository(E.Order).findOneByOrFail({ id: splitOrder.id })).status, 5);
+    // Also support keeping all completed tranches in the kitchen for one final handover.
+    for (const [index, quantity] of [2, 160, 40].entries())
+      await db.transaction(manager => movements.change(manager, splitStock.id, splitInputs[index].product.id, quantity, randomUUID(), { lotCode: `SPLIT-HOLD-${index}`, expiresAt: '2099-03-01', actorId: splitActor.userId }));
+    const holdOrder = await save(E.Order, { branchId: splitBranch.id, orderCode: 'SPLIT-HOLD', orderNumber: 101, status: 1, paymentStatus: 'PAID', paidAmount: 40000, totalAmount: 40000 });
+    const holdTicket = await save(E.KitchenOrderTicket, { orderId: holdOrder.id, branchId: splitBranch.id, status: 'WAITING' });
+    await save(E.KitchenOrderTicketItem, { ticketId: holdTicket.id, productId: splitDish.id, productName: splitDish.name, quantity: 2 });
+    let holdState = await tasks.get(splitActor, 'ticket', holdTicket.id);
+    const holdAct = async (action, body = {}) => holdState = await tasks.action(splitActor, 'ticket', holdTicket.id, action, { ...body, expectedVersion: holdState.version, requestId: randomUUID() });
+    for (let tranche = 0; tranche < 2; tranche++) {
+      const suggestion = holdState.suggestedRound[0];
+      await holdAct('receive', { dishes: [{ productId: splitDish.id, quantity: 1, inputLots: suggestion.inputLots.map(line => ({ lotId: line.lotId, quantity: line.quantity / suggestion.quantity })) }] });
+      await holdAct('start');
+      await holdAct('record', { actuals: holdState.received.map(entry => ({ batchId: entry.batchId, quantity: 1, note: '', lots: entry.inputLots.map(line => ({ lotId: line.lotId, used: line.quantity, waste: 0 })) })) });
+      await holdAct('complete', { qualityPassed: true });
+    }
+    assert.equal(holdState.status, 'COMPLETED');
+    assert.equal(holdState.actuals.length, 2, 'both unhanded tranches must be available for final handover');
+    await holdAct('handover', { receivedBy: 'Quầy nhận đủ', items: holdState.actuals.map(row => ({ batchId: row.batchId, quantity: row.quantity })) });
+    assert.equal(holdState.status, 'HANDED_OVER');
+    assert.equal(holdState.progress[0].completedQuantity, 2);
+    console.log('PASS split production: 75/100 complete portions, stock-capped FEFO, wait and admin request, remaining demand, pinned recipe quantities, QC, replay, replenish 25 and full-order handover.');
     console.log('PASS isolated PostgreSQL: receive → start → actuals → sample/QC → handover; three lots, unused returns, stock once, replay, expiry, branch/owner/version checks, transaction rollback, finished units and order status.');
   } finally { if (db.isInitialized) await db.destroy(); await pg.close(); }
 })().catch((error) => { console.error(error.stack); process.exit(1); });

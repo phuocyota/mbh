@@ -1,5 +1,6 @@
 import { isUUID } from 'class-validator';
 import { recipeCosting } from './recipe-costing';
+import { remainingTaskSnapshot } from './kitchen-task-planning';
 import { KitchenOperationsService } from './kitchen-operations.service';
 import { canUseStockProduct } from '../stock/stock-scope';
 import {
@@ -1517,6 +1518,7 @@ export class KitchenService {
     date: string,
     mealPeriod: string,
     stationId?: string,
+    remainingOnly = false,
   ) {
     const productQuantities = new Map<string, number>();
     const plans = await this.mealPlans.find({
@@ -1554,7 +1556,36 @@ export class KitchenService {
       })
       .andWhere(stationId ? 't.station_id=:stationId' : '1=1', { stationId })
       .getMany();
-    for (const ticket of ticketRows)
+    const flows =
+      remainingOnly && ticketRows.length
+        ? await this.dataSource.getRepository(KitchenOperation).findBy({
+            branchId,
+            kind: 'task-flow',
+            parentId: In(ticketRows.map((ticket) => ticket.id)),
+          })
+        : [];
+    const workflowDemand: any[] = [];
+    for (const flow of flows) {
+      const original = flow.payload.originalSnapshot || flow.payload.snapshot;
+      if (!original) continue;
+      const issued = [...(flow.payload.rounds || [])];
+      if (
+        ['PREPARING', 'RECORDED', 'COMPLETED', 'HANDED_OVER'].includes(flow.status)
+      )
+        issued.push({ snapshot: flow.payload.snapshot });
+      workflowDemand.push(
+        ...remainingTaskSnapshot(original, issued).dishes.flatMap(
+          (dish: any) => dish.requirements,
+        ),
+      );
+    }
+    const untrackedTickets = ticketRows.filter(
+      (ticket) => !flows.some(
+        (flow) => flow.parentId === ticket.id &&
+          (flow.payload.originalSnapshot || flow.payload.snapshot),
+      ),
+    );
+    for (const ticket of untrackedTickets)
       for (const item of ticket.items || [])
         productQuantities.set(
           item.productId,
@@ -1592,6 +1623,24 @@ export class KitchenService {
         });
       }
     }
+    const missingUnitIds = [...new Set(
+      workflowDemand.filter((line) => !line.unitId).map((line) => line.productId),
+    )];
+    const legacyProducts = missingUnitIds.length
+      ? await this.products.findBy({ id: In(missingUnitIds) })
+      : [];
+    for (const line of workflowDemand) {
+      const current = result.get(line.productId);
+      const unitId = line.unitId || legacyProducts.find(
+        (product) => product.id === line.productId,
+      )?.baseUnitId;
+      if (!unitId) continue;
+      result.set(line.productId, {
+        productId: line.productId,
+        quantity: (current?.quantity || 0) + Number(line.quantity),
+        unitId,
+      });
+    }
     return [...result.values()];
   }
 
@@ -1626,7 +1675,7 @@ export class KitchenService {
     ).filter((ticket) =>
       ['WAITING', 'PREPARING', 'READY', 'DELIVERED'].includes(ticket.status),
     );
-    const demand = await this.getDemand(actor, { branchId, date });
+    const demand = await this.getDemand(actor, { branchId, date, remainingOnly: true });
     const ingredients = new Map<string, any>(
       demand.map((line) => [line.productId, line]),
     );
@@ -1753,6 +1802,7 @@ export class KitchenService {
       query.date,
       query.mealPeriod,
       query.stationId,
+      query.remainingOnly === true,
     );
     const stockRows = await this.dataSource
       .getRepository(StockItem)
