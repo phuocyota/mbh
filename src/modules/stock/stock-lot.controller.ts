@@ -30,7 +30,8 @@ import {
   localDate,
   positive,
 } from './stock-movement.service';
-import { resolveStockBranch } from './stock-scope';
+import { resolveStockBranch, canUseStockProduct } from './stock-scope';
+import { planFefo } from './fefo';
 import { StockService } from './stock.service';
 import {
   normalizePagination,
@@ -47,6 +48,37 @@ export class StockLotController {
     private movements: StockMovementService,
     private stocks: StockService,
   ) {}
+  @Get('fefo')
+  @Roles(UserType.ADMIN, UserType.MANAGER)
+  async fefo(@Req() req: any, @Query() q: any) {
+    const branchId = resolveStockBranch(req.user, q.branchId);
+    if (!isUUID(q.productId) || (q.stockId && !isUUID(q.stockId)) || (q.unitId && !isUUID(q.unitId)))
+      throw new BadRequestException('INVALID_FEFO_REFERENCE');
+    const product = await this.db.getRepository(Product).findOneBy({ id: q.productId });
+    if (!product?.lotTrackingEnabled || !product.baseUnitId ||
+      !(await canUseStockProduct(this.db.manager, product, branchId)))
+      throw new BadRequestException('INVALID_FEFO_PRODUCT');
+    const stock = await this.db.getRepository(Stock).findOneBy({ branchId, ...(q.stockId ? { id: q.stockId } : {}) });
+    if (!stock) throw new BadRequestException('Không tìm thấy kho của chi nhánh.');
+    const quantity = await this.movements.normalize(this.db.manager, product, { quantity: positive(q.quantity), unitId: q.unitId || product.baseUnitId });
+    const [lots, balance, unit] = await Promise.all([
+      this.db.getRepository(StockLot).findBy({ stockId: stock.id, productId: product.id }),
+      this.db.getRepository(StockItem).findOneBy({ stockId: stock.id, productId: product.id }),
+      this.db.getRepository(MeasurementUnit).findOneBy({ id: product.baseUnitId }),
+    ]);
+    if (!unit?.isActive) throw new BadRequestException('INVALID_FEFO_UNIT');
+    return {
+      ...planFefo(quantity, lots, localDate(), Math.max(0, Number(balance?.quantity || 0))),
+      branchId,
+      stockId: stock.id,
+      stockName: stock.name,
+      productId: product.id,
+      productName: product.name,
+      unitId: unit.id,
+      unit: unit.code,
+      calculatedAt: new Date().toISOString(),
+    };
+  }
   @Get()
   @Roles(UserType.ADMIN, UserType.MANAGER, UserType.KITCHEN)
   async list(@Req() req: any, @Query() q: any) {
