@@ -65,6 +65,8 @@ export class KitchenProductStation extends BaseEntity {
 @Entity('kitchen_recipes')
 @Unique('UQ_kitchen_recipe_version', ['branchId', 'productId', 'version'])
 export class KitchenRecipe extends BaseEntity {
+  @Column('varchar', { name: 'description', length: 500, nullable: true })
+  description: string | null;
   @Column('uuid', { name: 'branch_id' }) branchId: string;
   @Column('uuid', { name: 'product_id' }) productId: string;
   @Column('int') version: number;

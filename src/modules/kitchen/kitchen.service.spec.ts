@@ -7,10 +7,67 @@ function createService() {
   service.config = {
     get: jest.fn().mockReturnValue(undefined),
   };
+  service.tickets = { find: jest.fn().mockResolvedValue([]) };
   return service as KitchenService & Record<string, any>;
 }
 
 describe('KitchenService authorization and concurrency', () => {
+  it('keeps made-to-order finished goods out of direct-sale stock export', async () => {
+    const service = createService();
+    service.products = { find: jest.fn().mockResolvedValue([{ id: 'bread' }]) };
+    const order = {
+      branchId: 'branch1',
+      items: [
+        { productId: 'bread', quantity: 1 },
+        { productId: 'milk', quantity: 1 },
+      ],
+    };
+    expect(await service.orderForLegacyStockExport(order)).toEqual({
+      ...order,
+      items: [{ productId: 'milk', quantity: 1 }],
+    });
+    expect(order.items).toHaveLength(2);
+  });
+  it('shows a paid canteen ticket on overview without inventing a production batch', async () => {
+    const service = createService();
+    service.mealPlans = { find: jest.fn().mockResolvedValue([]) };
+    service.getDemand = jest.fn().mockResolvedValue([]);
+    service.tickets = {
+      find: jest
+        .fn()
+        .mockResolvedValue([
+          {
+            id: 't1',
+            status: 'WAITING',
+            order: { orderCode: 'TEST', orderNumber: 123 },
+            items: [
+              { productId: 'bread', productName: 'Bánh mì', quantity: 1 },
+            ],
+          },
+        ]),
+    };
+    service.products = {
+      find: jest
+        .fn()
+        .mockResolvedValue([
+          { id: 'bread', name: 'Bánh mì', productType: 'FINISHED_GOOD' },
+        ]),
+    };
+    const result = await service.staffOverview(
+      { userId: 'u', userType: 'KITCHEN', branchId: 'branch1' },
+      { date: '2026-10-20' },
+    );
+    expect(result).toMatchObject({
+      taskCount: 1,
+      completedCount: 0,
+      dishCount: 1,
+      batches: [],
+      tickets: [{ id: 't1', items: [{ name: 'Bánh mì', quantity: 1 }] }],
+    });
+    expect(service.tickets.find.mock.calls[0][0].where.branchId).toBe(
+      'branch1',
+    );
+  });
   it('aggregates staff work from real batches and checks demand once for the whole day', async () => {
     const service = createService();
     service.mealPlans = {

@@ -13,7 +13,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, EntityManager, In, Repository } from 'typeorm';
+import { Between, DataSource, EntityManager, In, Repository } from 'typeorm';
 import {
   CustomerMealItem,
   Employee,
@@ -233,6 +233,15 @@ export class KitchenService {
   async createRecipe(actor: Actor, dto: any) {
     const branchId = this.resolveBranch(actor, dto.branchId);
     if (
+      dto.description != null &&
+      (typeof dto.description !== 'string' ||
+        dto.description.trim().length > 500)
+    )
+      throw new BadRequestException(
+        'Mô tả công thức phải là chuỗi tối đa 500 ký tự.',
+      );
+    const description = dto.description?.trim() || null;
+    if (
       !(Number(dto.yieldQuantity) > 0) ||
       !Array.isArray(dto.items) ||
       !dto.items.length
@@ -326,6 +335,7 @@ export class KitchenService {
           branchId,
           productId: dto.productId,
           version: (latest?.version || 0) + 1,
+          description,
           yieldQuantity: dto.yieldQuantity,
           yieldUnitId: dto.yieldUnitId,
           status: dto.activate ? 'ACTIVE' : 'DRAFT',
@@ -645,13 +655,25 @@ export class KitchenService {
   }
 
   async orderForLegacyStockExport(order: any) {
+    const productIds = (order?.items || []).map((item: any) => item.productId);
+    if (!productIds.length || !order?.branchId) return order;
+    const cookingProducts = await this.products.find({
+      where: { id: In(productIds), productType: 'FINISHED_GOOD' },
+      select: ['id'],
+    });
+    const cookingIds = new Set(cookingProducts.map((product) => product.id));
+    order = {
+      ...order,
+      items: (order.items || []).filter(
+        (item: any) => !cookingIds.has(item.productId),
+      ),
+    };
     const recipeStockEnabled =
       String(
         this.config.get('KITCHEN_RECIPE_STOCK_ENABLED') ?? 'false',
       ).toLowerCase() === 'true';
     if (!recipeStockEnabled || !order?.branchId) return order;
-    const productIds = (order.items || []).map((item: any) => item.productId);
-    if (!productIds.length) return order;
+    if (!order.items.length) return order;
     const recipeRows = await this.recipes.find({
       where: {
         branchId: order.branchId,
@@ -1012,6 +1034,17 @@ export class KitchenService {
         mealPeriod: plan.mealPeriod,
       })),
     );
+    const start = new Date(`${date}T00:00:00+07:00`);
+    const end = new Date(start.getTime() + 86400000 - 1);
+    const tickets = (
+      await this.tickets.find({
+        where: { branchId, createdAt: Between(start, end) },
+        relations: ['items', 'order'],
+        order: { createdAt: 'ASC' },
+      })
+    ).filter((ticket) =>
+      ['WAITING', 'PREPARING', 'READY', 'DELIVERED'].includes(ticket.status),
+    );
     const demand = await this.getDemand(actor, { branchId, date });
     const ingredients = new Map<string, any>(
       demand.map((line) => [line.productId, line]),
@@ -1019,13 +1052,16 @@ export class KitchenService {
     const ids = [
       ...new Set([
         ...batches.map((batch) => batch.productId),
+        ...tickets.flatMap((ticket) =>
+          (ticket.items || []).map((item) => item.productId),
+        ),
         ...ingredients.keys(),
       ]),
     ];
     const products = ids.length
       ? await this.products.find({
           where: { id: In(ids) },
-          select: ['id', 'name', 'unit', 'requiresSample'],
+          select: ['id', 'name', 'unit', 'requiresSample', 'productType'],
         })
       : [];
     const byId = new Map(products.map((product) => [product.id, product]));
@@ -1078,13 +1114,38 @@ export class KitchenService {
           ),
         0,
       ),
-      dishCount: new Set(batches.map((batch) => batch.productId)).size,
-      inProgressCount: batches.filter((batch) =>
-        ['PREPARING', 'READY'].includes(batch.status),
-      ).length,
-      completedCount: batches.filter((batch) => batch.status === 'COMPLETED')
-        .length,
-      taskCount: batches.length,
+      dishCount: new Set([
+        ...batches.map((batch) => batch.productId),
+        ...tickets.flatMap((ticket) =>
+          (ticket.items || [])
+            .filter(
+              (item) =>
+                byId.get(item.productId)?.productType === 'FINISHED_GOOD',
+            )
+            .map((item) => item.productId),
+        ),
+      ]).size,
+      inProgressCount:
+        batches.filter((batch) => ['PREPARING', 'READY'].includes(batch.status))
+          .length +
+        tickets.filter((ticket) =>
+          ['PREPARING', 'READY'].includes(ticket.status),
+        ).length,
+      completedCount:
+        batches.filter((batch) => batch.status === 'COMPLETED').length +
+        tickets.filter((ticket) => ticket.status === 'DELIVERED').length,
+      taskCount: batches.length + tickets.length,
+      tickets: tickets.map((ticket) => ({
+        id: ticket.id,
+        orderCode: ticket.order?.orderCode || ticket.orderId,
+        orderNumber: ticket.order?.orderNumber,
+        status: ticket.status,
+        items: (ticket.items || []).map((item) => ({
+          productId: item.productId,
+          name: item.productName,
+          quantity: Number(item.quantity),
+        })),
+      })),
       batches: batches.map((batch) => ({
         id: batch.id,
         name: byId.get(batch.productId)?.name || batch.productId,
