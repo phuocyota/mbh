@@ -572,6 +572,17 @@ export class KitchenService {
     target: string,
   ) {
     const ticket = await this.getTicket(actor, id);
+    const task = await this.dataSource
+      .getRepository(KitchenOperation)
+      .findOneBy({
+        kind: 'task-flow',
+        parentId: id,
+        branchId: ticket.branchId,
+      });
+    if (task)
+      throw new ConflictException(
+        'Hãy thao tác đơn này qua luồng Nhiệm vụ bếp.',
+      );
     const allowed: Record<string, string> = {
       [KITCHEN_TICKET_STATUS.WAITING]: KITCHEN_TICKET_STATUS.PREPARING,
       [KITCHEN_TICKET_STATUS.PREPARING]: KITCHEN_TICKET_STATUS.READY,
@@ -637,7 +648,24 @@ export class KitchenService {
     return updated;
   }
 
+  async assertTaskHandover(orderId: string) {
+    const ticket = await this.tickets.findOne({ where: { orderId } });
+    if (!ticket) return;
+    const task = await this.dataSource
+      .getRepository(KitchenOperation)
+      .findOneBy({
+        kind: 'task-flow',
+        parentId: ticket.id,
+        branchId: ticket.branchId,
+      });
+    if (task && task.status !== 'HANDED_OVER')
+      throw new ConflictException(
+        'Cần ghi người nhận và bàn giao trong Nhiệm vụ bếp trước khi kết thúc đơn.',
+      );
+  }
+
   async markDelivered(orderId: string, changedBy?: string) {
+    await this.assertTaskHandover(orderId);
     const ticket = await this.tickets.findOne({ where: { orderId } });
     if (!ticket || ticket.status === KITCHEN_TICKET_STATUS.DELIVERED) return;
     ticket.status = KITCHEN_TICKET_STATUS.DELIVERED;
@@ -1031,10 +1059,12 @@ export class KitchenService {
       relations: ['batches'],
     });
     const batches = plans.flatMap((plan) =>
-      (plan.batches || []).map((batch) => ({
-        ...batch,
-        mealPeriod: plan.mealPeriod,
-      })),
+      (plan.batches || [])
+        .filter((batch) => !batch.details?.workflowTicketId)
+        .map((batch) => ({
+          ...batch,
+          mealPeriod: plan.mealPeriod,
+        })),
     );
     const start = new Date(`${date}T00:00:00+07:00`);
     const end = new Date(start.getTime() + 86400000 - 1);

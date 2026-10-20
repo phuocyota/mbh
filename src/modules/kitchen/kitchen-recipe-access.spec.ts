@@ -6,7 +6,7 @@ import { KitchenOperationsService } from './kitchen-operations.service';
 
 describe('Kitchen recipe and menu setup permissions', () => {
   const guard = new RolesGuard(new Reflector());
-  const controller = new KitchenController({} as any, {} as any);
+  const controller = new KitchenController({} as any, {} as any, {} as any);
   const operations = Object.create(
     KitchenOperationsService.prototype,
   ) as KitchenOperationsService;

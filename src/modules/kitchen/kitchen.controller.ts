@@ -18,6 +18,7 @@ import { RolesGuard } from '../../common/guard/roles.guard';
 import { Roles } from '../../common/decorator/roles.decorator';
 import { UserType } from '../../common/enum/user-type.enum';
 import { KitchenService } from './kitchen.service';
+import { KitchenTaskService } from './kitchen-task.service';
 
 const MANAGERS = [UserType.ADMIN, UserType.MANAGER] as const;
 const OPERATORS = [
@@ -35,7 +36,36 @@ export class KitchenController {
   constructor(
     private readonly kitchen: KitchenService,
     private operations: KitchenOperationsService,
+    private tasks: KitchenTaskService,
   ) {}
+
+  @Get('tasks')
+  @Roles(...OPERATORS)
+  taskList(@Req() req: any, @Query() query: any) {
+    return this.tasks.list(req.user, query);
+  }
+
+  @Get('tasks/:type/:id')
+  @Roles(...OPERATORS)
+  taskDetail(
+    @Req() req: any,
+    @Param('type') type: string,
+    @Param('id') id: string,
+  ) {
+    return this.tasks.get(req.user, type, id);
+  }
+
+  @Post('tasks/:type/:id/:action')
+  @Roles(...OPERATORS)
+  taskAction(
+    @Req() req: any,
+    @Param('type') type: string,
+    @Param('id') id: string,
+    @Param('action') action: string,
+    @Body() dto: any,
+  ) {
+    return this.tasks.action(req.user, type, id, action, dto);
+  }
 
   @Put('staff/:userId/employee-link')
   @Roles(...MANAGERS)

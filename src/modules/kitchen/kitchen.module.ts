@@ -27,6 +27,7 @@ import { SocketModule } from '../socket/socket.module';
 import { KitchenController } from './kitchen.controller';
 import { KitchenScheduler } from './kitchen.scheduler';
 import { KitchenService } from './kitchen.service';
+import { KitchenTaskService } from './kitchen-task.service';
 import { RolesGuard } from '../../common/guard/roles.guard';
 
 @Module({
@@ -58,6 +59,7 @@ import { RolesGuard } from '../../common/guard/roles.guard';
   providers: [
     KitchenOperationsService,
     KitchenService,
+    KitchenTaskService,
     KitchenScheduler,
     RolesGuard,
   ],

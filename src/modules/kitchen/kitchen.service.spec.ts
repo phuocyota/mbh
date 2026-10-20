@@ -8,6 +8,9 @@ function createService() {
     get: jest.fn().mockReturnValue(undefined),
   };
   service.tickets = { find: jest.fn().mockResolvedValue([]) };
+  service.dataSource = {
+    getRepository: () => ({ findOneBy: jest.fn().mockResolvedValue(null) }),
+  };
   return service as KitchenService & Record<string, any>;
 }
 

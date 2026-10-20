@@ -388,6 +388,7 @@ export class OrderService {
 
   async completeOrder(orderId: string, changedBy?: string) {
     const order = await this.findOrderByIdOrThrow(orderId);
+    await this.kitchenService.assertTaskHandover(orderId);
 
     if (
       (await this.kitchenService.hasTicket(orderId)) &&

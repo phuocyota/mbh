@@ -77,6 +77,7 @@ function productionDate(value: any) {
 
 @Injectable()
 export class KitchenOperationsService {
+  private taskFlowInternal = false;
   constructor(
     private db: DataSource,
     private config: ConfigService,
@@ -802,6 +803,10 @@ export class KitchenOperationsService {
     const b = await this.db
       .getRepository(KitchenProductionBatch)
       .findOneByOrFail({ id });
+    if (b.details?.workflowTaskId && !this.taskFlowInternal)
+      throw new ConflictException(
+        'Hãy thao tác mẻ này qua luồng Nhiệm vụ bếp.',
+      );
     const plan = await this.db
       .getRepository(KitchenMealPlan)
       .findOneByOrFail({ id: b.mealPlanId });
@@ -899,7 +904,10 @@ export class KitchenOperationsService {
       ])
         if (dto[key] !== undefined) batch.details[key] = dto[key];
       if (target !== 'UPDATE') batch.status = target;
-      if (target === 'PREPARING') batch.startedAt = new Date();
+      if (target === 'PREPARING') {
+        batch.startedAt = new Date();
+        batch.details.startedBy = actor.userId;
+      }
       if (target === 'READY') {
         batch.readyAt = new Date();
         batch.details.servingExpiresAt = new Date(
