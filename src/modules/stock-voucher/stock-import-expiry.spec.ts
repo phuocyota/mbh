@@ -9,6 +9,8 @@ describe('fresh food expiry', () => {
     ['2026-10-19', '2026-10-26'],
     ['2026-12-29', '2027-01-05'],
     ['2028-02-25', '2028-03-03'],
+    ['2026-10-20T00:15+07:00', '2026-10-27'],
+    ['2026-10-19T17:15:00Z', '2026-10-27'],
   ])('defaults to seven calendar days after %s', (purchasedAt, expiresAt) => {
     expect(defaultFreshFoodExpiry(true, purchasedAt)).toBe(expiresAt);
   });
@@ -21,7 +23,7 @@ describe('fresh food expiry', () => {
   it.each([CreateMaterialImportDto, CreateStockVoucherDto])(
     'validates the purchase calendar date',
     async (dtoClass: any) => {
-      for (const purchasedAt of ['2026-02-30', '2026-10-19T12:00:00Z', 'bad']) {
+      for (const purchasedAt of ['2026-02-30', '2026-10-20T25:30+07:00', '2026-10-20T14:30', 'bad']) {
         const errors = await validate(
           plainToInstance(dtoClass, { purchasedAt }),
         );
@@ -29,12 +31,10 @@ describe('fresh food expiry', () => {
           true,
         );
       }
-      const errors = await validate(
-        plainToInstance(dtoClass, { purchasedAt: '2026-10-19' }),
-      );
-      expect(errors.some((error) => error.property === 'purchasedAt')).toBe(
-        false,
-      );
+      for (const purchasedAt of ['2026-10-19', '2026-10-20T14:30+07:00', '2026-10-19T17:15:00Z']) {
+        const errors = await validate(plainToInstance(dtoClass, { purchasedAt }));
+        expect(errors.some((error) => error.property === 'purchasedAt')).toBe(false);
+      }
     },
   );
 });

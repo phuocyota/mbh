@@ -831,6 +831,7 @@ export class StockVoucherService {
       manager,
       dto.items.map((item) => item.productId),
     );
+    const purchasedAt = dto.purchasedAt || new Date().toISOString();
     const normalized = [] as any[];
     for (const rawItem of dto.items) {
       const item = { ...rawItem };
@@ -841,7 +842,7 @@ export class StockVoucherService {
       if (dto.type === 'IMPORT')
         item.expiresAt = defaultFreshFoodExpiry(
           product.isFreshFood,
-          dto.purchasedAt || localDate(),
+          purchasedAt,
           item.expiresAt,
         );
       if (dto.purpose === 'MATERIAL_IMPORT') {
@@ -893,7 +894,7 @@ export class StockVoucherService {
         inputDetails: {
           ...serialInput,
           purchasedAt:
-            dto.type === 'IMPORT' ? dto.purchasedAt || localDate() : null,
+            dto.type === 'IMPORT' ? purchasedAt : null,
           unitId: item.unitId || product.baseUnitId || null,
           quantity: Number(item.quantity),
           unitPrice: Number(item.unitPrice || 0),

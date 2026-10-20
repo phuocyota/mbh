@@ -1,3 +1,4 @@
+import { PURCHASE_DATE_PATTERN } from '../stock-import-expiry';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform, Type } from 'class-transformer';
 import {
@@ -53,11 +54,11 @@ export class MaterialImportItemDto {
 export class CreateMaterialImportDto {
   @ApiProperty({
     required: false,
-    description: 'Ngày mua/nhập kho YYYY-MM-DD; mặc định ngày hiện tại UTC+7',
+    description: 'Thời điểm nhập kho ISO 8601 có múi giờ (vd 2026-10-20T14:30+07:00); chấp nhận YYYY-MM-DD cho dữ liệu cũ',
   })
   @IsOptional()
   @IsDateString({ strict: true })
-  @Matches(/^\d{4}-\d{2}-\d{2}$/)
+  @Matches(PURCHASE_DATE_PATTERN)
   purchasedAt?: string;
 
   @ApiProperty({

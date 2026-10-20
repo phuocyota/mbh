@@ -250,7 +250,7 @@ describe('StockVoucherService', () => {
         sourceId: 'supplier-id-1',
         sourceType: 'SUPPLIER',
         requestId: 'fresh-food-request',
-        purchasedAt: '2099-01-28',
+        purchasedAt: '2099-01-28T00:15+07:00',
         paymentStatus: 'DEBT',
         items: [{ productId: 'product-id-1', quantity: 2, unitPrice: 100 }],
       };
@@ -258,7 +258,7 @@ describe('StockVoucherService', () => {
       expect(
         mockRepositories.StockReceiptDetail.create.mock.calls[0][0][0]
           .inputDetails,
-      ).toMatchObject({ purchasedAt: '2099-01-28', expiresAt: '2099-02-04' });
+      ).toMatchObject({ purchasedAt: '2099-01-28T00:15+07:00', expiresAt: '2099-02-04' });
       expect(mockMovements.change).toHaveBeenCalledWith(
         mockManager,
         'stock-id-1',

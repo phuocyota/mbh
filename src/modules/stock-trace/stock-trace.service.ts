@@ -977,6 +977,13 @@ export class StockTraceService {
       where: { id: firstInbound.referenceId },
     });
     if (importReceipt) {
+      const details = await this.stockReceiptDetailRepository.find({
+        where: { importId: importReceipt.id, productId: lot.productId, receiptType: 'IMPORT' },
+      });
+      const purchaseDates = [...new Set(details
+        .filter((detail) => detail.inputDetails?.lotCode === lot.lotCode)
+        .map((detail) => detail.inputDetails?.purchasedAt)
+        .filter((value): value is string => typeof value === 'string' && !!value))];
       let supplier: Supplier | null = null;
       if (importReceipt.fromType === 'SUPPLIER' && importReceipt.fromId) {
         supplier = await this.supplierRepository.findOne({
@@ -987,6 +994,7 @@ export class StockTraceService {
         type: importReceipt.fromType || 'IMPORT',
         receiptId: importReceipt.id,
         receiptCode: importReceipt.code,
+        purchasedAt: purchaseDates.length === 1 ? purchaseDates[0] : null,
         receivedAt: importReceipt.createdAt?.toISOString() ?? null,
         quantity: Number(firstInbound.quantity),
         supplier: supplier

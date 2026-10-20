@@ -223,6 +223,28 @@ describe('StockTraceService', () => {
     });
   });
 
+  describe('receipt time in lot origin', () => {
+    it('returns the selected lot purchase time without borrowing another lot time', async () => {
+      mockRepositories.stockReceiptDetailRepository.find.mockResolvedValue([
+        { inputDetails: { lotCode: 'OTHER', purchasedAt: '2026-10-20T08:00+07:00' } },
+        { inputDetails: { lotCode: mockLot.lotCode, purchasedAt: '2026-10-20T14:35+07:00' } },
+      ]);
+      const origin = await (service as any).resolveOrigin(mockLot, [mockMovement]);
+      expect(origin.purchasedAt).toBe('2026-10-20T14:35+07:00');
+      expect(mockRepositories.stockReceiptDetailRepository.find).toHaveBeenCalledWith({
+        where: { importId: 'import-1', productId: 'product-1', receiptType: 'IMPORT' },
+      });
+    });
+    it('keeps legacy date precision and does not invent missing purchase time', async () => {
+      mockRepositories.stockReceiptDetailRepository.find.mockResolvedValue([
+        { inputDetails: { lotCode: mockLot.lotCode, purchasedAt: '2026-10-20' } },
+      ]);
+      expect((await (service as any).resolveOrigin(mockLot, [mockMovement])).purchasedAt).toBe('2026-10-20');
+      mockRepositories.stockReceiptDetailRepository.find.mockResolvedValue([]);
+      expect((await (service as any).resolveOrigin(mockLot, [mockMovement])).purchasedAt).toBeNull();
+    });
+  });
+
   describe('getProductRecipe', () => {
     it('should return null when no recipe exists', async () => {
       const result = await service.getProductRecipe('product-1');
