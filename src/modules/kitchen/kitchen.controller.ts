@@ -21,6 +21,11 @@ import { KitchenService } from './kitchen.service';
 import { KitchenTaskService } from './kitchen-task.service';
 
 const MANAGERS = [UserType.ADMIN, UserType.MANAGER] as const;
+const TASK_OPERATORS = [
+  UserType.ADMIN,
+  UserType.MANAGER,
+  UserType.KITCHEN,
+] as const;
 const OPERATORS = [
   UserType.ADMIN,
   UserType.MANAGER,
@@ -40,13 +45,13 @@ export class KitchenController {
   ) {}
 
   @Get('tasks')
-  @Roles(...OPERATORS)
+  @Roles(...TASK_OPERATORS)
   taskList(@Req() req: any, @Query() query: any) {
     return this.tasks.list(req.user, query);
   }
 
   @Get('tasks/:type/:id')
-  @Roles(...OPERATORS)
+  @Roles(...TASK_OPERATORS)
   taskDetail(
     @Req() req: any,
     @Param('type') type: string,
@@ -56,7 +61,7 @@ export class KitchenController {
   }
 
   @Post('tasks/:type/:id/:action')
-  @Roles(...OPERATORS)
+  @Roles(...TASK_OPERATORS)
   taskAction(
     @Req() req: any,
     @Param('type') type: string,

@@ -814,6 +814,10 @@ export class KitchenOperationsService {
     const result = await this.db.transaction(async (m) => {
       await this.lock(m, branchId);
       const batch = await this.batch(m, actor, id);
+      if (batch.details?.workflowTaskId && !this.taskFlowInternal)
+        throw new ConflictException(
+          'Nhiệm vụ bếp cần được xử lý qua luồng nhận việc.',
+        );
       await this.unlocked(m, branchId, plan.planDate, batch.shift);
       if (batch.version !== Number(dto.expectedVersion))
         throw new ConflictException('KITCHEN_BATCH_VERSION_CONFLICT');

@@ -78,6 +78,7 @@ class Pool extends EventEmitter {
     assert.equal(await db.getRepository(E.StockMovement).count(), 3, 'replayed start must not consume twice');
     await assert.rejects(act('record', { actuals: [] }, randomUUID(), oldVersion), /phiên bản|cập nhật/);
     const actuals = [{ batchId: linkedBatch, quantity: 1, note: 'Hao hụt 5g chả', lots: inputs.map((input, index) => ({ lotId: input.lot.id, used: input.requirement, waste: index === 1 ? 5 : 0 })) }];
+    await assert.rejects(act('record', { actuals: [{ ...actuals[0], lots: inputs.map(input => ({ lotId: input.lot.id, used: 0, waste: 0 })) }] }), /thực dùng/);
     state = await act('record', { actuals }); assert.equal(state.status, 'RECORDED');
     assert.equal(await db.getRepository(E.StockMovement).count(), 3, 'unused ingredients return only on confirmed completion');
     await assert.rejects(act('complete', { qualityPassed: true }), /SAMPLE_REQUIRED/);
@@ -98,6 +99,24 @@ class Pool extends EventEmitter {
     assert.equal((await db.getRepository(E.Order).findOneByOrFail({ id: order.id })).status, 5);
     assert.equal((await db.getRepository(E.KitchenOperation).findOneByOrFail({ id: inventories[0].id })).payload.availableQuantity, 0);
     const list = await tasks.list(actor, { date: localDate() }); assert.equal(list.length, 1); assert.equal(list[0].status, 'HANDED_OVER');
+    // The same flow also handles a planned batch, without an order ticket.
+    const plan = await save(E.KitchenMealPlan, { branchId: branch.id, planDate: localDate(), mealPeriod: 'DINNER', status: 'LOCKED', createdBy: user.id });
+    const planned = await save(E.KitchenProductionBatch, { mealPlanId: plan.id, productId: dish.id, plannedQuantity: 1, adjustmentQuantity: 0, shift: 'Ca chiều', source: 'MANUAL', status: 'WAITING', details: {} });
+    state = await tasks.get(actor, 'batch', planned.id);
+    const batchAction = (action, body) => tasks.action(actor, 'batch', planned.id, action, { ...body, expectedVersion: state.version, requestId: randomUUID() });
+    state = await batchAction('receive', { dishes: [{ productId: dish.id, inputLots: inputs.map(input => ({ lotId: input.lot.id, quantity: input.requirement })) }] });
+    await db.getRepository(E.StockLot).update(inputs[0].lot.id, { quantity: 0 });
+    await assert.rejects(batchAction('start', {}), /STOCK|LOT|tồn|INSUFFICIENT/);
+    assert.equal((await tasks.get(actor, 'batch', planned.id)).status, 'RECEIVED');
+    await db.getRepository(E.StockLot).update(inputs[0].lot.id, { quantity: 4 });
+    state = await batchAction('start', {});
+    const batchActuals = [{ batchId: planned.id, quantity: 1, note: '', lots: inputs.map(input => ({ lotId: input.lot.id, used: input.requirement, waste: 0 })) }];
+    state = await batchAction('record', { actuals: batchActuals });
+    state = await batchAction('record', { actuals: batchActuals });
+    state = await batchAction('complete', { qualityPassed: true, samples: [{ batchId: planned.id, quantity: 10, unit: 'g', storageLocation: 'Tủ mẫu' }] });
+    state = await batchAction('handover', { receivedBy: 'Nhân viên phục vụ', items: [{ batchId: planned.id, quantity: 1 }] });
+    assert.equal(state.status, 'HANDED_OVER');
+    assert.equal((await tasks.list(actor, { date: localDate() })).length, 2);
     console.log('PASS isolated PostgreSQL: receive → start → actuals → sample/QC → handover; three lots, unused returns, stock once, replay, expiry, branch/owner/version checks, transaction rollback, finished units and order status.');
   } finally { if (db.isInitialized) await db.destroy(); await pg.close(); }
 })().catch((error) => { console.error(error.stack); process.exit(1); });

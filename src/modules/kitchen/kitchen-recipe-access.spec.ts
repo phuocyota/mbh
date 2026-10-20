@@ -11,7 +11,13 @@ describe('Kitchen recipe and menu setup permissions', () => {
     KitchenOperationsService.prototype,
   ) as KitchenOperationsService;
   function context(
-    method: 'createRecipe' | 'activateRecipe' | 'createStation',
+    method:
+      | 'createRecipe'
+      | 'activateRecipe'
+      | 'createStation'
+      | 'taskList'
+      | 'taskDetail'
+      | 'taskAction',
     userType: string,
   ) {
     return {
@@ -20,6 +26,17 @@ describe('Kitchen recipe and menu setup permissions', () => {
       switchToHttp: () => ({ getRequest: () => ({ user: { userType } }) }),
     } as any;
   }
+  it.each(['taskList', 'taskDetail', 'taskAction'] as const)(
+    'limits %s to kitchen operators and managers',
+    (method) => {
+      for (const role of ['KITCHEN', 'HEAD_CHEF', 'ADMIN', 'MANAGER'])
+        expect(guard.canActivate(context(method, role))).toBe(true);
+      for (const role of ['CASHIER', 'CUSTOMER'])
+        expect(() => guard.canActivate(context(method, role))).toThrow(
+          ForbiddenException,
+        );
+    },
+  );
   it.each(['createRecipe', 'activateRecipe'] as const)(
     'allows head chefs to %s',
     (method) => {

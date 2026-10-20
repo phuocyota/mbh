@@ -19,7 +19,7 @@ describe('Kitchen controller cashier permissions', () => {
     for (const name of Object.getOwnPropertyNames(controller.prototype)) {
       if (name === 'constructor') continue;
       const handler = controller.prototype[name];
-      it(`${controller.name}.${name} gives cashier the same access as kitchen`, () => {
+      it(`${controller.name}.${name} preserves shared access except kitchen-only task workflow`, () => {
         let kitchenAllowed = true;
         try {
           guard.canActivate(context(controller, handler, 'KITCHEN'));
@@ -27,7 +27,10 @@ describe('Kitchen controller cashier permissions', () => {
           expect(error).toBeInstanceOf(ForbiddenException);
           kitchenAllowed = false;
         }
-        if (kitchenAllowed) {
+        const kitchenOnlyTask =
+          controller === KitchenController &&
+          ['taskList', 'taskDetail', 'taskAction'].includes(name);
+        if (kitchenAllowed && !kitchenOnlyTask) {
           expect(
             guard.canActivate(context(controller, handler, 'CASHIER')),
           ).toBe(true);
