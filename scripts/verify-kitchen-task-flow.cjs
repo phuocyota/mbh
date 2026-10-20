@@ -10,6 +10,7 @@ const { PGlite } = require(process.env.WAREHOUSE_PGLITE_PATH || '/tmp/mbh-wareho
 const E = { ...require('../dist/src/entities'), ...require('../dist/src/entities/finished-unit.entity') };
 const { KitchenTaskService } = require('../dist/src/modules/kitchen/kitchen-task.service');
 const { KitchenService } = require('../dist/src/modules/kitchen/kitchen.service');
+const { AddKitchenRecipeApproval1765100000000 } = require('../dist/src/migrations/1765100000000-AddKitchenRecipeApproval');
 const { KitchenOperationsService } = require('../dist/src/modules/kitchen/kitchen-operations.service');
 const { StockMovementService, localDate } = require('../dist/src/modules/stock/stock-movement.service');
 const { SocketService } = require('../dist/src/modules/socket/socket.service');
@@ -52,6 +53,12 @@ class Pool extends EventEmitter {
     }
     const recipe = await save(E.KitchenRecipe, { branchId: branch.id, productId: dish.id, version: 1, status: 'ACTIVE', yieldQuantity: 1, yieldUnitId: piece.id, description: 'Vỏ bánh, chả và rau' });
     for (const input of inputs) await save(E.KitchenRecipeItem, { recipeId: recipe.id, ingredientProductId: input.product.id, unitId: input.unit.id, quantity: input.requirement });
+    // Exercise the actual migration against the prior schema in this isolated DB.
+    await db.query('ALTER TABLE kitchen_recipes DROP COLUMN approval, DROP COLUMN expected_waste_percent');
+    const migration = new AddKitchenRecipeApproval1765100000000(), runner = db.createQueryRunner();
+    await migration.up(runner);
+    assert.equal((await db.getRepository(E.KitchenRecipe).findOneByOrFail({ id: recipe.id })).approval.legacy, true);
+    await runner.release();
     const order = await save(E.Order, { branchId: branch.id, orderCode: 'ISOLATED-TEST', orderNumber: 1, status: 1, paymentStatus: 'PAID', paidAmount: 20000, totalAmount: 20000 });
     const ticket = await save(E.KitchenOrderTicket, { orderId: order.id, branchId: branch.id, status: 'WAITING' });
     await save(E.KitchenOrderTicketItem, { ticketId: ticket.id, productId: dish.id, productName: dish.name, quantity: 1 });
