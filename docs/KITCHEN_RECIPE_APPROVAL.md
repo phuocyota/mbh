@@ -34,3 +34,15 @@ Web Bếp: Thực đơn & Công thức → Công thức & Định lượng. Web 
 Chạy migration `1765100000000-AddKitchenRecipeApproval` trước khi triển khai backend mới. Thêm `expected_waste_percent` và `approval`. Các công thức ACTIVE/INACTIVE hiện có giữ nguyên và gắn `approval.legacy=true` để phân biệt hồ sơ có trước quy trình duyệt. Không tự nhận chúng là đã có admin phê duyệt. API chế biến tiếp tục chỉ dùng ACTIVE; bản chưa duyệt không tham gia tính nhu cầu/chế biến.
 
 Migration chưa được chạy trên DB thật trong lần thay đổi source này. Kiểm tra service thật trên PostgreSQL độc lập bằng `node scripts/verify-kitchen-task-flow.cjs` sau build; script kiểm tra quyền, chi nhánh, gửi/trả lại/gửi lại/duyệt, giữ bản cũ đến khi duyệt, chụp giá và toàn bộ luồng chế biến.
+
+## Yêu cầu bếp trưởng tạo công thức
+
+Khi món chưa có công thức, ADMIN/MANAGER trên Web Admin có nút **Yêu cầu bếp trưởng tạo công thức**. Nội dung tối đa 1000 ký tự, để trống sẽ dùng lời nhắc mặc định kèm tên món.
+
+- `POST /kitchen/products/:productId/request-recipe` với `{ branchId, note }`, chỉ ADMIN/MANAGER; MANAGER bị ràng buộc chi nhánh JWT.
+- `GET /kitchen/recipe-requests?branchId=...&productId=...` (productId tùy chọn), chỉ HEAD_CHEF/ADMIN/MANAGER, giới hạn theo chi nhánh.
+- Yêu cầu lưu trong `kitchen_operations` với kind `recipe-request`: `OPEN` → `DRAFTED` khi bếp trưởng tạo công thức → `SUBMITTED` khi gửi duyệt. Không cần migration mới cho yêu cầu này.
+- Mỗi món chỉ có một yêu cầu OPEN; gửi lại trả yêu cầu cũ và không nhân bản thông báo. Món đã có công thức dùng luồng duyệt/yêu cầu chỉnh sửa hiện có.
+- Chỉ gửi khi chi nhánh có HEAD_CHEF ACTIVE liên kết nhân viên `working` cùng chi nhánh. Yêu cầu là hàng đợi chung cho HEAD_CHEF trong chi nhánh, lưu danh sách người nhận tại thời điểm tạo.
+- HEAD_CHEF thấy yêu cầu đang chờ trên Tổng quan và Công thức & Định lượng; liên kết mở đúng món. Chuông của HEAD_CHEF dẫn đến màn công thức. Xem yêu cầu không tự đánh dấu hoàn thành; tạo bản nháp/gửi duyệt mới thay đổi trạng thái.
+- Không gửi email, không bật socket/polling. Dữ liệu tải khi mở màn hình hoặc bấm Làm mới, giữ nguyên lựa chọn tắt tự làm mới trước đó.
