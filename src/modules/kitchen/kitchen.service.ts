@@ -262,17 +262,50 @@ export class KitchenService {
     const rows = await this.dataSource
       .getRepository(KitchenOperation)
       .find({ where, order: { createdAt: 'DESC' } });
-    return rows.map((row) => ({
+    // Older review actions only changed the recipe. Include those outstanding
+    // revisions too, so existing requests do not disappear from the chef inbox.
+    const revisionQuery = this.recipes.createQueryBuilder('recipe')
+      .leftJoinAndSelect('recipe.product', 'product')
+      .where('recipe.branch_id = :branchId', { branchId })
+      .andWhere('recipe.status = :status', { status: 'REVISION_REQUESTED' })
+      .andWhere(`NOT EXISTS (SELECT 1 FROM kitchen_recipes newer
+        WHERE newer.branch_id=recipe.branch_id AND newer.product_id=recipe.product_id
+          AND newer.version>recipe.version)`);
+    if (query.productId) revisionQuery.andWhere('recipe.product_id = :productId', { productId: query.productId });
+    const revisions = await revisionQuery.getMany();
+    const result = rows.map((row) => {
+      const revision = revisions.find((recipe) => recipe.id === row.payload.recipeId);
+      return {
       id: row.id,
       productId: row.parentId,
-      status: row.status,
+      status: revision ? 'REVISION_REQUESTED' : row.status,
       productName: row.payload.productName,
       note: row.payload.note,
-      requestedByName: row.payload.requestedByName,
+      revisionReason: revision?.approval?.reason || row.payload.revisionReason || null,
+      requestedByName: row.payload.reviewedByName || row.payload.requestedByName,
       createdAt: row.createdAt,
+      reviewedAt: revision?.approval?.reviewedAt || row.payload.reviewedAt || null,
       recipeId: row.payload.recipeId || null,
       link: `/dashboard/menu/recipes?productId=${row.parentId}`,
-    }));
+      };
+    });
+    for (const recipe of revisions) {
+      if (result.some((row) => row.recipeId === recipe.id)) continue;
+      result.push({
+        id: recipe.id,
+        productId: recipe.productId,
+        status: 'REVISION_REQUESTED',
+        productName: recipe.product?.name || recipe.productId,
+        note: '',
+        revisionReason: recipe.approval?.reason || null,
+        requestedByName: 'Quản trị',
+        createdAt: recipe.createdAt,
+        reviewedAt: recipe.approval?.reviewedAt || null,
+        recipeId: recipe.id,
+        link: `/dashboard/menu/recipes?productId=${recipe.productId}`,
+      });
+    }
+    return result;
   }
 
   async listRecipeNotifications(actor: Actor) {
@@ -570,15 +603,20 @@ export class KitchenService {
           branchId,
           kind: 'recipe-request',
           parentId: dto.productId,
-          status: In(['OPEN', 'DRAFTED']),
+          status: In(['OPEN', 'DRAFTED', 'REVISION_REQUESTED', 'SUBMITTED']),
         });
       for (const request of requests) {
+        if (request.status === 'SUBMITTED') {
+          const previous = request.payload.recipeId && await manager.findOneBy(KitchenRecipe, { id: request.payload.recipeId });
+          if (previous?.status !== 'REVISION_REQUESTED') continue;
+        }
         request.status = 'DRAFTED';
         request.payload = {
           ...request.payload,
           recipeId: recipe.id,
           draftedBy: actor.userId,
           draftedAt: new Date().toISOString(),
+            revisionReason: null,
         };
         request.updatedBy = actor.userId;
         await manager.save(KitchenOperation, request);
@@ -678,7 +716,7 @@ export class KitchenService {
             branchId: row.branchId,
             kind: 'recipe-request',
             parentId: row.productId,
-            status: In(['DRAFTED', 'SUBMITTED']),
+            status: In(['DRAFTED', 'SUBMITTED', 'REVISION_REQUESTED']),
           });
         for (const request of requests) {
           if (request.payload.recipeId !== row.id) continue;
@@ -731,6 +769,44 @@ export class KitchenService {
         approval.reason = reason!.trim();
         approval.reviewedBy = actor.userId;
         approval.reviewedAt = new Date().toISOString();
+        const requestRepo = manager.getRepository(KitchenOperation);
+        const requests = (await requestRepo.findBy({
+          branchId: row.branchId,
+          kind: 'recipe-request',
+          parentId: row.productId,
+        })).filter((request) => request.payload.recipeId === row.id);
+        const reviewer = await manager.findOneBy(User, { id: actor.userId });
+        if (!requests.length) {
+          const product = await manager.findOneBy(Product, { id: row.productId });
+          requests.push(requestRepo.create({
+            branchId: row.branchId,
+            kind: 'recipe-request',
+            parentId: row.productId,
+            requestId: null,
+            date: localDate(),
+            shift: '',
+            createdBy: actor.userId,
+            payload: {
+              productName: product?.name || row.productId,
+              requestedByName: reviewer?.fullName || 'Quản trị',
+              recipientRole: 'HEAD_CHEF',
+              recipientIds: [row.createdBy],
+            },
+          }));
+        }
+        for (const request of requests) {
+          request.status = 'REVISION_REQUESTED';
+          request.payload = {
+            ...request.payload,
+            recipeId: row.id,
+            revisionReason: reason!.trim(),
+            reviewedBy: actor.userId,
+            reviewedByName: reviewer?.fullName || 'Quản trị',
+            reviewedAt: approval.reviewedAt,
+          };
+          request.updatedBy = actor.userId;
+          await requestRepo.save(request);
+        }
       }
       approval.history.push({
         action,

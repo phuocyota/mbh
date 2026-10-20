@@ -113,10 +113,26 @@ class Pool extends EventEmitter {
     await assert.rejects(kitchen.reviewRecipe(chef, requestDraft.id, 'submit'), /Trạng thái/);
     assert.equal((await kitchen.listRecipeNotifications(admin)).items.length, 1, 'retries cannot duplicate notifications');
     await kitchen.reviewRecipe(admin, requestDraft.id, 'request-changes', 'Kiểm tra lại định lượng');
+    let revisionRequest = (await kitchen.listRecipeRequests(chef, {})).find(row => row.recipeId === requestDraft.id);
+    assert.equal(revisionRequest.status, 'REVISION_REQUESTED');
+    assert.equal(revisionRequest.revisionReason, 'Kiểm tra lại định lượng');
+    assert.equal(revisionRequest.id, request.id, 'revision reopens the original persisted request');
     await kitchen.reviewRecipe(chef, requestDraft.id, 'submit');
     notifications = await kitchen.listRecipeNotifications(admin);
     assert.equal(notifications.items.length, 1);
     assert.equal(notifications.unreadCount, 1, 'resubmission notifies the original requester again');
+    await kitchen.reviewRecipe(admin, requestDraft.id, 'request-changes', 'Giảm chả còn 40g');
+    // Simulate the old backend: recipe changed, but its inbox document stayed submitted.
+    await db.getRepository(E.KitchenOperation).update(request.id, { status: 'SUBMITTED' });
+    revisionRequest = (await kitchen.listRecipeRequests(chef, {})).find(row => row.recipeId === requestDraft.id);
+    assert.equal(revisionRequest.status, 'REVISION_REQUESTED', 'legacy revisions remain visible without data repair');
+    const amended = await kitchen.createRecipe(chef, { ...recipeBody, productId: requestedDish.id, description: 'Đã giảm định lượng theo yêu cầu' });
+    revisionRequest = (await kitchen.listRecipeRequests(chef, {})).find(row => row.id === request.id);
+    assert.equal(revisionRequest.status, 'DRAFTED');
+    assert.equal(revisionRequest.recipeId, amended.id);
+    assert.equal((await kitchen.listRecipeRequests(chef, {})).filter(row => row.status === 'REVISION_REQUESTED').length, 0, 'superseded versions do not reopen old revision alerts');
+    await kitchen.reviewRecipe(chef, amended.id, 'submit');
+    assert.equal((await kitchen.listRecipeNotifications(admin)).items[0].recipeId, amended.id);
     console.log('PASS recipe notifications: draft/submit boundary, exact recipient, branch/role guards, persistent read, retry safety, resubmission.');
     assert.equal((await kitchen.listRecipeRequests({ ...chef, branchId: randomUUID() }, {})).length, 0);
     await assert.rejects(kitchen.requestRecipe(admin, requestedDish.id, requestBody), /đã có công thức/);
