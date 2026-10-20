@@ -153,7 +153,7 @@ export class KitchenTaskService {
           'yieldUnit',
         ],
       });
-      if (!recipe) {
+      if (!recipe || !recipe.items.length) {
         missingRecipes.push(product.name);
         continue;
       }
@@ -292,12 +292,10 @@ export class KitchenTaskService {
         )
         .findOne({ where: { id }, lock: { mode: 'pessimistic_write' } });
       if (type === 'ticket')
-        await m
-          .getRepository(Order)
-          .findOne({
-            where: { id: source.row.orderId },
-            lock: { mode: 'pessimistic_write' },
-          });
+        await m.getRepository(Order).findOne({
+          where: { id: source.row.orderId },
+          lock: { mode: 'pessimistic_write' },
+        });
       source = await this.source(m, actor, type, id);
       const repo = m.getRepository(KitchenOperation);
       let flow = await repo.findOne({
@@ -555,6 +553,21 @@ export class KitchenTaskService {
             if (waste > 0 && !String(actual.note || '').trim())
               throw new BadRequestException('Cần ghi lý do hao hụt.');
             losses.push({ lotId: input.lotId, used, waste, returned });
+          }
+          for (const requirement of dish.requirements) {
+            const used = losses.reduce((sum, line) => {
+              const input = entry.inputLots.find(
+                (row) => row.lotId === line.lotId,
+              );
+              return (
+                sum +
+                (input.productId === requirement.productId ? line.used : 0)
+              );
+            }, 0);
+            if (used <= 0)
+              throw new BadRequestException(
+                `Cần ghi nhận lượng thực dùng của ${requirement.name}.`,
+              );
           }
           const batch = await m
             .getRepository(KitchenProductionBatch)

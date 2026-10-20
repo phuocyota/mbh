@@ -21,13 +21,17 @@ export function taskNumber(value: unknown, allowZero = false) {
     throw new BadRequestException('Số lượng không hợp lệ.');
   const n = Number(value);
   if (
-    value === '' ||
+    (typeof value === 'string' && value.trim() === '') ||
     value === null ||
     value === undefined ||
     !Number.isFinite(n) ||
     (allowZero ? n < 0 : n <= 0)
   )
     throw new BadRequestException('Số lượng không hợp lệ.');
+  if (Math.abs(n - Number(n.toFixed(4))) > 1e-9)
+    throw new BadRequestException(
+      'Số lượng chỉ được tối đa 4 chữ số thập phân.',
+    );
   return n;
 }
 export function validateTaskActuals(

@@ -15,6 +15,53 @@ function createService() {
 }
 
 describe('KitchenService authorization and concurrency', () => {
+  it('does not count a ticket again through its generated production batch', async () => {
+    const service = createService();
+    service.mealPlans = {
+      find: jest
+        .fn()
+        .mockResolvedValue([
+          {
+            batches: [
+              {
+                productId: 'bread',
+                plannedQuantity: 1,
+                adjustmentQuantity: 0,
+                details: { workflowTicketId: 'ticket' },
+              },
+            ],
+          },
+        ]),
+    };
+    const builder: any = {};
+    for (const method of ['innerJoinAndSelect', 'where', 'andWhere'])
+      builder[method] = jest.fn().mockReturnValue(builder);
+    builder.getMany = jest
+      .fn()
+      .mockResolvedValue([{ items: [{ productId: 'bread', quantity: 1 }] }]);
+    service.tickets = { createQueryBuilder: () => builder };
+    service.recipes = {
+      findOne: jest.fn().mockResolvedValue({
+        yieldQuantity: 1,
+        items: [
+          {
+            ingredientProductId: 'pork',
+            quantity: 50,
+            unit: { dimension: 'MASS', factorToBase: 1 },
+            ingredientProduct: { baseUnitId: 'g' },
+          },
+        ],
+      }),
+    };
+    service.units = {
+      findOne: jest
+        .fn()
+        .mockResolvedValue({ id: 'g', dimension: 'MASS', factorToBase: 1 }),
+    };
+    expect(
+      await (service as any).calculateDemand('b', '2026-10-20', ''),
+    ).toEqual([{ productId: 'pork', quantity: 50, unitId: 'g' }]);
+  });
   it.each([123, {}, 'a'.repeat(501)])(
     'rejects invalid recipe descriptions before writing (%p)',
     async (description) => {

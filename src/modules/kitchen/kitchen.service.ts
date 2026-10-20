@@ -983,7 +983,10 @@ export class KitchenService {
     });
     for (const plan of plans)
       for (const batch of plan.batches || [])
-        if (!stationId || batch.stationId === stationId)
+        if (
+          !batch.details?.workflowTicketId &&
+          (!stationId || batch.stationId === stationId)
+        )
           productQuantities.set(
             batch.productId,
             (productQuantities.get(batch.productId) || 0) +
