@@ -2,18 +2,18 @@
 
 ## Phân quyền
 
-- HEAD_CHEF trên Web Bếp: tạo phiên bản nháp, khai báo định lượng và hao hụt dự kiến, gửi công thức của mình để admin duyệt. Không được tự kích hoạt.
-- ADMIN trên Web Admin: xem công thức/định lượng/giá vốn, phê duyệt và áp dụng hoặc yêu cầu chỉnh sửa kèm lý do. Giữ khả năng tạo bản nháp của màn định lượng admin; vẫn phải gửi duyệt trước khi phê duyệt.
-- MANAGER: quyền tạo/gửi duyệt/phê duyệt/trả lại như ADMIN trong phạm vi `req.user.branchId`; không được chọn hoặc thao tác dữ liệu chi nhánh khác.
-- KITCHEN, CASHIER: chỉ đọc công thức ACTIVE qua API danh sách; không tạo/gửi duyệt/phê duyệt. Những quyền nghiệp vụ khác của các role giữ nguyên.
+- HEAD_CHEF trên Web Bếp: tạo và chỉnh định lượng bằng phiên bản mới, gửi duyệt công thức của mình. Không tự kích hoạt.
+- ADMIN trên Web Admin: xem công thức/định lượng/giá vốn, phê duyệt và áp dụng hoặc yêu cầu chỉnh sửa kèm lý do; không tạo/sửa/gửi công thức.
+- MANAGER: duyệt như ADMIN trong phạm vi `req.user.branchId`; không được thao tác chi nhánh khác, không tạo/sửa/gửi công thức.
+- KITCHEN, CASHIER: chỉ đọc công thức ACTIVE; không tạo/gửi duyệt/phê duyệt.
 
-Web Bếp: Thực đơn & Công thức → Công thức & Định lượng. Web Admin: Hàng hóa → món thành phẩm → Định lượng nguyên liệu.
+Web Bếp: Thực đơn & Công thức → Công thức & Định lượng. Web Admin: Hàng hóa → món thành phẩm → Định lượng nguyên liệu để xem/duyệt. Form tạo/sửa sản phẩm chỉ có hướng dẫn và trạng thái công thức, không nhập định lượng. Có thể lưu sản phẩm chưa có công thức; chế biến vẫn yêu cầu công thức ACTIVE.
 
 ## Trạng thái và API
 
 `POST /kitchen/recipes` luôn tạo `DRAFT`, không nhận `activate:true`.
 
-- `POST /kitchen/recipes/:id/submit`: DRAFT hoặc REVISION_REQUESTED → PENDING_REVIEW; HEAD_CHEF chỉ gửi phiên bản mình tạo, ADMIN/MANAGER gửi được bản nháp thuộc chi nhánh đang xử lý.
+- `POST /kitchen/recipes/:id/submit`: DRAFT hoặc REVISION_REQUESTED → PENDING_REVIEW; chỉ HEAD_CHEF gửi phiên bản mình tạo trong chi nhánh của mình.
 - `POST /kitchen/recipes/:id/approve`: PENDING_REVIEW → ACTIVE, phiên bản ACTIVE cũ thành INACTIVE trong cùng giao dịch.
 - `POST /kitchen/recipes/:id/request-changes` với `{ "reason": "..." }`: PENDING_REVIEW → REVISION_REQUESTED; lý do bắt buộc, tối đa 1000 ký tự.
 - URL cũ `/activate` là alias phê duyệt với đầy đủ kiểm tra: chỉ ADMIN/MANAGER, chỉ PENDING_REVIEW.

@@ -133,8 +133,8 @@ export class KitchenController {
   }
 
   @Post('recipes')
-  @Roles(...MANAGERS, UserType.HEAD_CHEF)
-  @ApiOperation({ summary: 'Create a new immutable recipe version' })
+  @Roles(UserType.HEAD_CHEF)
+  @ApiOperation({ summary: 'Head chef creates a new immutable recipe version' })
   createRecipe(@Req() req: any, @Body() dto: any) {
     return this.kitchen.createRecipe(req.user, dto);
   }
@@ -146,7 +146,7 @@ export class KitchenController {
   }
 
   @Post('recipes/:id/submit')
-  @Roles(...MANAGERS, UserType.HEAD_CHEF)
+  @Roles(UserType.HEAD_CHEF)
   submitRecipe(@Req() req: any, @Param('id') id: string) {
     return this.kitchen.reviewRecipe(req.user, id, 'submit');
   }

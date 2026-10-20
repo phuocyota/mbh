@@ -601,7 +601,7 @@ POST /auth/register
 ### Authentication Guards
 
 #### AuthGuard (Global)
-Location: [src/common/guard/auth.guard.ts](src/common/guard/auth.guard.ts)
+Location: [src/common/guard/auth.guard.ts](../src/common/guard/auth.guard.ts)
 
 Features:
 - Validates JWT tokens from `Authorization: Bearer <token>` header
@@ -622,7 +622,7 @@ getPublicResource() { }
 ```
 
 #### RolesGuard
-Location: [src/common/guard/roles.guard.ts](src/common/guard/roles.guard.ts)
+Location: [src/common/guard/roles.guard.ts](../src/common/guard/roles.guard.ts)
 
 Features:
 - Role-based access control
@@ -637,7 +637,7 @@ getAdminResource() { }
 ```
 
 #### LocalAuthGuard
-Location: [src/modules/auth/guards/local-auth.guard.ts](src/modules/auth/guards/local-auth.guard.ts)
+Location: [src/modules/auth/guards/local-auth.guard.ts](../src/modules/auth/guards/local-auth.guard.ts)
 
 - Used only on `/auth/login` endpoint
 - Invokes LocalStrategy for credential validation
@@ -645,7 +645,7 @@ Location: [src/modules/auth/guards/local-auth.guard.ts](src/modules/auth/guards/
 ### Passport Strategies
 
 #### LocalStrategy
-Location: [src/modules/auth/strategies/local.strategy.ts](src/modules/auth/strategies/local.strategy.ts)
+Location: [src/modules/auth/strategies/local.strategy.ts](../src/modules/auth/strategies/local.strategy.ts)
 
 - **Field:** Uses `email` as username field (not standard `username`)
 - **Validation:** Calls `AuthService.validateUser(email, password)`
@@ -658,7 +658,7 @@ constructor(private authService: AuthService) {
 ```
 
 #### JwtStrategy
-Location: [src/modules/auth/strategies/jwt.strategy.ts](src/modules/auth/strategies/jwt.strategy.ts)
+Location: [src/modules/auth/strategies/jwt.strategy.ts](../src/modules/auth/strategies/jwt.strategy.ts)
 
 - **Token Extraction:** From Bearer token in Authorization header
 - **Validation:** Verifies signature using JWT_SECRET
@@ -675,7 +675,7 @@ Location: [src/modules/auth/strategies/jwt.strategy.ts](src/modules/auth/strateg
 ### Custom Decorators
 
 #### @Public()
-Location: [src/common/decorator/public.decorator.ts](src/common/decorator/public.decorator.ts)
+Location: [src/common/decorator/public.decorator.ts](../src/common/decorator/public.decorator.ts)
 
 Marks a route as publicly accessible (no auth required)
 
@@ -686,7 +686,7 @@ register() { }
 ```
 
 #### @Roles(...roles)
-Location: [src/common/decorator/roles.decorator.ts](src/common/decorator/roles.decorator.ts)
+Location: [src/common/decorator/roles.decorator.ts](../src/common/decorator/roles.decorator.ts)
 
 Restricts access to specific user roles
 
@@ -697,7 +697,7 @@ deleteUser(@Param('id') id: string) { }
 ```
 
 #### @GetUser()
-Location: [src/common/decorator/user.decorator.ts](src/common/decorator/user.decorator.ts)
+Location: [src/common/decorator/user.decorator.ts](../src/common/decorator/user.decorator.ts)
 
 Injects the current authenticated user into the request
 
@@ -710,7 +710,7 @@ getProfile(@GetUser() user: User) {
 
 ### AuthService Methods
 
-Location: [src/modules/auth/auth.service.ts](src/modules/auth/auth.service.ts)
+Location: [src/modules/auth/auth.service.ts](../src/modules/auth/auth.service.ts)
 
 #### validateUser(email, password)
 - Finds user by email
@@ -747,7 +747,7 @@ Location: [src/modules/auth/auth.service.ts](src/modules/auth/auth.service.ts)
 
 ### AuthModule Configuration
 
-Location: [src/modules/auth/auth.module.ts](src/modules/auth/auth.module.ts)
+Location: [src/modules/auth/auth.module.ts](../src/modules/auth/auth.module.ts)
 
 **Imports:**
 - TypeOrmModule: User, Customer, Wallet, StudentProfile, StudentCard, School, Class
@@ -835,7 +835,7 @@ BCRYPT_ROUNDS=10
 
 ### User Types/Roles
 
-From [src/common/enum/user-type.enum.ts](src/common/enum/user-type.enum.ts):
+From [src/common/enum/user-type.enum.ts](../src/common/enum/user-type.enum.ts):
 
 - `ADMIN` - Full system access
 - `STAFF` - Canteen staff

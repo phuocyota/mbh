@@ -101,14 +101,19 @@ class Pool extends EventEmitter {
     await assert.rejects(kitchen.reviewRecipe(admin, draft.id, 'approve'), /Trạng thái/);
     console.log('PASS isolated recipe approval: role/branch guards, draft → submit → request changes → resubmit → approve, cost conversion/snapshot, previous active preserved until approval.');
     const manager = { ...actor, userType: 'MANAGER' };
-    const managerDraft = await kitchen.createRecipe(manager, recipeBody);
-    assert.ok((await kitchen.listRecipes(manager, branch.id)).some(row => row.id === managerDraft.id));
-    await kitchen.reviewRecipe(manager, managerDraft.id, 'submit');
-    await kitchen.reviewRecipe(manager, managerDraft.id, 'request-changes', 'Kiểm tra lại');
-    await kitchen.reviewRecipe(manager, managerDraft.id, 'submit');
-    assert.equal((await kitchen.activateRecipe(manager, managerDraft.id)).status, 'ACTIVE');
-    await assert.rejects(kitchen.createRecipe(manager, { ...recipeBody, branchId: randomUUID() }), /CROSS_BRANCH/);
-    console.log('PASS MANAGER branch admin: create, list drafts, submit, request changes, approve; cross-branch writes rejected.');
+    for (const role of ['ADMIN', 'MANAGER', 'KITCHEN', 'CASHIER']) {
+      await assert.rejects(kitchen.createRecipe({ ...actor, userType: role }, recipeBody), /Chỉ bếp trưởng/);
+      await assert.rejects(kitchen.reviewRecipe({ ...actor, userType: role }, draft.id, 'submit'), /quyền/);
+    }
+    const chefDraft = await kitchen.createRecipe(chef, recipeBody);
+    assert.ok((await kitchen.listRecipes(manager, branch.id)).some(row => row.id === chefDraft.id));
+    await assert.rejects(kitchen.reviewRecipe({ ...chef, userId: randomUUID() }, chefDraft.id, 'submit'), /do bạn tạo/);
+    await kitchen.reviewRecipe(chef, chefDraft.id, 'submit');
+    await kitchen.reviewRecipe(manager, chefDraft.id, 'request-changes', 'Kiểm tra lại');
+    await kitchen.reviewRecipe(chef, chefDraft.id, 'submit');
+    assert.equal((await kitchen.activateRecipe(manager, chefDraft.id)).status, 'ACTIVE');
+    await assert.rejects(kitchen.reviewRecipe({ ...manager, branchId: randomUUID() }, chefDraft.id, 'approve'), /CROSS_BRANCH/);
+    console.log('PASS recipe separation: HEAD_CHEF authors/submits; ADMIN/MANAGER only review; manager cross-branch review rejected.');
     const tasks = new KitchenTaskService(db, ops, movements);
     let state = await tasks.get(actor, 'ticket', ticket.id);
     assert.equal(state.status, 'WAITING'); assert.equal(state.dishes[0].requirements.length, 3);

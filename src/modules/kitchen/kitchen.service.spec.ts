@@ -122,7 +122,7 @@ describe('KitchenService authorization and concurrency', () => {
       service.operations = { lock: jest.fn() };
       service.movements = { lockProducts: jest.fn() };
       const recipe = await service.createRecipe(
-        { userId: 'u', userType: 'ADMIN', branchId: 'b' },
+        { userId: 'u', userType: 'HEAD_CHEF', branchId: 'b' },
         {
           productId: 'bread',
           yieldQuantity: 1,

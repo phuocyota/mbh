@@ -44,12 +44,10 @@ describe('Kitchen recipe and menu setup permissions', () => {
     'allows head chefs to %s',
     (method) => {
       expect(guard.canActivate(context(method, 'HEAD_CHEF'))).toBe(true);
-      expect(() => guard.canActivate(context(method, 'KITCHEN'))).toThrow(
-        ForbiddenException,
-      );
-      expect(() => guard.canActivate(context(method, 'CASHIER'))).toThrow(
-        ForbiddenException,
-      );
+      for (const role of ['KITCHEN', 'CASHIER', 'ADMIN', 'MANAGER'])
+        expect(() => guard.canActivate(context(method, role))).toThrow(
+          ForbiddenException,
+        );
     },
   );
   it.each(['activateRecipe', 'approveRecipe', 'requestRecipeChanges'] as const)(

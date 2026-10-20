@@ -247,9 +247,9 @@ export class KitchenService {
   }
 
   async createRecipe(actor: Actor, dto: any) {
-    if (!['HEAD_CHEF', 'ADMIN', 'MANAGER'].includes(actor.userType))
+    if (actor.userType !== 'HEAD_CHEF')
       throw new ForbiddenException(
-        'Chỉ bếp trưởng, admin hoặc quản lý chi nhánh được tạo công thức.',
+        'Chỉ bếp trưởng được tạo và thiết lập định lượng công thức trên màn bếp.',
       );
     if (dto.activate)
       throw new BadRequestException(
@@ -422,7 +422,7 @@ export class KitchenService {
       throw new BadRequestException('Thao tác duyệt không hợp lệ.');
     if (
       submit
-        ? !['HEAD_CHEF', 'ADMIN', 'MANAGER'].includes(actor.userType)
+        ? actor.userType !== 'HEAD_CHEF'
         : !['ADMIN', 'MANAGER'].includes(actor.userType)
     )
       throw new ForbiddenException('Bạn không có quyền duyệt công thức.');
@@ -444,11 +444,7 @@ export class KitchenService {
         lock: { mode: 'pessimistic_write' },
       });
       if (!row) throw new NotFoundException('Không tìm thấy công thức.');
-      if (
-        submit &&
-        !['ADMIN', 'MANAGER'].includes(actor.userType) &&
-        row.createdBy !== actor.userId
-      )
+      if (submit && row.createdBy !== actor.userId)
         throw new ForbiddenException(
           'Chỉ được gửi duyệt công thức do bạn tạo.',
         );
