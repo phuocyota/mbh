@@ -1,6 +1,8 @@
 import { StockLotController } from './stock-lot.controller';
 import { DataSource, SelectQueryBuilder } from 'typeorm';
 import { join } from 'path';
+import { Reflector } from '@nestjs/core';
+import { RolesGuard } from '../../common/guard/roles.guard';
 
 class MetadataSource extends DataSource {
   async inspect() {
@@ -33,6 +35,18 @@ function harness() {
 }
 
 describe('stock lot management listing', () => {
+  it('limits FEFO suggestions to admin and manager roles', () => {
+    const guard = new RolesGuard(new Reflector());
+    for (const userType of ['ADMIN', 'MANAGER', 'HEAD_CHEF', 'KITCHEN', 'CASHIER', 'STUDENT']) {
+      const context: any = {
+        getHandler: () => StockLotController.prototype.fefo,
+        getClass: () => StockLotController,
+        switchToHttp: () => ({ getRequest: () => ({ user: { userType } }) }),
+      };
+      if (['ADMIN', 'MANAGER'].includes(userType)) expect(guard.canActivate(context)).toBe(true);
+      else expect(() => guard.canActivate(context)).toThrow();
+    }
+  });
   const request = { user: { userType: 'MANAGER', branchId: 'branch' } };
   it('builds the real TypeORM joined pagination ordering without a database connection', async () => {
     const db = new MetadataSource({

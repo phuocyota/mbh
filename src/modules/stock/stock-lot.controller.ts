@@ -61,14 +61,18 @@ export class StockLotController {
     const stock = await this.db.getRepository(Stock).findOneBy({ branchId, ...(q.stockId ? { id: q.stockId } : {}) });
     if (!stock) throw new BadRequestException('Không tìm thấy kho của chi nhánh.');
     const quantity = await this.movements.normalize(this.db.manager, product, { quantity: positive(q.quantity), unitId: q.unitId || product.baseUnitId });
+    const today = localDate();
     const [lots, balance, unit] = await Promise.all([
-      this.db.getRepository(StockLot).findBy({ stockId: stock.id, productId: product.id }),
+      this.db.getRepository(StockLot).createQueryBuilder('lot')
+        .where('lot.stock_id = :stockId AND lot.product_id = :productId', { stockId: stock.id, productId: product.id })
+        .andWhere('lot.quantity > 0 AND (lot.expires_at IS NULL OR lot.expires_at >= :today)', { today })
+        .getMany(),
       this.db.getRepository(StockItem).findOneBy({ stockId: stock.id, productId: product.id }),
       this.db.getRepository(MeasurementUnit).findOneBy({ id: product.baseUnitId }),
     ]);
     if (!unit?.isActive) throw new BadRequestException('INVALID_FEFO_UNIT');
     return {
-      ...planFefo(quantity, lots, localDate(), Math.max(0, Number(balance?.quantity || 0))),
+      ...planFefo(quantity, lots, today, Math.max(0, Number(balance?.quantity || 0))),
       branchId,
       stockId: stock.id,
       stockName: stock.name,

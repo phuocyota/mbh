@@ -22,7 +22,9 @@ export function planFefo<T extends Lot>(quantity: number, lots: T[], today: stri
   if (!requested) throw new BadRequestException('INVALID_FEFO_QUANTITY');
   const eligible = lots.filter((lot) => Number(lot.quantity) > 0 && (!lot.expiresAt || lot.expiresAt >= today))
     .sort((a, b) => {
-      const expiry = (a.expiresAt || '9999-12-31').localeCompare(b.expiresAt || '9999-12-31');
+      if (!a.expiresAt && b.expiresAt) return 1;
+      if (a.expiresAt && !b.expiresAt) return -1;
+      const expiry = (a.expiresAt || '').localeCompare(b.expiresAt || '');
       return expiry || new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime() || a.id.localeCompare(b.id);
     });
   const totalEligible = eligible.reduce((sum, lot) => sum + units(lot.quantity), 0);
