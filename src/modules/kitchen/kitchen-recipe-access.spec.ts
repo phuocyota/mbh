@@ -21,9 +21,12 @@ describe('Kitchen recipe and menu setup permissions', () => {
     } as any;
   }
   it.each(['createRecipe', 'activateRecipe'] as const)(
-    'allows kitchen staff to %s',
+    'allows head chefs to %s',
     (method) => {
-      expect(guard.canActivate(context(method, 'KITCHEN'))).toBe(true);
+      expect(guard.canActivate(context(method, 'HEAD_CHEF'))).toBe(true);
+      expect(() => guard.canActivate(context(method, 'KITCHEN'))).toThrow(
+        ForbiddenException,
+      );
       expect(() => guard.canActivate(context(method, 'CASHIER'))).toThrow(
         ForbiddenException,
       );
@@ -37,8 +40,29 @@ describe('Kitchen recipe and menu setup permissions', () => {
       ForbiddenException,
     );
   });
+  it('head chefs inherit kitchen operations but not management permissions', () => {
+    const request = (handler: any) =>
+      ({
+        getHandler: () => handler,
+        getClass: () => KitchenController,
+        switchToHttp: () => ({
+          getRequest: () => ({ user: { userType: 'HEAD_CHEF' } }),
+        }),
+      }) as any;
+    expect(guard.canActivate(request(controller.units))).toBe(true);
+    expect(guard.canActivate(request(controller.startBatch))).toBe(true);
+    expect(() =>
+      guard.canActivate(context('createStation', 'HEAD_CHEF')),
+    ).toThrow(ForbiddenException);
+    expect(() => operations.manager({ userType: 'HEAD_CHEF' })).toThrow(
+      ForbiddenException,
+    );
+    expect(() =>
+      operations.branch({ userType: 'HEAD_CHEF', branchId: 'a' }, 'b'),
+    ).toThrow(ForbiddenException);
+  });
   it('allows only kitchen, admin and manager to edit menus', () => {
-    for (const userType of ['KITCHEN', 'ADMIN', 'MANAGER'])
+    for (const userType of ['KITCHEN', 'HEAD_CHEF', 'ADMIN', 'MANAGER'])
       expect(() => operations.menuEditor({ userType })).not.toThrow();
     expect(() => operations.menuEditor({ userType: 'CASHIER' })).toThrow(
       ForbiddenException,

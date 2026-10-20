@@ -55,7 +55,7 @@ export class SocketGateway
       void client.disconnect(true);
       return;
     }
-    if (client.data.user.userType !== 'KITCHEN') {
+    if (!['KITCHEN', 'HEAD_CHEF'].includes(client.data.user.userType)) {
       void client.join(SOCKET_ROOMS.ALL_ORDERS);
       void client.join(SOCKET_ROOMS.DASHBOARD);
     }
@@ -70,7 +70,8 @@ export class SocketGateway
     @ConnectedSocket() client: Socket,
     @MessageBody() payload?: { branchId?: string; orderId?: string },
   ) {
-    if (client.data.user?.userType === 'KITCHEN') return { ok: true };
+    if (['KITCHEN', 'HEAD_CHEF'].includes(client.data.user?.userType))
+      return { ok: true };
     if (!client.data.user?.branchId) void client.join(SOCKET_ROOMS.ALL_ORDERS);
 
     const branchId = client.data.user?.branchId || payload?.branchId;
@@ -113,7 +114,7 @@ export class SocketGateway
     @ConnectedSocket() client: Socket,
     @MessageBody() payload?: { branchId?: string },
   ) {
-    if (client.data.user?.userType === 'KITCHEN') {
+    if (['KITCHEN', 'HEAD_CHEF'].includes(client.data.user?.userType)) {
       return { ok: false, error: 'KITCHEN_DASHBOARD_FORBIDDEN' };
     }
     if (!client.data.user?.branchId) void client.join(SOCKET_ROOMS.DASHBOARD);

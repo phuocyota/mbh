@@ -28,7 +28,9 @@ export class RolesGuard implements CanActivate {
     const request = context.switchToHttp().getRequest<RequestWithUser>();
     const user = request.user;
 
-    if (!user || !requiredRoles.includes(user.userType)) {
+    const inheritsKitchen =
+      user?.userType === 'HEAD_CHEF' && requiredRoles.includes('KITCHEN');
+    if (!user || (!requiredRoles.includes(user.userType) && !inheritsKitchen)) {
       throw new ForbiddenException('Bạn không có quyền');
     }
 

@@ -130,7 +130,9 @@ export class KitchenService {
       throw new NotFoundException('User or employee not found');
     const branchId = this.resolveBranch(actor, employee.branchId);
     if (
-      (user.role !== USER_ROLE.KITCHEN && user.role !== USER_ROLE.CASHIER) ||
+      ![USER_ROLE.KITCHEN, USER_ROLE.HEAD_CHEF, USER_ROLE.CASHIER].includes(
+        user.role as any,
+      ) ||
       user.branchId !== branchId ||
       employee.branchId !== branchId
     )

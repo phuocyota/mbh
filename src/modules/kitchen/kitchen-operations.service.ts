@@ -91,7 +91,7 @@ export class KitchenOperationsService {
       throw new ForbiddenException('MANAGER_REQUIRED');
   }
   menuEditor(actor: any) {
-    if (!['ADMIN', 'MANAGER', 'KITCHEN'].includes(actor.userType))
+    if (!['ADMIN', 'MANAGER', 'KITCHEN', 'HEAD_CHEF'].includes(actor.userType))
       throw new ForbiddenException('KITCHEN_MENU_EDITOR_REQUIRED');
   }
   async lock(m: EntityManager, branchId: string) {

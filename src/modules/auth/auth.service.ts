@@ -227,9 +227,13 @@ export class AuthService {
     if (!user || !(await bcrypt.compare(dto.password, user.passwordHash))) {
       throw new UnauthorizedException('Invalid credentials');
     }
-    if (user.role !== USER_ROLE.KITCHEN && user.role !== USER_ROLE.CASHIER) {
+    if (
+      ![USER_ROLE.KITCHEN, USER_ROLE.HEAD_CHEF, USER_ROLE.CASHIER].includes(
+        user.role as any,
+      )
+    ) {
       throw new UnauthorizedException(
-        'This endpoint is only for kitchen staff or cashiers',
+        'This endpoint is only for kitchen staff, head chefs or cashiers',
       );
     }
     if (user.status !== COMMON_STATUS.ACTIVE || !user.branchId) {

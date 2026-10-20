@@ -35,7 +35,7 @@ describe('AuthService kitchen login', () => {
     (bcrypt.compare as jest.Mock).mockResolvedValue(true);
   });
 
-  it.each([USER_ROLE.CASHIER, USER_ROLE.KITCHEN])(
+  it.each([USER_ROLE.CASHIER, USER_ROLE.KITCHEN, USER_ROLE.HEAD_CHEF])(
     'allows %s and preserves its role and branch in the JWT',
     async (role) => {
       user.role = role;
