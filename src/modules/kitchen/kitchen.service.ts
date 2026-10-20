@@ -1126,7 +1126,14 @@ export class KitchenService {
         parentId: id,
         branchId: ticket.branchId,
       });
-    if (task)
+    const needsTaskFlow = ticket.items?.length &&
+      await this.products.exists({
+        where: {
+          id: In(ticket.items.map((item) => item.productId)),
+          productType: 'FINISHED_GOOD',
+        },
+      });
+    if (task || needsTaskFlow)
       throw new ConflictException(
         'Hãy thao tác đơn này qua luồng Nhiệm vụ bếp.',
       );

@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -200,6 +201,70 @@ export class KitchenTaskService {
     }
     return { dishes, missingRecipes };
   }
+  private async migrationCheck(m: EntityManager, source: any, type: string) {
+    if (source.date !== localDate())
+      return {
+        allowed: false,
+        reason: 'Chỉ tiếp nhận nhiệm vụ chế biến trong ngày hôm nay.',
+      };
+    if (
+      source.row.status !== 'PREPARING' ||
+      (type === 'ticket' &&
+        Number(source.row.order.status) !== ORDER_STATUS.PREPARING)
+    )
+      return {
+        allowed: false,
+        reason:
+          'Nhiệm vụ đã sẵn sàng, bàn giao hoặc kết thúc; cần đối chiếu thành phẩm đã tạo.',
+      };
+    if (
+      type === 'batch' &&
+      (source.row.details?.traceabilityVersion ||
+        source.row.details?.inputLots?.length ||
+        source.row.actualQuantity != null)
+    )
+      return {
+        allowed: false,
+        reason:
+          'Mẻ đã có hồ sơ nguyên liệu hoặc sản lượng thực tế; cần đối chiếu trước khi tiếp nhận.',
+      };
+    const ids = [
+      source.row.id,
+      ...(type === 'ticket' ? [source.row.orderId] : []),
+    ];
+    const [evidence] = await m.query(
+      `SELECT
+        EXISTS(SELECT 1 FROM stock_movements WHERE reference_id=ANY($1::uuid[])) AS movements,
+        EXISTS(SELECT 1 FROM stock_receipt_export e WHERE e.branch_id=$2 AND e.reference_id=ANY($1::uuid[]) AND e.status<>'CANCELLED'
+          AND (COALESCE(e.reference_type,'')<>'order'
+            OR NOT EXISTS(SELECT 1 FROM stock_receipt_detail d WHERE d.export_id=e.id AND d.receipt_type='EXPORT')
+            OR EXISTS(SELECT 1 FROM stock_receipt_detail d LEFT JOIN products p ON p.id=d.product_id
+              WHERE d.export_id=e.id AND d.receipt_type='EXPORT' AND (p.product_type IN ('INGREDIENT','FUEL') OR p.product_type IS NULL)))) AS exports,
+        EXISTS(SELECT 1 FROM kitchen_production_batches b JOIN kitchen_meal_plans p ON p.id=b.meal_plan_id
+          WHERE p.branch_id=$2 AND b.id<>$3 AND (b.details->>'workflowTicketId'=$3::text OR b.details->>'workflowTaskId'=$3::text
+            OR b.details->>'ticketId'=$3::text OR b.details->>'orderId'=$4::text)) AS batches,
+        EXISTS(SELECT 1 FROM kitchen_operations WHERE branch_id=$2 AND kind<>'task-flow' AND
+          (parent_id=ANY($1::uuid[]) OR payload->>'batchId'=$3::text OR payload->>'ticketId'=$3::text OR payload->>'orderId'=$4::text)) AS documents,
+        EXISTS(SELECT 1 FROM kitchen_consumption_sessions WHERE branch_id=$2 AND session_date=$5::date
+          AND meal_period=$6 AND status='CONFIRMED' AND ($7::uuid IS NULL OR station_id=$7::uuid)) AS sessions`,
+      [
+        ids,
+        source.branchId,
+        source.row.id,
+        type === 'ticket' ? source.row.orderId : null,
+        source.date,
+        type === 'batch' ? source.row.mealPlan.mealPeriod : 'LUNCH',
+        source.row.stationId || null,
+      ],
+    );
+    if (Object.values(evidence).some(Boolean))
+      return {
+        allowed: false,
+        reason:
+          'Đã có giao dịch kho, mẻ liên quan hoặc xác nhận tiêu hao. Cần đối chiếu chứng từ để tránh xuất nguyên liệu hai lần.',
+      };
+    return { allowed: true, reason: '' };
+  }
   private async detail(m: EntityManager, actor: any, type: string, id: string) {
     const source = await this.source(m, actor, type, id);
     const flow = await m.getRepository(KitchenOperation).findOneBy({
@@ -209,6 +274,8 @@ export class KitchenTaskService {
     });
     const snapshot =
       flow?.payload.snapshot || (await this.requirements(m, source, type));
+    const status =
+      flow?.status || (source.row.status === 'WAITING' ? 'WAITING' : 'LEGACY');
     const productIds = [
       ...new Set(
         snapshot.dishes.flatMap((dish) =>
@@ -242,9 +309,11 @@ export class KitchenTaskService {
         type === 'ticket'
           ? `Đơn ${source.row.order?.orderNumber || source.row.orderId}`
           : snapshot.dishes[0]?.name || 'Mẻ chế biến',
-      status:
-        flow?.status ||
-        (source.row.status === 'WAITING' ? 'WAITING' : 'LEGACY'),
+      status,
+      migration:
+        status === 'LEGACY' && !flow
+          ? await this.migrationCheck(m, source, type)
+          : null,
       version: flow?.version || 0,
       ...snapshot,
       lots: lots.filter((lot: any) => Number(lot.quantity) > 0),
@@ -405,6 +474,45 @@ export class KitchenTaskService {
           payload: { history: [], requests: {} },
           createdBy: actor.userId,
         });
+      if (action === 'migrate') {
+        if (!['ADMIN', 'MANAGER', 'HEAD_CHEF'].includes(actor.userType))
+          throw new ForbiddenException(
+            'Bếp trưởng hoặc quản lý cần xác nhận tiếp nhận nhiệm vụ.',
+          );
+        if (dto.confirmUnissued !== true)
+          throw new BadRequestException(
+            'Cần xác nhận nguyên liệu chưa xuất và thành phẩm chưa được ghi nhận.',
+          );
+        if (flow.id)
+          throw new ConflictException(
+            'Nhiệm vụ đã có hồ sơ xử lý. Hãy làm mới.',
+          );
+        const check = await this.migrationCheck(m, source, type);
+        if (!check.allowed) throw new ConflictException(check.reason);
+        await this.operations.unlocked(
+          m,
+          source.branchId,
+          source.date,
+          source.shift,
+        );
+        flow.payload.migration = {
+          previousStatus: source.row.status,
+          previousStartedAt: source.row.startedAt,
+          sourceVersion: source.row.version,
+          confirmedBy: actor.userId,
+          confirmedAt: new Date().toISOString(),
+          confirmUnissued: true,
+        };
+        await m
+          .getRepository(
+            type === 'ticket' ? KitchenOrderTicket : KitchenProductionBatch,
+          )
+          .update(
+            { id },
+            { status: 'WAITING', startedAt: null, updatedBy: actor.userId },
+          );
+        flow.status = 'WAITING';
+      }
       if (action === 'wait') {
         if (type !== 'ticket')
           throw new BadRequestException('Chỉ chia đợt cho đơn căn tin.');

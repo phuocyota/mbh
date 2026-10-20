@@ -49,7 +49,8 @@ export class StockVoucherController {
   }
 
   @Get()
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(RolesGuard)
+  @Roles(UserType.ADMIN, UserType.MANAGER, UserType.HEAD_CHEF)
   @ApiOperation({ summary: 'Get all stock import/export vouchers' })
   @ApiQuery({ name: 'page', required: false, type: Number })
   @ApiQuery({ name: 'size', required: false, type: Number })

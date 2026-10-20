@@ -30,6 +30,8 @@ export class StockTransferController {
   constructor(private readonly stockTransferService: StockTransferService) {}
 
   @Get()
+  @UseGuards(RolesGuard)
+  @Roles(UserType.ADMIN, UserType.MANAGER, UserType.HEAD_CHEF)
   @ApiOperation({ summary: 'Get all stock transfers' })
   @ApiQuery({ name: 'status', required: false })
   @ApiQuery({ name: 'fromBranchId', required: false })
@@ -56,6 +58,8 @@ export class StockTransferController {
   }
 
   @Get(':id')
+  @UseGuards(RolesGuard)
+  @Roles(UserType.ADMIN, UserType.MANAGER, UserType.HEAD_CHEF)
   @ApiOperation({ summary: 'Get stock transfer by ID' })
   async findOne(@Req() req: any, @Param('id') id: string) {
     const current = await this.stockTransferService.findOne(id);

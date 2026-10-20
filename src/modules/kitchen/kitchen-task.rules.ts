@@ -1,6 +1,7 @@
 import { BadRequestException, ConflictException } from '@nestjs/common';
 
 export const TASK_FLOW = {
+  migrate: 'LEGACY',
   wait: 'WAITING',
   receive: 'WAITING',
   start: 'RECEIVED',

@@ -19,6 +19,8 @@ describe('Kitchen task safeguards', () => {
     expect(() => validateTaskActuals(60, 60, 1)).toThrow();
   });
   it('requires receipt before starting and allows corrections before QC', () => {
+    expect(() => assertTaskAction('LEGACY', 'migrate')).not.toThrow();
+    expect(() => assertTaskAction('WAITING', 'migrate')).toThrow();
     expect(() => assertTaskAction('WAITING', 'start')).toThrow();
     expect(() => assertTaskAction('RECORDED', 'record')).not.toThrow();
     expect(() => assertTaskAction('COMPLETED', 'record')).toThrow();
