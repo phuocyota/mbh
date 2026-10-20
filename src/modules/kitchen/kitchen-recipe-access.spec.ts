@@ -19,6 +19,9 @@ describe('Kitchen recipe and menu setup permissions', () => {
       | 'recipeRequests'
       | 'recipeNotifications'
       | 'readRecipeNotification'
+      | 'kitchenNotifications'
+      | 'readKitchenNotification'
+      | 'syncShortageRequests'
       | 'approveRecipe'
       | 'requestRecipeChanges'
       | 'createStation'
@@ -58,7 +61,7 @@ describe('Kitchen recipe and menu setup permissions', () => {
         ForbiddenException,
       );
   });
-  it.each(['recipeNotifications', 'readRecipeNotification'] as const)(
+  it.each(['recipeNotifications', 'readRecipeNotification', 'kitchenNotifications', 'readKitchenNotification'] as const)(
     'limits %s to requesters with reviewer roles',
     (method) => {
       for (const role of ['ADMIN', 'MANAGER'])
@@ -67,6 +70,12 @@ describe('Kitchen recipe and menu setup permissions', () => {
         expect(() => guard.canActivate(context(method, role))).toThrow(ForbiddenException);
     },
   );
+  it('only operators can report shortages', () => {
+    for (const role of ['ADMIN', 'MANAGER', 'HEAD_CHEF', 'KITCHEN', 'CASHIER'])
+      expect(guard.canActivate(context('syncShortageRequests', role))).toBe(true);
+    for (const role of ['STUDENT', 'CUSTOMER'])
+      expect(() => guard.canActivate(context('syncShortageRequests', role))).toThrow(ForbiddenException);
+  });
   it.each(['createRecipe', 'submitRecipe'] as const)(
     'allows head chefs to %s',
     (method) => {

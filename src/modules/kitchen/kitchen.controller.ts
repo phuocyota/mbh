@@ -150,6 +150,24 @@ export class KitchenController {
     return this.kitchen.readRecipeNotification(req.user, id);
   }
 
+  @Get('notifications')
+  @Roles(...MANAGERS)
+  kitchenNotifications(@Req() req: any) {
+    return this.kitchen.listKitchenNotifications(req.user);
+  }
+
+  @Post('notifications/:id/read')
+  @Roles(...MANAGERS)
+  readKitchenNotification(@Req() req: any, @Param('id') id: string) {
+    return this.kitchen.readKitchenNotification(req.user, id);
+  }
+
+  @Post('shortage-requests')
+  @Roles(...OPERATORS)
+  syncShortageRequests(@Req() req: any, @Body() dto: any) {
+    return this.kitchen.syncShortageRequests(req.user, dto);
+  }
+
   @Post('products/:productId/request-recipe')
   @Roles(...MANAGERS)
   requestRecipe(

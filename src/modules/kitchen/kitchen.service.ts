@@ -329,6 +329,7 @@ export class KitchenService {
       unreadCount,
       items: rows.map((row) => ({
         id: row.id,
+        type: 'RECIPE_SUBMITTED',
         productId: row.parentId,
         productName: row.payload.productName,
         branchId: row.branchId,
@@ -359,6 +360,116 @@ export class KitchenService {
         await repo.save(row);
       }
       return { id: row.id, isRead: true };
+    });
+  }
+
+  async syncShortageRequests(actor: Actor, dto: any) {
+    if (!['ADMIN', 'MANAGER', 'HEAD_CHEF', 'KITCHEN', 'CASHIER'].includes(actor.userType))
+      throw new ForbiddenException('KITCHEN_OPERATOR_REQUIRED');
+    const branchId = this.resolveBranch(actor, dto.branchId);
+    const date = dto.date || localDate();
+    if (date !== localDate()) throw new BadRequestException('Chỉ gửi yêu cầu thiếu nguyên liệu cho hôm nay.');
+    return this.dataSource.transaction(async (manager) => {
+      await this.operations.lock(manager, branchId);
+      // Recalculate on the server; never accept client-supplied quantities.
+      const overview = await this.staffOverview(actor, { branchId, date });
+      const repo = manager.getRepository(KitchenOperation);
+      const existing = await repo.findBy({ branchId, date, kind: 'stock-shortage-request' });
+      const recipients = await manager.query(
+        `SELECT id FROM users WHERE status='ACTIVE' AND
+          ((role='MANAGER' AND branch_id=$1) OR
+           (role='ADMIN' AND (branch_id=$1 OR branch_id IS NULL)))`, [branchId],
+      );
+      if (overview.shortages.length && !recipients.length)
+        throw new ConflictException('Chưa có Admin/Quản lý hoạt động để nhận yêu cầu bổ sung.');
+      const [branch] = await manager.query('SELECT name FROM branches WHERE id=$1', [branchId]);
+      const requester = await manager.findOneBy(User, { id: actor.userId });
+      for (const line of overview.shortages) {
+        const previous = existing.find((row) => row.parentId === line.productId);
+        const recipientIds = recipients.map((user: any) => user.id).sort();
+        const changed = !previous || previous.status !== 'OPEN' ||
+          Number(previous.payload.shortageQuantity) !== Number(line.shortageQuantity) ||
+          previous.payload.unitId !== line.unitId;
+        if (!changed && JSON.stringify(previous!.payload.recipientIds) === JSON.stringify(recipientIds)) continue;
+        const row = previous || repo.create({ branchId, date, kind: 'stock-shortage-request', parentId: line.productId, shift: '', requestId: null, createdBy: actor.userId });
+        row.status = 'OPEN';
+        row.payload = {
+          ...row.payload,
+          productName: line.name,
+          unitId: line.unitId,
+          unit: line.unit,
+          demandQuantity: Number(line.quantity),
+          availableQuantity: Number(line.availableQuantity || 0),
+          shortageQuantity: Number(line.shortageQuantity),
+          branchName: branch?.name || branchId,
+          requestedByName: requester?.fullName || 'Nhân viên bếp',
+          recipientIds,
+          requestedAt: changed ? new Date().toISOString() : row.payload.requestedAt,
+          readBy: changed ? {} : row.payload.readBy || {},
+        };
+        row.updatedBy = actor.userId;
+        await repo.save(row);
+      }
+      for (const row of existing) {
+        if (row.status === 'OPEN' && !overview.shortages.some((line) => line.productId === row.parentId)) {
+          row.status = 'RESOLVED';
+          row.payload = { ...row.payload, resolvedAt: new Date().toISOString() };
+          row.updatedBy = actor.userId;
+          await repo.save(row);
+        }
+      }
+      return { count: overview.shortages.length, date };
+    });
+  }
+
+  async listKitchenNotifications(actor: Actor) {
+    const recipes = await this.listRecipeNotifications(actor);
+    const query = this.dataSource.getRepository(KitchenOperation).createQueryBuilder('request')
+      .where('request.kind = :kind', { kind: 'stock-shortage-request' })
+      .andWhere('request.status = :status', { status: 'OPEN' })
+      .andWhere('request.date = :date', { date: localDate() })
+      .andWhere("request.payload->'recipientIds' @> :recipient::jsonb", { recipient: JSON.stringify([actor.userId]) });
+    if (actor.userType !== 'ADMIN') query.andWhere('request.branch_id = :branchId', { branchId: this.resolveBranch(actor) });
+    const [rows, unread] = await Promise.all([
+      query.clone().orderBy("request.payload->>'requestedAt'", 'DESC').take(50).getMany(),
+      query.clone().andWhere("request.payload->'readBy'->>:reader IS NULL", { reader: actor.userId }).getCount(),
+    ]);
+    const items = rows.map((row) => ({
+      id: row.id,
+      type: 'STOCK_SHORTAGE',
+      productId: row.parentId,
+      productName: row.payload.productName,
+      branchId: row.branchId,
+      branchName: row.payload.branchName,
+      date: row.date,
+      shortageQuantity: row.payload.shortageQuantity,
+      unit: row.payload.unit,
+      requestedByName: row.payload.requestedByName,
+      title: 'Bếp yêu cầu bổ sung nguyên liệu',
+      message: `${row.payload.branchName}: thiếu ${row.payload.shortageQuantity} ${row.payload.unit} ${row.payload.productName}. Vui lòng bổ sung nguyên liệu cho bếp.`,
+      createdAt: row.payload.requestedAt,
+      isRead: Boolean(row.payload.readBy?.[actor.userId]),
+    }));
+    return { unreadCount: recipes.unreadCount + unread, items: [...recipes.items, ...items].sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt)).slice(0, 50) };
+  }
+
+  async readKitchenNotification(actor: Actor, id: string) {
+    if (!['ADMIN', 'MANAGER'].includes(actor.userType)) throw new ForbiddenException('MANAGER_REQUIRED');
+    if (!isUUID(id)) throw new BadRequestException('Mã thông báo không hợp lệ.');
+    const reference = await this.dataSource.getRepository(KitchenOperation).findOneBy({ id, kind: 'stock-shortage-request' });
+    if (!reference) return this.readRecipeNotification(actor, id);
+    this.resolveBranch(actor, reference.branchId);
+    return this.dataSource.transaction(async (manager) => {
+      await this.operations.lock(manager, reference.branchId);
+      const repo = manager.getRepository(KitchenOperation);
+      const row = await repo.findOne({ where: { id, kind: 'stock-shortage-request', status: 'OPEN' }, lock: { mode: 'pessimistic_write' } });
+      if (!row || !row.payload.recipientIds?.includes(actor.userId)) throw new NotFoundException('Không tìm thấy thông báo.');
+      if (!row.payload.readBy?.[actor.userId]) {
+        row.payload = { ...row.payload, readBy: { ...row.payload.readBy, [actor.userId]: new Date().toISOString() } };
+        row.updatedBy = actor.userId;
+        await repo.save(row);
+      }
+      return { id, isRead: true };
     });
   }
 
