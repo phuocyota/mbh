@@ -234,12 +234,14 @@ export class KitchenService {
       ],
       order: { productId: 'ASC', version: 'DESC' },
     });
-    const units = editor ? await this.units.find() : [];
+    const canViewCost = ['ADMIN', 'MANAGER'].includes(actor.userType);
+    const units = canViewCost ? await this.units.find() : [];
     return rows.map((row) => ({
       ...row,
-      ...(editor
+      ...(canViewCost
         ? {
-            costing: ['DRAFT', 'REVISION_REQUESTED'].includes(row.status)
+            costing: ['DRAFT', 'REVISION_REQUESTED'].includes(row.status) ||
+              (row.status === 'PENDING_REVIEW' && !row.approval?.costing?.complete)
               ? recipeCosting(row, units)
               : row.approval?.costing || recipeCosting(row, units),
           }
@@ -271,6 +273,60 @@ export class KitchenService {
       recipeId: row.payload.recipeId || null,
       link: `/dashboard/menu/recipes?productId=${row.parentId}`,
     }));
+  }
+
+  async listRecipeNotifications(actor: Actor) {
+    if (!['ADMIN', 'MANAGER'].includes(actor.userType))
+      throw new ForbiddenException('Bạn không có quyền xem thông báo công thức.');
+    const query = this.dataSource.getRepository(KitchenOperation)
+      .createQueryBuilder('request')
+      .where('request.kind = :kind', { kind: 'recipe-request' })
+      .andWhere('request.status = :status', { status: 'SUBMITTED' })
+      .andWhere('request.created_by = :userId', { userId: actor.userId });
+    if (actor.userType !== 'ADMIN')
+      query.andWhere('request.branch_id = :branchId', {
+        branchId: this.resolveBranch(actor),
+      });
+    const [rows, unreadCount] = await Promise.all([
+      query.clone().orderBy("request.payload->>'submittedAt'", 'DESC')
+        .addOrderBy('request.id', 'DESC').take(50).getMany(),
+      query.clone().andWhere("request.payload->>'requesterReadAt' IS NULL").getCount(),
+    ]);
+    return {
+      unreadCount,
+      items: rows.map((row) => ({
+        id: row.id,
+        productId: row.parentId,
+        productName: row.payload.productName,
+        branchId: row.branchId,
+        recipeId: row.payload.recipeId,
+        title: 'Bếp đã hoàn tất công thức',
+        message: `Công thức và định lượng món ${row.payload.productName} đã được bếp trưởng hoàn tất và gửi duyệt.`,
+        createdAt: row.payload.submittedAt,
+        isRead: Boolean(row.payload.requesterReadAt),
+      })),
+    };
+  }
+
+  async readRecipeNotification(actor: Actor, id: string) {
+    if (!['ADMIN', 'MANAGER'].includes(actor.userType))
+      throw new ForbiddenException('Bạn không có quyền đọc thông báo công thức.');
+    if (!isUUID(id)) throw new BadRequestException('Mã thông báo không hợp lệ.');
+    return this.dataSource.transaction(async (manager) => {
+      const repo = manager.getRepository(KitchenOperation);
+      const row = await repo.findOne({
+        where: { id, kind: 'recipe-request', status: 'SUBMITTED', createdBy: actor.userId },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (!row) throw new NotFoundException('Không tìm thấy thông báo.');
+      this.resolveBranch(actor, row.branchId);
+      if (!row.payload.requesterReadAt) {
+        row.payload = { ...row.payload, requesterReadAt: new Date().toISOString() };
+        row.updatedBy = actor.userId;
+        await repo.save(row);
+      }
+      return { id: row.id, isRead: true };
+    });
   }
 
   async requestRecipe(actor: Actor, productId: string, dto: any) {
@@ -514,7 +570,7 @@ export class KitchenService {
           branchId,
           kind: 'recipe-request',
           parentId: dto.productId,
-          status: 'OPEN',
+          status: In(['OPEN', 'DRAFTED']),
         });
       for (const request of requests) {
         request.status = 'DRAFTED';
@@ -611,10 +667,6 @@ export class KitchenService {
           current,
           await manager.getRepository(MeasurementUnit).find(),
         );
-        if (!costing.complete)
-          throw new BadRequestException(
-            `Cần khai báo giá vốn theo đơn vị tồn chuẩn: ${costing.missing.join(', ')}.`,
-          );
         approval.costing = costing;
         approval.submittedBy = actor.userId;
         approval.submittedAt = new Date().toISOString();
@@ -626,23 +678,41 @@ export class KitchenService {
             branchId: row.branchId,
             kind: 'recipe-request',
             parentId: row.productId,
-            status: 'DRAFTED',
+            status: In(['DRAFTED', 'SUBMITTED']),
           });
         for (const request of requests) {
+          if (request.payload.recipeId !== row.id) continue;
           request.status = 'SUBMITTED';
           request.payload = {
             ...request.payload,
             recipeId: row.id,
             submittedAt: new Date().toISOString(),
+            requesterReadAt: null,
           };
           request.updatedBy = actor.userId;
           await manager.save(KitchenOperation, request);
         }
       } else if (action === 'approve') {
-        if (!approval.costing?.complete)
-          throw new ConflictException(
-            'Cần gửi lại công thức với giá vốn hợp lệ.',
+        if (!approval.costing?.complete) {
+          const full = await repo.findOne({
+            where: { id },
+            relations: ['items', 'items.ingredientProduct', 'items.unit'],
+          });
+          await this.movements.lockProducts(
+            manager,
+            full!.items.map((item) => item.ingredientProductId),
           );
+          const current = await repo.findOne({
+            where: { id },
+            relations: ['items', 'items.ingredientProduct', 'items.unit'],
+          });
+          const costing = recipeCosting(current, await manager.getRepository(MeasurementUnit).find());
+          if (!costing.complete)
+            throw new ConflictException(
+              `Cần khai báo giá vốn theo đơn vị tồn chuẩn trước khi duyệt: ${costing.missing.join(', ')}.`,
+            );
+          approval.costing = costing;
+        }
         await manager.update(
           KitchenRecipe,
           {

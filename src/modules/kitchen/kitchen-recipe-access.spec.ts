@@ -17,6 +17,8 @@ describe('Kitchen recipe and menu setup permissions', () => {
       | 'submitRecipe'
       | 'requestRecipe'
       | 'recipeRequests'
+      | 'recipeNotifications'
+      | 'readRecipeNotification'
       | 'approveRecipe'
       | 'requestRecipeChanges'
       | 'createStation'
@@ -56,6 +58,15 @@ describe('Kitchen recipe and menu setup permissions', () => {
         ForbiddenException,
       );
   });
+  it.each(['recipeNotifications', 'readRecipeNotification'] as const)(
+    'limits %s to requesters with reviewer roles',
+    (method) => {
+      for (const role of ['ADMIN', 'MANAGER'])
+        expect(guard.canActivate(context(method, role))).toBe(true);
+      for (const role of ['HEAD_CHEF', 'KITCHEN', 'CASHIER', 'STUDENT'])
+        expect(() => guard.canActivate(context(method, role))).toThrow(ForbiddenException);
+    },
+  );
   it.each(['createRecipe', 'submitRecipe'] as const)(
     'allows head chefs to %s',
     (method) => {

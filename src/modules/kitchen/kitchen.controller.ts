@@ -138,6 +138,18 @@ export class KitchenController {
     return this.kitchen.listRecipeRequests(req.user, query);
   }
 
+  @Get('recipe-notifications')
+  @Roles(...MANAGERS)
+  recipeNotifications(@Req() req: any) {
+    return this.kitchen.listRecipeNotifications(req.user);
+  }
+
+  @Post('recipe-notifications/:id/read')
+  @Roles(...MANAGERS)
+  readRecipeNotification(@Req() req: any, @Param('id') id: string) {
+    return this.kitchen.readRecipeNotification(req.user, id);
+  }
+
   @Post('products/:productId/request-recipe')
   @Roles(...MANAGERS)
   requestRecipe(
