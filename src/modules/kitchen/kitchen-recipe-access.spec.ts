@@ -53,10 +53,11 @@ describe('Kitchen recipe and menu setup permissions', () => {
     },
   );
   it.each(['activateRecipe', 'approveRecipe', 'requestRecipeChanges'] as const)(
-    'allows only admin to %s',
+    'allows admin and branch manager to %s',
     (method) => {
-      expect(guard.canActivate(context(method, 'ADMIN'))).toBe(true);
-      for (const role of ['HEAD_CHEF', 'KITCHEN', 'MANAGER', 'CASHIER'])
+      for (const role of ['ADMIN', 'MANAGER'])
+        expect(guard.canActivate(context(method, role))).toBe(true);
+      for (const role of ['HEAD_CHEF', 'KITCHEN', 'CASHIER'])
         expect(() => guard.canActivate(context(method, role))).toThrow(
           ForbiddenException,
         );

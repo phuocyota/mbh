@@ -220,7 +220,7 @@ export class KitchenService {
   async listRecipes(actor: Actor, branchId?: string, productId?: string) {
     const where: any = { branchId: this.resolveBranch(actor, branchId) };
     if (productId) where.productId = productId;
-    const editor = ['ADMIN', 'HEAD_CHEF'].includes(actor.userType);
+    const editor = ['ADMIN', 'MANAGER', 'HEAD_CHEF'].includes(actor.userType);
     if (!editor) where.status = 'ACTIVE';
     const rows = await this.recipes.find({
       where,
@@ -247,9 +247,9 @@ export class KitchenService {
   }
 
   async createRecipe(actor: Actor, dto: any) {
-    if (!['HEAD_CHEF', 'ADMIN'].includes(actor.userType))
+    if (!['HEAD_CHEF', 'ADMIN', 'MANAGER'].includes(actor.userType))
       throw new ForbiddenException(
-        'Chỉ bếp trưởng hoặc admin được tạo công thức.',
+        'Chỉ bếp trưởng, admin hoặc quản lý chi nhánh được tạo công thức.',
       );
     if (dto.activate)
       throw new BadRequestException(
@@ -422,8 +422,8 @@ export class KitchenService {
       throw new BadRequestException('Thao tác duyệt không hợp lệ.');
     if (
       submit
-        ? !['HEAD_CHEF', 'ADMIN'].includes(actor.userType)
-        : actor.userType !== 'ADMIN'
+        ? !['HEAD_CHEF', 'ADMIN', 'MANAGER'].includes(actor.userType)
+        : !['ADMIN', 'MANAGER'].includes(actor.userType)
     )
       throw new ForbiddenException('Bạn không có quyền duyệt công thức.');
     if (
@@ -446,7 +446,7 @@ export class KitchenService {
       if (!row) throw new NotFoundException('Không tìm thấy công thức.');
       if (
         submit &&
-        actor.userType !== 'ADMIN' &&
+        !['ADMIN', 'MANAGER'].includes(actor.userType) &&
         row.createdBy !== actor.userId
       )
         throw new ForbiddenException(
