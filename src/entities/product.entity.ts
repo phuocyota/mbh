@@ -64,6 +64,8 @@ export class Product extends BaseEntity {
 
   @Column('varchar', { name: 'product_type', nullable: true })
   productType: 'INGREDIENT' | 'FUEL' | 'FINISHED_GOOD' | 'MERCHANDISE' | null;
+  @Column('boolean', { name: 'requires_cooking', default: false })
+  requiresCooking: boolean;
   @Column('boolean', { name: 'lot_tracking_enabled', default: false })
   lotTrackingEnabled: boolean;
   @Column('boolean', { name: 'is_fresh_food', default: false })

@@ -44,6 +44,10 @@ export class ProductWriteDto {
   @IsOptional()
   @IsIn(['INGREDIENT', 'FUEL', 'FINISHED_GOOD', 'MERCHANDISE'])
   productType?: string | null;
+  @ApiPropertyOptional({ description: 'Món phải qua chế biến tại bếp' })
+  @IsOptional()
+  @IsBoolean()
+  requiresCooking?: boolean;
   @ApiPropertyOptional() @IsOptional() @IsBoolean() isActive?: boolean;
   @ApiPropertyOptional() @IsOptional() @IsBoolean() isCanteenItem?: boolean;
   @ApiPropertyOptional() @IsOptional() @IsBoolean() isBoarding?: boolean;

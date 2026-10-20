@@ -367,6 +367,12 @@ export class ProductService extends BaseService<Product> {
         );
       }
 
+      if (
+        productDto.requiresCooking === false &&
+        productDto.productType === undefined &&
+        product.productType === 'FINISHED_GOOD'
+      )
+        productDto.productType = 'MERCHANDISE';
       await this.validateKitchenFields(productDto, product, manager);
       const oldPrice = Number(product.price);
       const oldCostPrice =
@@ -537,6 +543,23 @@ export class ProductService extends BaseService<Product> {
   }
 
   private withoutQuantity(dto: any) {
+    dto = { ...dto };
+    if (dto.requiresCooking === true) {
+      if (dto.productType && dto.productType !== 'FINISHED_GOOD')
+        throw new BadRequestException(
+          'Món phải qua chế biến cần loại FINISHED_GOOD.',
+        );
+      dto.productType = 'FINISHED_GOOD';
+    }
+    if (dto.productType !== undefined) {
+      const requiresCooking = dto.productType === 'FINISHED_GOOD';
+      if (
+        dto.requiresCooking !== undefined &&
+        dto.requiresCooking !== requiresCooking
+      )
+        throw new BadRequestException('Cờ chế biến không khớp với loại hàng.');
+      dto.requiresCooking = requiresCooking;
+    }
     const allowed = [
       'branchId',
       'categoryId',
@@ -555,6 +578,7 @@ export class ProductService extends BaseService<Product> {
       'isBoarding',
       'isFreshFood',
       'productType',
+      'requiresCooking',
       'requiresSample',
       'cookDuration',
       'recommendedUseMinutes',

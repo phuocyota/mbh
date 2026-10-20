@@ -35,6 +35,28 @@ function harness(productOverrides: any = {}) {
   return { service, repo, product, manager };
 }
 describe('Product classification and unit boundaries', () => {
+  it('classifies a cooking flag as a finished good without changing stock', async () => {
+    const h = harness({ productType: null, baseUnitId: null });
+    await h.service.updateProduct('product', { requiresCooking: true });
+    expect(h.product).toMatchObject({
+      requiresCooking: true,
+      productType: 'FINISHED_GOOD',
+    });
+    expect(h.product.quantity).toBeUndefined();
+  });
+  it('rejects a cooking flag on raw materials', async () => {
+    await expect(
+      harness().service.updateProduct('product', {
+        requiresCooking: true,
+        productType: 'INGREDIENT',
+      }),
+    ).rejects.toThrow('FINISHED_GOOD');
+  });
+  it('preserves material classification when its cooking flag is false', async () => {
+    const h = harness();
+    await h.service.updateProduct('product', { requiresCooking: false });
+    expect(h.product.productType).toBe('INGREDIENT');
+  });
   it('blocks classification changes for products with stock, recipes or transactions', async () => {
     const h = harness();
     await expect(
