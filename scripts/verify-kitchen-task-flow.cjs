@@ -72,6 +72,27 @@ class Pool extends EventEmitter {
     for (const [index, costPrice] of [2000, 100, 50].entries()) await db.getRepository(E.Product).update(inputs[index].product.id, { costPrice });
     const recipeBody = { productId: dish.id, branchId: branch.id, yieldQuantity: 1, yieldUnitId: piece.id, expectedWastePercent: 5,
       items: inputs.map(input => ({ ingredientProductId: input.product.id, unitId: input.unit.id, quantity: input.requirement })) };
+    const requestedDish = await save(E.Product, { name: 'Món cần công thức', categoryId: category.id, branchId: branch.id, productType: 'FINISHED_GOOD', requiresCooking: true, baseUnitId: piece.id, unit: 'ổ', price: 0 });
+    const requestBody = { branchId: branch.id, note: 'Tạo định lượng cho món mới' };
+    await assert.rejects(kitchen.requestRecipe(chef, requestedDish.id, requestBody), /Chỉ admin/);
+    await assert.rejects(kitchen.requestRecipe(admin, requestedDish.id, requestBody), /chưa có tài khoản bếp trưởng/);
+    await db.getRepository(E.User).update(user.id, { role: 'HEAD_CHEF' });
+    await save(E.Employee, { code: 'CHEF-TEST', userId: user.id, fullName: 'Test chef', branchId: branch.id, status: 'working' });
+    const request = await kitchen.requestRecipe(admin, requestedDish.id, requestBody);
+    assert.equal(request.status, 'OPEN');
+    const replayRequest = await kitchen.requestRecipe(admin, requestedDish.id, requestBody);
+    assert.equal(replayRequest.id, request.id); assert.equal(replayRequest.alreadyRequested, true);
+    await assert.rejects(kitchen.requestRecipe({ ...actor, userType: 'MANAGER' }, requestedDish.id, { ...requestBody, branchId: randomUUID() }), /CROSS_BRANCH/);
+    await assert.rejects(kitchen.listRecipeRequests(actor, {}), /quyền/);
+    const inbox = await kitchen.listRecipeRequests(chef, {});
+    assert.equal(inbox.length, 1); assert.equal(inbox[0].note, requestBody.note); assert.ok(inbox[0].link.includes(requestedDish.id));
+    const requestDraft = await kitchen.createRecipe(chef, { ...recipeBody, productId: requestedDish.id });
+    assert.equal((await kitchen.listRecipeRequests(chef, {}))[0].status, 'DRAFTED');
+    await kitchen.reviewRecipe(chef, requestDraft.id, 'submit');
+    assert.equal((await kitchen.listRecipeRequests(chef, {}))[0].status, 'SUBMITTED');
+    assert.equal((await kitchen.listRecipeRequests({ ...chef, branchId: randomUUID() }, {})).length, 0);
+    await assert.rejects(kitchen.requestRecipe(admin, requestedDish.id, requestBody), /đã có công thức/);
+    console.log('PASS recipe request: persisted chef inbox, same-branch audience, no recipient guard, duplicate prevention, permissions, draft/submitted lifecycle.');
     await assert.rejects(kitchen.createRecipe(actor, recipeBody), /Chỉ bếp trưởng/);
     await assert.rejects(kitchen.createRecipe(chef, { ...recipeBody, activate: true }), /gửi duyệt/);
     const draft = await kitchen.createRecipe(chef, recipeBody);

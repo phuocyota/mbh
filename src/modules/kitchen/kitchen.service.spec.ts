@@ -109,7 +109,10 @@ describe('KitchenService authorization and concurrency', () => {
         getRepository: (entity) =>
           entity.name === 'Product'
             ? { find: jest.fn().mockResolvedValue([product, ingredient]) }
-            : { findOne: jest.fn().mockResolvedValue(null) },
+            : {
+                findOne: jest.fn().mockResolvedValue(null),
+                findBy: jest.fn().mockResolvedValue([]),
+              },
         create: (_entity, value) => ({ ...value }),
         save: async (entity, value) => {
           if (entity.name === 'KitchenRecipe')

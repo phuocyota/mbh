@@ -132,6 +132,22 @@ export class KitchenController {
     return this.kitchen.listRecipes(req.user, branchId, productId);
   }
 
+  @Get('recipe-requests')
+  @Roles(...MANAGERS, UserType.HEAD_CHEF)
+  recipeRequests(@Req() req: any, @Query() query: any) {
+    return this.kitchen.listRecipeRequests(req.user, query);
+  }
+
+  @Post('products/:productId/request-recipe')
+  @Roles(...MANAGERS)
+  requestRecipe(
+    @Req() req: any,
+    @Param('productId') id: string,
+    @Body() dto: any,
+  ) {
+    return this.kitchen.requestRecipe(req.user, id, dto);
+  }
+
   @Post('recipes')
   @Roles(UserType.HEAD_CHEF)
   @ApiOperation({ summary: 'Head chef creates a new immutable recipe version' })

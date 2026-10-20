@@ -15,6 +15,8 @@ describe('Kitchen recipe and menu setup permissions', () => {
       | 'createRecipe'
       | 'activateRecipe'
       | 'submitRecipe'
+      | 'requestRecipe'
+      | 'recipeRequests'
       | 'approveRecipe'
       | 'requestRecipeChanges'
       | 'createStation'
@@ -40,6 +42,20 @@ describe('Kitchen recipe and menu setup permissions', () => {
         );
     },
   );
+  it('only managers/admin request a recipe; only head chefs and reviewers read the inbox', () => {
+    for (const role of ['ADMIN', 'MANAGER'])
+      expect(guard.canActivate(context('requestRecipe', role))).toBe(true);
+    for (const role of ['HEAD_CHEF', 'KITCHEN', 'CASHIER'])
+      expect(() => guard.canActivate(context('requestRecipe', role))).toThrow(
+        ForbiddenException,
+      );
+    for (const role of ['ADMIN', 'MANAGER', 'HEAD_CHEF'])
+      expect(guard.canActivate(context('recipeRequests', role))).toBe(true);
+    for (const role of ['KITCHEN', 'CASHIER'])
+      expect(() => guard.canActivate(context('recipeRequests', role))).toThrow(
+        ForbiddenException,
+      );
+  });
   it.each(['createRecipe', 'submitRecipe'] as const)(
     'allows head chefs to %s',
     (method) => {

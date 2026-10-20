@@ -1,3 +1,4 @@
+import { isUUID } from 'class-validator';
 import { recipeCosting } from './recipe-costing';
 import { KitchenOperationsService } from './kitchen-operations.service';
 import { canUseStockProduct } from '../stock/stock-scope';
@@ -246,6 +247,119 @@ export class KitchenService {
     }));
   }
 
+  async listRecipeRequests(actor: Actor, query: any) {
+    if (!['HEAD_CHEF', 'ADMIN', 'MANAGER'].includes(actor.userType))
+      throw new ForbiddenException('Bạn không có quyền xem yêu cầu công thức.');
+    const branchId = this.resolveBranch(actor, query.branchId);
+    const where: any = { branchId, kind: 'recipe-request' };
+    if (query.productId) {
+      if (!isUUID(query.productId))
+        throw new BadRequestException('Mã món không hợp lệ.');
+      where.parentId = query.productId;
+    }
+    const rows = await this.dataSource
+      .getRepository(KitchenOperation)
+      .find({ where, order: { createdAt: 'DESC' } });
+    return rows.map((row) => ({
+      id: row.id,
+      productId: row.parentId,
+      status: row.status,
+      productName: row.payload.productName,
+      note: row.payload.note,
+      requestedByName: row.payload.requestedByName,
+      createdAt: row.createdAt,
+      recipeId: row.payload.recipeId || null,
+      link: `/dashboard/menu/recipes?productId=${row.parentId}`,
+    }));
+  }
+
+  async requestRecipe(actor: Actor, productId: string, dto: any) {
+    if (!isUUID(productId))
+      throw new BadRequestException('Mã món không hợp lệ.');
+    if (!['ADMIN', 'MANAGER'].includes(actor.userType))
+      throw new ForbiddenException(
+        'Chỉ admin hoặc quản lý chi nhánh được yêu cầu tạo công thức.',
+      );
+    const branchId = this.resolveBranch(actor, dto.branchId);
+    if (
+      dto.note != null &&
+      (typeof dto.note !== 'string' || dto.note.trim().length > 1000)
+    )
+      throw new BadRequestException('Nội dung yêu cầu tối đa 1000 ký tự.');
+    return this.dataSource.transaction(async (manager) => {
+      await this.operations.lock(manager, branchId);
+      const product = await manager
+        .getRepository(Product)
+        .findOneBy({ id: productId });
+      if (
+        !product ||
+        product.productType !== 'FINISHED_GOOD' ||
+        !(await canUseStockProduct(manager, product, branchId))
+      )
+        throw new BadRequestException(
+          'Món không thuộc chi nhánh hoặc không phải thành phẩm.',
+        );
+      const repo = manager.getRepository(KitchenOperation);
+      const existing = await repo.findOne({
+        where: {
+          branchId,
+          kind: 'recipe-request',
+          parentId: productId,
+          status: 'OPEN',
+        },
+      });
+      if (existing)
+        return {
+          id: existing.id,
+          alreadyRequested: true,
+          status: existing.status,
+        };
+      const recipe = await manager
+        .getRepository(KitchenRecipe)
+        .findOneBy({ branchId, productId });
+      if (recipe)
+        throw new ConflictException(
+          'Món đã có công thức. Hãy xem công thức hoặc yêu cầu chỉnh sửa bản đang chờ duyệt.',
+        );
+      // Staff notifications are branch kitchen documents; customer notifications
+      // belong to a different audience and must not be reused for employees.
+      const chefs = await manager.query(
+        `SELECT u.id FROM users u JOIN employees e ON e.user_id=u.id AND e.branch_id=u.branch_id
+        WHERE u.branch_id=$1 AND u.role='HEAD_CHEF' AND u.status='ACTIVE' AND e.status='working'`,
+        [branchId],
+      );
+      if (!chefs.length)
+        throw new ConflictException(
+          'Chi nhánh chưa có tài khoản bếp trưởng hoạt động để nhận yêu cầu.',
+        );
+      const requester = await manager
+        .getRepository(User)
+        .findOneBy({ id: actor.userId });
+      const row = await repo.save(
+        repo.create({
+          branchId,
+          kind: 'recipe-request',
+          parentId: productId,
+          requestId: null,
+          date: localDate(),
+          shift: '',
+          status: 'OPEN',
+          createdBy: actor.userId,
+          payload: {
+            productName: product.name,
+            note:
+              dto.note?.trim() ||
+              `Vui lòng tạo công thức và định lượng cho món ${product.name}, sau đó gửi duyệt.`,
+            requestedByName: requester?.fullName || 'Quản trị',
+            recipientRole: 'HEAD_CHEF',
+            recipientIds: chefs.map((chef) => chef.id),
+          },
+        }),
+      );
+      return { id: row.id, alreadyRequested: false, status: row.status };
+    });
+  }
+
   async createRecipe(actor: Actor, dto: any) {
     if (actor.userType !== 'HEAD_CHEF')
       throw new ForbiddenException(
@@ -394,6 +508,25 @@ export class KitchenService {
           }),
         ),
       );
+      const requests = await manager
+        .getRepository(KitchenOperation)
+        .findBy({
+          branchId,
+          kind: 'recipe-request',
+          parentId: dto.productId,
+          status: 'OPEN',
+        });
+      for (const request of requests) {
+        request.status = 'DRAFTED';
+        request.payload = {
+          ...request.payload,
+          recipeId: recipe.id,
+          draftedBy: actor.userId,
+          draftedAt: new Date().toISOString(),
+        };
+        request.updatedBy = actor.userId;
+        await manager.save(KitchenOperation, request);
+      }
       return manager.findOne(KitchenRecipe, {
         where: { id: recipe.id },
         relations: [
@@ -487,6 +620,24 @@ export class KitchenService {
         approval.submittedAt = new Date().toISOString();
         approval.reason = null;
         row.status = 'PENDING_REVIEW';
+        const requests = await manager
+          .getRepository(KitchenOperation)
+          .findBy({
+            branchId: row.branchId,
+            kind: 'recipe-request',
+            parentId: row.productId,
+            status: 'DRAFTED',
+          });
+        for (const request of requests) {
+          request.status = 'SUBMITTED';
+          request.payload = {
+            ...request.payload,
+            recipeId: row.id,
+            submittedAt: new Date().toISOString(),
+          };
+          request.updatedBy = actor.userId;
+          await manager.save(KitchenOperation, request);
+        }
       } else if (action === 'approve') {
         if (!approval.costing?.complete)
           throw new ConflictException(
