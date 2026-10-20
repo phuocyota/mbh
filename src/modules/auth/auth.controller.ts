@@ -70,7 +70,9 @@ export class AuthController {
     return this.authService.loginCashier(dto);
   }
 
-  @ApiOperation({ summary: 'Kitchen staff or cashier login with email/password' })
+  @ApiOperation({
+    summary: 'Kitchen staff, head chef or cashier login with email/password',
+  })
   @ApiBody({ type: CashierLoginDto })
   @ApiResponse({
     status: 200,
@@ -79,7 +81,7 @@ export class AuthController {
   @ApiResponse({
     status: 401,
     description:
-      'Unauthorized - Requires an active kitchen staff or cashier account linked to a working employee in the same branch',
+      'Unauthorized - Requires an active kitchen staff, head chef or cashier account linked to a working employee in the same branch',
   })
   @Post('login/kitchen')
   async loginKitchen(@Body() dto: CashierLoginDto) {
