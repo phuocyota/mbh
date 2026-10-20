@@ -10,6 +10,7 @@ const { PGlite } = require(process.env.WAREHOUSE_PGLITE_PATH || '/tmp/mbh-wareho
 const E = { ...require('../dist/src/entities'), ...require('../dist/src/entities/finished-unit.entity') };
 const { KitchenTaskService } = require('../dist/src/modules/kitchen/kitchen-task.service');
 const { KitchenService } = require('../dist/src/modules/kitchen/kitchen.service');
+const { ProductService } = require('../dist/src/modules/products/product.service');
 const { AddKitchenRecipeApproval1765100000000 } = require('../dist/src/migrations/1765100000000-AddKitchenRecipeApproval');
 const { KitchenOperationsService } = require('../dist/src/modules/kitchen/kitchen-operations.service');
 const { StockMovementService, localDate } = require('../dist/src/modules/stock/stock-movement.service');
@@ -196,6 +197,17 @@ class Pool extends EventEmitter {
     state = await batchAction('handover', { receivedBy: 'Nhân viên phục vụ', items: [{ batchId: planned.id, quantity: 1 }] });
     assert.equal(state.status, 'HANDED_OVER');
     assert.equal((await tasks.list(actor, { date: localDate() })).length, 2);
+    const missingDish = await save(E.Product, { name: 'Món chưa định lượng', categoryId: category.id, branchId: branch.id, productType: 'FINISHED_GOOD', requiresCooking: true, price: 0 });
+    const otherBranch = await save(E.Branch, { name: 'Other isolated branch' });
+    await save(E.KitchenRecipe, { branchId: otherBranch.id, productId: missingDish.id, version: 1, status: 'ACTIVE', yieldQuantity: 1, yieldUnitId: piece.id });
+    const productsService = new ProductService(db.getRepository(E.Product), db.getRepository(E.ProductPriceHistory), {});
+    const missingProducts = await productsService.findProducts(undefined, { branchId: branch.id, recipeStatus: 'MISSING', page: 1, size: 1 });
+    assert.equal(missingProducts.total, 1); assert.equal(missingProducts.data[0].id, missingDish.id, 'recipe in another branch does not hide missing recipe');
+    const pendingProducts = await productsService.findProducts(undefined, { branchId: branch.id, recipeStatus: 'PENDING_REVIEW' });
+    assert.equal(pendingProducts.total, 1); assert.equal(pendingProducts.data[0].id, requestedDish.id);
+    const secondPage = await productsService.findProducts(undefined, { branchId: branch.id, recipeStatus: 'MISSING', page: 2, size: 1 });
+    assert.equal(secondPage.total, 1); assert.equal(secondPage.data.length, 0);
+    console.log('PASS product quick filters: branch-specific recipe existence, pending review, accurate totals and pagination.');
     console.log('PASS isolated PostgreSQL: receive → start → actuals → sample/QC → handover; three lots, unused returns, stock once, replay, expiry, branch/owner/version checks, transaction rollback, finished units and order status.');
   } finally { if (db.isInitialized) await db.destroy(); await pg.close(); }
 })().catch((error) => { console.error(error.stack); process.exit(1); });

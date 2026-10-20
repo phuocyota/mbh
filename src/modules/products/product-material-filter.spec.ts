@@ -24,6 +24,53 @@ function harness() {
 }
 
 describe('product material API filter', () => {
+  it.each(['MISSING', 'PENDING_REVIEW'])(
+    'filters %s recipes within branch before counting and pagination',
+    async (recipeStatus) => {
+      const { service, query } = harness();
+      await service.findProducts('food', {
+        branchId: 'branch',
+        recipeStatus,
+        page: 2,
+        size: 10,
+        search: 'bánh',
+      });
+      expect(query.andWhere).toHaveBeenCalledWith(
+        "p.product_type = 'FINISHED_GOOD'",
+      );
+      const clause = query.andWhere.mock.calls.find(([sql]) =>
+        sql.includes('kitchen_recipes'),
+      );
+      expect(clause[0]).toContain(
+        'r.product_id=p.id AND r.branch_id=:recipeBranchId',
+      );
+      expect(clause[1]).toEqual({ recipeBranchId: 'branch' });
+      expect(clause[0]).toContain(
+        recipeStatus === 'MISSING' ? 'NOT EXISTS' : "r.status='PENDING_REVIEW'",
+      );
+      expect(query.andWhere.mock.invocationCallOrder.at(-1)).toBeLessThan(
+        query.clone.mock.invocationCallOrder[0],
+      );
+      expect(query.offset).toHaveBeenCalledWith(10);
+      expect(query.andWhere).toHaveBeenCalledWith(
+        'p.category_id = :categoryId',
+        { categoryId: 'food' },
+      );
+    },
+  );
+  it('rejects unsupported recipe states or an unspecified branch', async () => {
+    const { service, query } = harness();
+    await expect(
+      service.findProducts(undefined, {
+        recipeStatus: 'ACTIVE',
+        branchId: 'b',
+      }),
+    ).rejects.toThrow('INVALID_RECIPE_STATUS');
+    await expect(
+      service.findProducts(undefined, { recipeStatus: 'MISSING' }),
+    ).rejects.toThrow('chọn chi nhánh');
+    expect(query.getRawMany).not.toHaveBeenCalled();
+  });
   it('filters ingredients and fuel together before pagination and counting, preserving branch and search', async () => {
     const { service, query } = harness();
     await service.findProducts(undefined, {

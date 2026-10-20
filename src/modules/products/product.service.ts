@@ -26,6 +26,7 @@ type ProductPriceFilter = {
   branchId?: string;
   isCanteenItem?: boolean;
   productType?: string;
+  recipeStatus?: string;
   hasInventory?: boolean;
   isActive?: boolean;
   search?: string;
@@ -127,6 +128,20 @@ export class ProductService extends BaseService<Product> {
       )
         throw new BadRequestException('INVALID_PRODUCT_TYPE');
       query.andWhere('p.product_type IN (:...productTypes)', { productTypes });
+    }
+    if (filter.recipeStatus) {
+      if (!['MISSING', 'PENDING_REVIEW'].includes(filter.recipeStatus))
+        throw new BadRequestException('INVALID_RECIPE_STATUS');
+      if (!filter.branchId)
+        throw new BadRequestException('Cần chọn chi nhánh để lọc công thức.');
+      query.andWhere("p.product_type = 'FINISHED_GOOD'");
+      const recipeScope = 'r.product_id=p.id AND r.branch_id=:recipeBranchId';
+      query.andWhere(
+        filter.recipeStatus === 'MISSING'
+          ? `NOT EXISTS (SELECT 1 FROM kitchen_recipes r WHERE ${recipeScope})`
+          : `EXISTS (SELECT 1 FROM kitchen_recipes r WHERE ${recipeScope} AND r.status='PENDING_REVIEW')`,
+        { recipeBranchId: filter.branchId },
+      );
     }
     this.applyPriceFilter(query, 'p', filter);
 

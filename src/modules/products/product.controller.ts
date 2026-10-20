@@ -45,6 +45,11 @@ export class ProductController {
   @ApiQuery({ name: 'size', required: false, type: Number })
   @ApiResponse({ status: 200, description: 'List of products' })
   @ApiQuery({
+    name: 'recipeStatus',
+    required: false,
+    enum: ['MISSING', 'PENDING_REVIEW'],
+  })
+  @ApiQuery({
     name: 'productType',
     required: false,
     description: 'One type or comma-separated types, e.g. INGREDIENT,FUEL',
@@ -64,12 +69,14 @@ export class ProductController {
     @Query('page') page?: string,
     @Query('size') size?: string,
     @Query('limit') limit?: string,
+    @Query('recipeStatus') recipeStatus?: string,
   ) {
     return this.productService.findProducts(categoryId, {
       minPrice,
       maxPrice,
       branchId: this.resolveBranchId(req, branchId),
       productType,
+      recipeStatus,
       isCanteenItem: parseOptionalBoolean(isCanteenItem),
       search,
       displayStatus,
