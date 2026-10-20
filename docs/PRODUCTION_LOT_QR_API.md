@@ -41,7 +41,7 @@
 
 ## Quản lý kho ERP: tổng quan và tồn kho
 
-Menu **Hàng hóa → Kho** mở `/warehouse`. Navigation gồm: **Tổng quan**, **Tồn kho**, **Nhập kho**, **Xuất kho**, **Chuyển kho**, **Lô hàng**, **Kiểm kê**, **Truy xuất nguồn gốc**. Nút **Xuất bán** vẫn hiển thị và giữ nguyên `/stock-sale`, `/stock-sale/create` cùng luồng xử lý cũ; khi mở, mục Xuất kho được đánh dấu đang hoạt động.
+Menu **Hàng hóa → Kho** mở `/warehouse`. Navigation gồm: **Tổng quan**, **Tồn kho**, **Nhập kho**, **Xuất kho**, **Chuyển kho**, **Lô hàng**, **Truy xuất nguồn gốc**. Nút **Xuất bán** vẫn hiển thị và giữ nguyên `/stock-sale`, `/stock-sale/create` cùng luồng xử lý cũ; khi mở, mục Xuất kho được đánh dấu đang hoạt động.
 
 ### API mới
 
@@ -224,3 +224,5 @@ Chi tiết serial ưu tiên hiển thị **Ngày nhập kho** và **Ngày hết 
 - FE mặc định có một ô nhập ID lô/serial; bấm serial trong lô cũng gửi chuỗi serial tới API này. Các đường dẫn và API chi tiết cũ vẫn hoạt động.
 
 Ví dụ: `/production-trace/lookup?id=DEMO-SERIAL-20261019-001` hoặc `/production-trace/lookup?id=<stock_lots.id>`.
+
+Mục Kiểm kê đã được gỡ khỏi navigation kho. Đường dẫn FE cũ `/stock-takes` chuyển tới `/warehouse/inventory`; dữ liệu kiểm kê và lịch sử điều chỉnh trước đây vẫn được giữ để truy xuất.

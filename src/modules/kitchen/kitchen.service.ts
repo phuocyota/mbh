@@ -929,9 +929,12 @@ export class KitchenService {
       .createQueryBuilder('t')
       .innerJoinAndSelect('t.items', 'i')
       .where('t.branch_id=:branchId', { branchId })
-      .andWhere("(t.created_at AT TIME ZONE 'Asia/Bangkok')::date=:date", {
-        date,
-      })
+      .andWhere(
+        "CAST(t.created_at AT TIME ZONE 'Asia/Ho_Chi_Minh' AS date)=:date",
+        {
+          date,
+        },
+      )
       .andWhere('t.status IN (:...statuses)', {
         statuses: ['WAITING', 'PREPARING', 'READY', 'DELIVERED'],
       })

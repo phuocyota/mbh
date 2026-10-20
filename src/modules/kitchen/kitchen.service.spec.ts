@@ -1,5 +1,6 @@
 import { ConflictException, ForbiddenException } from '@nestjs/common';
 import { KitchenService } from './kitchen.service';
+import { DataSource } from 'typeorm';
 
 function createService() {
   const service = Object.create(KitchenService.prototype);
@@ -10,6 +11,56 @@ function createService() {
 }
 
 describe('KitchenService authorization and concurrency', () => {
+  it.each([undefined, 'station-1'])(
+    'binds the demand date without corrupting the PostgreSQL cast (station %s)',
+    async (stationId) => {
+      const service = createService();
+      const clauses: string[] = [];
+      const parameters: Record<string, unknown> = {};
+      const builder: any = {
+        innerJoinAndSelect: jest.fn().mockReturnThis(),
+        where: jest.fn((sql, values) => {
+          clauses.push(sql);
+          Object.assign(parameters, values);
+          return builder;
+        }),
+        andWhere: jest.fn((sql, values) => {
+          clauses.push(sql);
+          Object.assign(parameters, values);
+          return builder;
+        }),
+        getMany: jest.fn().mockResolvedValue([]),
+      };
+      service.mealPlans = { find: jest.fn().mockResolvedValue([]) };
+      service.tickets = { createQueryBuilder: () => builder };
+      await (service as any).calculateDemand(
+        'branch-1',
+        '2026-10-20',
+        'LUNCH',
+        stationId,
+      );
+      const driver = new DataSource({ type: 'postgres' }).driver;
+      const [sql, bindings] = driver.escapeQueryWithParameters(
+        clauses.join(' AND '),
+        parameters,
+        {},
+      );
+      expect(sql).toContain(
+        "CAST(t.created_at AT TIME ZONE 'Asia/Ho_Chi_Minh' AS date)=$2",
+      );
+      expect(sql).not.toMatch(/:\$\d|:date|:branchId/);
+      expect(bindings).toEqual([
+        'branch-1',
+        '2026-10-20',
+        'WAITING',
+        'PREPARING',
+        'READY',
+        'DELIVERED',
+        ...(stationId ? [stationId] : []),
+      ]);
+    },
+  );
+
   it('lists active units without requiring a module feature flag', async () => {
     const service = createService();
     const units = [{ id: 'unit-1', code: 'kg', isActive: true }];
