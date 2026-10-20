@@ -330,6 +330,33 @@ class Pool extends EventEmitter {
     assert.equal(refreshed.shortageQuantity, 1);
     assert.equal(refreshed.allocatedQuantity, 4);
     console.log('PASS FEFO: real controller, expiry order, stock/branch/unit scope, read-only plan, explicit commit allocations, stale-plan rejection and refreshed shortage.');
+    const { StockVoucherService } = require('../dist/src/modules/stock-voucher/stock-voucher.service');
+    const vouchers = Object.create(StockVoucherService.prototype);
+    const automaticProduct = await save(E.Product, { name: 'Nguyên liệu tự tạo lô', categoryId: category.id, branchId: branch.id, productType: 'INGREDIENT', baseUnitId: gram.id, lotTrackingEnabled: false, unit: 'g', price: 0 });
+    await assert.rejects(db.transaction(async manager => {
+      await movements.lockProducts(manager, [automaticProduct.id]);
+      const product = await manager.findOneByOrFail(E.Product, { id: automaticProduct.id });
+      await vouchers.ensureMaterialLotTracking(manager, product, actor.userId);
+      throw Error('ROLLBACK_AUTO_LOT');
+    }), /ROLLBACK_AUTO_LOT/);
+    assert.equal((await db.getRepository(E.Product).findOneByOrFail({ id: automaticProduct.id })).lotTrackingEnabled, false, 'failed receipt cannot leave tracking configuration behind');
+    await db.transaction(async manager => {
+      await movements.lockProducts(manager, [automaticProduct.id]);
+      const product = await manager.findOneByOrFail(E.Product, { id: automaticProduct.id });
+      await vouchers.ensureMaterialLotTracking(manager, product, actor.userId);
+      await movements.change(manager, stock.id, product.id, 10, randomUUID(), { lotCode: 'AUTO-LOT', expiresAt: '2099-01-01' });
+    });
+    assert.equal((await db.getRepository(E.Product).findOneByOrFail({ id: automaticProduct.id })).lotTrackingEnabled, true);
+    assert.equal(Number((await db.getRepository(E.StockLot).findOneByOrFail({ productId: automaticProduct.id })).quantity), 10);
+    const legacyProduct = await save(E.Product, { name: 'Tồn cũ chưa phân lô', categoryId: category.id, branchId: branch.id, productType: 'INGREDIENT', baseUnitId: gram.id, lotTrackingEnabled: false, unit: 'g', price: 0 });
+    await save(E.StockItem, { stockId: stock.id, productId: legacyProduct.id, quantity: 7 });
+    await assert.rejects(db.transaction(async manager => {
+      await movements.lockProducts(manager, [legacyProduct.id]);
+      const product = await manager.findOneByOrFail(E.Product, { id: legacyProduct.id });
+      await vouchers.ensureMaterialLotTracking(manager, product, actor.userId);
+    }), /tồn chưa phân lô/);
+    assert.equal((await db.getRepository(E.Product).findOneByOrFail({ id: legacyProduct.id })).lotTrackingEnabled, false);
+    console.log('PASS automatic material lots: zero-stock preparation and actual lot receipt, transaction rollback, legacy unallocated stock blocked.');
     console.log('PASS isolated PostgreSQL: receive → start → actuals → sample/QC → handover; three lots, unused returns, stock once, replay, expiry, branch/owner/version checks, transaction rollback, finished units and order status.');
   } finally { if (db.isInitialized) await db.destroy(); await pg.close(); }
 })().catch((error) => { console.error(error.stack); process.exit(1); });

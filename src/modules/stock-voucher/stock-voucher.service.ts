@@ -365,6 +365,21 @@ export class StockVoucherService {
     );
   }
 
+  private async ensureMaterialLotTracking(manager: EntityManager, product: Product, actorId?: string) {
+    if (product.lotTrackingEnabled) return;
+    // Called under the product lock, inside the receipt transaction. Existing
+    // unallocated stock must be reconciled, never silently put into a new lot.
+    const [balance] = await manager.query(
+      `SELECT EXISTS(SELECT 1 FROM stock_items WHERE product_id=$1 AND quantity<>0)
+        OR EXISTS(SELECT 1 FROM stock_lots WHERE product_id=$1 AND quantity<>0) AS present`,
+      [product.id],
+    );
+    if (balance.present)
+      throw new ConflictException('Nguyên liệu đang có tồn chưa phân lô. Cần phân bổ tồn hiện có vào các lô trước khi nhập thêm.');
+    await manager.update(Product, product.id, { lotTrackingEnabled: true, ...(actorId ? { updatedBy: actorId } : {}) });
+    product.lotTrackingEnabled = true;
+  }
+
   private async updateStockItemQuantity(
     stockItemRepo: Repository<StockItem>,
     stockId: string,
@@ -850,14 +865,15 @@ export class StockVoucherService {
           throw new BadRequestException(
             'Chỉ được nhập sản phẩm nguyên liệu hoặc nhiên liệu.',
           );
-        if (!product.lotTrackingEnabled || !product.baseUnitId)
+        if (!product.baseUnitId)
           throw new BadRequestException(
-            'Sản phẩm phải có đơn vị cơ sở và bật theo dõi lô trước khi nhập.',
+            'Nguyên liệu cần có đơn vị tồn chuẩn trước khi nhập.',
           );
         if (!item.lotCode?.trim())
           throw new BadRequestException('Vui lòng nhập mã lô.');
         if (item.expiresAt && item.expiresAt < localDate())
           throw new BadRequestException('Không thể nhập lô đã hết hạn.');
+        await this.ensureMaterialLotTracking(manager, product, dto.actorId);
       }
       if (
         !(await canUseStockProduct(
