@@ -16,6 +16,47 @@ export class TraceLookupService {
     private readonly serials: StockSerialService,
     private readonly trace: StockTraceService,
   ) {}
+  async search(branchId: string, value: unknown, requestedPage: unknown = 1) {
+    // Preserve exact scans, including UUID-shaped serials, before keyword search.
+    try {
+      return await this.lookup(branchId, value);
+    } catch (error) {
+      if (!(error instanceof NotFoundException)) throw error;
+    }
+    const search = (value as string).trim();
+    const page = Math.min(1000000, Math.max(1, Math.floor(Number(requestedPage) || 1)));
+    const size = 20;
+    const [[lots], serials] = await Promise.all([
+      this.db.query(
+        `WITH filtered AS (
+          SELECT 'LOT' AS type, l.id AS "lotId", l.lot_code AS "lotCode",
+            p.name AS "productName", p.code AS "productCode", s.name AS "stockName"
+          FROM stock_lots l JOIN stocks s ON s.id=l.stock_id
+          JOIN products p ON p.id=l.product_id
+          WHERE s.branch_id=$1::uuid AND
+            (l.lot_code ILIKE $2 OR p.code ILIKE $2 OR p.name ILIKE $2)
+        ), paged AS (
+          SELECT * FROM filtered ORDER BY "lotCode", "lotId" LIMIT $3 OFFSET $4
+        ) SELECT (SELECT COUNT(*)::int FROM filtered) AS total,
+          COALESCE(jsonb_agg(to_jsonb(paged) ORDER BY "lotCode", "lotId"),'[]'::jsonb) AS data
+          FROM paged`,
+        [branchId, `%${search}%`, size, (page - 1) * size],
+      ),
+      this.serials.list(branchId, { search, page, size }),
+    ]);
+    return {
+      type: 'SEARCH',
+      lotTotal: Number(lots.total),
+      serialTotal: Number(serials.total),
+      page,
+      size,
+      hasNext: page * size < Math.max(Number(lots.total), Number(serials.total)),
+      matches: [
+        ...lots.data,
+        ...serials.data.map((serial) => ({ ...serial, type: 'SERIAL' })),
+      ],
+    };
+  }
   async lookup(branchId: string, value: unknown) {
     if (typeof value !== 'string' || !value.trim() || value.trim().length > 128)
       throw new BadRequestException(

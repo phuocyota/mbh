@@ -16,6 +16,49 @@ function harness(lots: any[] = [], rows: any[] = []) {
   };
 }
 describe('single identifier trace lookup', () => {
+  it('returns keyword lot and serial choices scoped and paginated by the backend', async () => {
+    const h = harness();
+    h.db.query.mockResolvedValue([{
+      total: 25,
+      data: [{ type: 'LOT', lotId: uuid, lotCode: 'DEMO-LOT' }],
+    }]);
+    h.serials.list.mockImplementation(async (_branch, q) => q.serial
+      ? { total: 0, data: [] }
+      : { total: 1, data: [{ serial: 'DEMO-SERIAL', detailId: uuid, position: 1 }] });
+    const result = await h.service.search('branch', ' demo ', 2);
+    expect(result).toMatchObject({
+      type: 'SEARCH', lotTotal: 25, serialTotal: 1, page: 2, size: 20, hasNext: false,
+      matches: [
+        { type: 'LOT', lotId: uuid, lotCode: 'DEMO-LOT' },
+        { type: 'SERIAL', serial: 'DEMO-SERIAL', detailId: uuid, position: 1 },
+      ],
+    });
+    expect(h.db.query).toHaveBeenCalledWith(expect.stringContaining('s.branch_id=$1::uuid'), ['branch', '%demo%', 20, 20]);
+    expect(h.serials.list).toHaveBeenLastCalledWith('branch', { search: 'demo', page: 2, size: 20 });
+    expect(h.trace.getFullTrace).not.toHaveBeenCalled();
+  });
+  it('preserves exact scans without running keyword queries', async () => {
+    const h = harness([], [{ serial: 'EXACT', lotId: null }]);
+    expect(await h.service.search('branch', 'EXACT')).toMatchObject({ type: 'SERIAL', id: 'EXACT' });
+    expect(h.db.query).not.toHaveBeenCalled();
+    expect(h.serials.list).toHaveBeenCalledTimes(1);
+  });
+  it('returns an empty search result and propagates database failures', async () => {
+    const h = harness();
+    h.db.query.mockResolvedValue([{ total: 0, data: [] }]);
+    expect(await h.service.search('branch', 'missing')).toMatchObject({ type: 'SEARCH', matches: [], hasNext: false });
+    h.db.query.mockRejectedValue(new Error('database unavailable'));
+    await expect(h.service.search('branch', 'missing')).rejects.toThrow('database unavailable');
+  });
+  it('passes keyword search through the controller with JWT scope', () => {
+    const service: any = { search: jest.fn() };
+    const c = new TraceLookupController(service);
+    const req = { user: { userType: 'MANAGER', branchId: 'branch' } };
+    c.lookup(req, { search: 'demo', page: '2' });
+    expect(service.search).toHaveBeenCalledWith('branch', 'demo', '2');
+    expect(() => c.lookup(req, { search: 'demo', branchId: 'foreign' })).toThrow('CROSS_BRANCH_FORBIDDEN');
+    expect(service.search).toHaveBeenCalledTimes(1);
+  });
   it('resolves scoped lot UUIDs', async () => {
     const h = harness([{ id: uuid }]);
     expect(await h.service.lookup('branch', uuid)).toMatchObject({

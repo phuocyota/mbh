@@ -21,10 +21,16 @@ export class TraceLookupController {
   constructor(private readonly lookupService: TraceLookupService) {}
   @Get('lookup')
   @ApiOperation({
-    summary: 'Truy xuất bằng một ID: UUID lô hoặc số serial chính xác',
+    summary: 'Truy xuất mã chính xác hoặc tìm theo số lô, serial, mã và tên hàng',
   })
-  @ApiQuery({ name: 'id', type: String })
+  @ApiQuery({ name: 'id', type: String, required: false })
+  @ApiQuery({ name: 'search', type: String, required: false })
+  @ApiQuery({ name: 'page', type: Number, required: false })
   lookup(@Req() req: any, @Query() q: any) {
+    if (q.search !== undefined)
+      return this.lookupService.search(
+        resolveStockBranch(req.user, q.branchId), q.search, q.page,
+      );
     return this.lookupService.lookup(
       resolveStockBranch(req.user, q.branchId),
       q.id,
