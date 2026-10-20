@@ -12,6 +12,83 @@ function createService() {
 }
 
 describe('KitchenService authorization and concurrency', () => {
+  it.each([123, {}, 'a'.repeat(501)])(
+    'rejects invalid recipe descriptions before writing (%p)',
+    async (description) => {
+      await expect(
+        createService().createRecipe(
+          { userId: 'u', userType: 'KITCHEN', branchId: 'b' },
+          { description },
+        ),
+      ).rejects.toThrow('500 ký tự');
+    },
+  );
+
+  it.each([
+    [
+      '  Bánh mì gồm vỏ bánh, chả và rau.  ',
+      'Bánh mì gồm vỏ bánh, chả và rau.',
+    ],
+    ['', null],
+    [undefined, null],
+  ])(
+    'stores a trimmed optional recipe introduction (%p)',
+    async (description, expected) => {
+      const service = createService();
+      const product = {
+        id: 'bread',
+        branchId: 'b',
+        productType: 'FINISHED_GOOD',
+        baseUnitId: null,
+      };
+      const ingredient = {
+        id: 'roll',
+        branchId: 'b',
+        productType: 'INGREDIENT',
+        baseUnitId: 'piece',
+      };
+      const unit = { id: 'piece', dimension: 'COUNT', factorToBase: 1 };
+      service.products = {
+        findOne: jest.fn().mockResolvedValue(product),
+        find: jest.fn().mockResolvedValue([ingredient]),
+      };
+      service.units = {
+        findOne: jest.fn().mockResolvedValue(unit),
+        find: jest.fn().mockResolvedValue([unit]),
+      };
+      let saved: any;
+      const manager: any = {
+        getRepository: (entity) =>
+          entity.name === 'Product'
+            ? { find: jest.fn().mockResolvedValue([product, ingredient]) }
+            : { findOne: jest.fn().mockResolvedValue(null) },
+        create: (_entity, value) => ({ ...value }),
+        save: async (entity, value) => {
+          if (entity.name === 'KitchenRecipe')
+            saved = { id: 'recipe', ...value };
+          return saved || value;
+        },
+        findOne: jest.fn(async () => saved),
+      };
+      service.dataSource = { manager, transaction: async (fn) => fn(manager) };
+      service.operations = { lock: jest.fn() };
+      service.movements = { lockProducts: jest.fn() };
+      const recipe = await service.createRecipe(
+        { userId: 'u', userType: 'ADMIN', branchId: 'b' },
+        {
+          productId: 'bread',
+          yieldQuantity: 1,
+          yieldUnitId: 'piece',
+          description,
+          items: [
+            { ingredientProductId: 'roll', quantity: 1, unitId: 'piece' },
+          ],
+        },
+      );
+      expect(recipe.description).toBe(expected);
+      expect(recipe.version).toBe(1);
+    },
+  );
   it('keeps made-to-order finished goods out of direct-sale stock export', async () => {
     const service = createService();
     service.products = { find: jest.fn().mockResolvedValue([{ id: 'bread' }]) };
@@ -33,18 +110,14 @@ describe('KitchenService authorization and concurrency', () => {
     service.mealPlans = { find: jest.fn().mockResolvedValue([]) };
     service.getDemand = jest.fn().mockResolvedValue([]);
     service.tickets = {
-      find: jest
-        .fn()
-        .mockResolvedValue([
-          {
-            id: 't1',
-            status: 'WAITING',
-            order: { orderCode: 'TEST', orderNumber: 123 },
-            items: [
-              { productId: 'bread', productName: 'Bánh mì', quantity: 1 },
-            ],
-          },
-        ]),
+      find: jest.fn().mockResolvedValue([
+        {
+          id: 't1',
+          status: 'WAITING',
+          order: { orderCode: 'TEST', orderNumber: 123 },
+          items: [{ productId: 'bread', productName: 'Bánh mì', quantity: 1 }],
+        },
+      ]),
     };
     service.products = {
       find: jest

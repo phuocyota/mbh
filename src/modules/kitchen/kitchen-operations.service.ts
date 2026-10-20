@@ -90,6 +90,10 @@ export class KitchenOperationsService {
     if (!['ADMIN', 'MANAGER'].includes(actor.userType))
       throw new ForbiddenException('MANAGER_REQUIRED');
   }
+  menuEditor(actor: any) {
+    if (!['ADMIN', 'MANAGER', 'KITCHEN'].includes(actor.userType))
+      throw new ForbiddenException('KITCHEN_MENU_EDITOR_REQUIRED');
+  }
   async lock(m: EntityManager, branchId: string) {
     await m.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', [
       `kitchen:${branchId}`,
@@ -202,7 +206,8 @@ export class KitchenOperationsService {
       ].includes(kind)
     )
       throw new NotFoundException('RESOURCE_NOT_FOUND');
-    if (['menus', 'manual-plans'].includes(kind)) this.manager(actor);
+    if (kind === 'menus') this.menuEditor(actor);
+    if (kind === 'manual-plans') this.manager(actor);
     const existing = id ? await this.get(actor, kind, id) : null;
     const branchId = this.branch(actor, existing?.branchId || dto.branchId);
     const result = await this.db.transaction(async (m) => {
@@ -498,8 +503,10 @@ export class KitchenOperationsService {
   ) {
     const current = await this.get(actor, kind, id);
     const branchId = current.branchId;
+    if (kind === 'menus' && ['copy', 'lock'].includes(action))
+      this.menuEditor(actor);
     if (
-      ['menus', 'manual-plans'].includes(kind) ||
+      kind === 'manual-plans' ||
       [
         'approve',
         'reopen',

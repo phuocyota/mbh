@@ -1,0 +1,50 @@
+import { ForbiddenException } from '@nestjs/common';
+import { Reflector } from '@nestjs/core';
+import { RolesGuard } from '../../common/guard/roles.guard';
+import { KitchenController } from './kitchen.controller';
+import { KitchenOperationsService } from './kitchen-operations.service';
+
+describe('Kitchen recipe and menu setup permissions', () => {
+  const guard = new RolesGuard(new Reflector());
+  const controller = new KitchenController({} as any, {} as any);
+  const operations = Object.create(
+    KitchenOperationsService.prototype,
+  ) as KitchenOperationsService;
+  function context(
+    method: 'createRecipe' | 'activateRecipe' | 'createStation',
+    userType: string,
+  ) {
+    return {
+      getHandler: () => controller[method],
+      getClass: () => KitchenController,
+      switchToHttp: () => ({ getRequest: () => ({ user: { userType } }) }),
+    } as any;
+  }
+  it.each(['createRecipe', 'activateRecipe'] as const)(
+    'allows kitchen staff to %s',
+    (method) => {
+      expect(guard.canActivate(context(method, 'KITCHEN'))).toBe(true);
+      expect(() => guard.canActivate(context(method, 'CASHIER'))).toThrow(
+        ForbiddenException,
+      );
+    },
+  );
+  it('does not grant kitchen staff general configuration or manual plan approval rights', () => {
+    expect(() =>
+      guard.canActivate(context('createStation', 'KITCHEN')),
+    ).toThrow(ForbiddenException);
+    expect(() => operations.manager({ userType: 'KITCHEN' })).toThrow(
+      ForbiddenException,
+    );
+  });
+  it('allows only kitchen, admin and manager to edit menus', () => {
+    for (const userType of ['KITCHEN', 'ADMIN', 'MANAGER'])
+      expect(() => operations.menuEditor({ userType })).not.toThrow();
+    expect(() => operations.menuEditor({ userType: 'CASHIER' })).toThrow(
+      ForbiddenException,
+    );
+    expect(() =>
+      operations.branch({ userType: 'KITCHEN', branchId: 'a' }, 'b'),
+    ).toThrow(ForbiddenException);
+  });
+});
