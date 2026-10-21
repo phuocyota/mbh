@@ -25,6 +25,15 @@ export class UserHomeDto {
 export class WalletHomeDto {
   @ApiProperty({ description: 'Wallet balance', example: 45000 })
   balance: number;
+
+  @ApiProperty({ description: 'Fixed total debt cap', example: 50000 })
+  debtLimit: number;
+
+  @ApiProperty({ description: 'Current debt', example: 65000 })
+  debt: number;
+
+  @ApiProperty({ description: 'Remaining borrowing capacity', example: 0 })
+  availableDebtLimit: number;
 }
 
 export class NotificationHomeDto {

@@ -78,11 +78,14 @@ export class ParentService {
       statistics,
     ] = await Promise.all([
       this.getUserInfo(customer),
-      this.getWalletInfo(customer.id),
+      this.getWalletInfo(customer),
       this.getRecentNotifications(customer.id),
       this.getTodayOrder(customer.id),
       this.getRecentHistory(customer.id),
-      this.getStatistics(customer.id, Number(customer.debtLimit || 0)),
+      this.getStatistics(
+        customer.id,
+        Math.min(Number(customer.debtLimit ?? 50000), 50000),
+      ),
     ]);
 
     return {
@@ -108,13 +111,18 @@ export class ParentService {
     };
   }
 
-  private async getWalletInfo(customerId: string): Promise<WalletHomeDto> {
+  private async getWalletInfo(customer: Customer): Promise<WalletHomeDto> {
     const wallet = await this.walletRepository.findOne({
-      where: { customerId },
+      where: { customerId: customer.id },
     });
-
+    const balance = Number(wallet?.balance ?? 0);
+    const debtLimit = Math.min(Number(customer.debtLimit ?? 50000), 50000);
+    const debt = Math.max(0, -balance);
     return {
-      balance: wallet ? Number(wallet.balance) : 0,
+      balance,
+      debtLimit,
+      debt,
+      availableDebtLimit: Math.max(0, debtLimit - debt),
     };
   }
 
