@@ -136,7 +136,7 @@ describe('Kitchen operations boundary rules', () => {
     expect(h.manager.save).toHaveBeenCalledWith(h.batch);
     expect(h.socket.emitKitchenBatchUpdated).toHaveBeenCalled();
   });
-  it('fixes serving expiry at ready time instead of later import or configuration time', async () => {
+  it('fixes serving expiry at 17:00 Vietnam on the production date and preserves the snapshot', async () => {
     const h = harness();
     h.batch.status = 'PREPARING';
     const ready = await h.service.transition(
@@ -146,7 +146,7 @@ describe('Kitchen operations boundary rules', () => {
       'READY',
     );
     const expiry = ready.details.servingExpiresAt;
-    expect(Date.parse(expiry) - ready.readyAt.getTime()).toBe(120 * 60000);
+    expect(expiry).toBe('2026-10-08T10:00:00.000Z');
     h.dish.recommendedUseMinutes = 1000;
     await h.service.transition(
       h.actor,

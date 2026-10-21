@@ -26,3 +26,13 @@ export function portionCount(quantity: unknown) {
     );
   return count;
 }
+
+/** Default finished-food deadline: 17:00 Vietnam time on the production date. */
+export function defaultServingExpiry(productionDate: string) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(productionDate))
+    throw new BadRequestException('INVALID_PRODUCTION_DATE');
+  const midnight = new Date(`${productionDate}T00:00:00Z`);
+  if (!Number.isFinite(midnight.getTime()) || midnight.toISOString().slice(0, 10) !== productionDate)
+    throw new BadRequestException('INVALID_PRODUCTION_DATE');
+  return new Date(`${productionDate}T17:00:00+07:00`).toISOString();
+}

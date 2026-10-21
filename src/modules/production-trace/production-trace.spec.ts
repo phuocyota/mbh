@@ -1,4 +1,4 @@
-import { traceStatus, portionCount } from './production-trace.rules';
+import { traceStatus, portionCount, defaultServingExpiry } from './production-trace.rules';
 import {
   consumeBatchLots,
   createFinishedUnits,
@@ -8,6 +8,14 @@ import { StockLot, Stock, Product } from '../../entities';
 
 const now = new Date('2026-10-19T06:00:00Z');
 describe('production traceability', () => {
+  it('sets 17:00 Vietnam on the production date, including month/year boundaries', () => {
+    expect(defaultServingExpiry('2026-10-21')).toBe('2026-10-21T10:00:00.000Z');
+    expect(defaultServingExpiry('2026-12-31')).toBe('2026-12-31T10:00:00.000Z');
+    expect(() => defaultServingExpiry('2026-02-30')).toThrow('INVALID_PRODUCTION_DATE');
+    const expiry = defaultServingExpiry('2026-10-21');
+    expect(traceStatus('UNIT', 'COMPLETED', expiry, new Date('2026-10-21T09:59:59Z'))).toBe('READY');
+    expect(traceStatus('UNIT', 'COMPLETED', expiry, new Date('2026-10-21T10:00:00Z'))).toBe('EXPIRED');
+  });
   it('keeps date-only materials usable through the expiry day in local time', () => {
     expect(traceStatus('LOT', '', '2026-10-19', now)).toBe('IN STOCK');
     expect(traceStatus('LOT', '', '2026-10-18', now)).toBe('EXPIRED');
