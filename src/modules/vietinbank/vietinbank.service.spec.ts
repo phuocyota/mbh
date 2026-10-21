@@ -316,16 +316,12 @@ describe('VietinBankService', () => {
     expect(context.request.status).toBe(VIETINBANK_TOPUP_STATUS.SUCCESS);
   });
 
-  it('restores debt allowance and emits only after a bank topup commits', async () => {
+  it('keeps the total debt cap unchanged and emits after a bank topup commits', async () => {
     const context = createNotifyContext(-10000);
     const response = await context.service.processNotify(context.body);
 
     expect(response.errorCode).toBe('00');
-    expect(context.customerManagerRepository.increment).toHaveBeenCalledWith(
-      { id: customerId },
-      'debtLimit',
-      10000,
-    );
+    expect(context.customerManagerRepository.increment).not.toHaveBeenCalled();
     expect(context.financeService.createMoneyVoucher).toHaveBeenCalledWith(
       expect.objectContaining({ amount: 10000, reasonCode: 'TNBHTS_BANK' }),
       expect.anything(),

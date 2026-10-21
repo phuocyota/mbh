@@ -2066,6 +2066,15 @@ Notes:
 
 ## Customer debt collection socket
 
+### Fixed total debt limit
+
+- `debtLimit` now means a fixed maximum **total debt**, default 50,000 VND and cannot exceed 50,000 VND. Purchases, topups, debt repayments and refunds never change this limit. Runtime checks also cap legacy values at 50,000 VND.
+- Partial debt repayments accept arbitrary positive amounts up to the current debt, including 17,000 VND; no 5,000/10,000 denomination restriction. Repaying 17,000 from a debt of 50,000 leaves 33,000 debt and 17,000 borrowing capacity, with the fixed limit unchanged.
+- A WALLET payment is allowed only when `max(0, -(balance - amount)) <= debtLimit`. Existing debt above the limit is preserved, but further wallet purchases are rejected.
+- Student login and `GET /wallets/customer/:customerId/balance` expose `debt` and `availableDebtLimit = max(0, debtLimit - debt)` for the current debt and remaining borrowing capacity. Student UI must use `availableDebtLimit` for “Được nợ thêm”; do not display `debtLimit` as remaining credit.
+- Migration `1765200000000-FixCustomerTotalDebtLimit` sets the fixed limit to 50,000 VND for **all existing customers**, leaving wallet balances/history unchanged. Apply with the new backend while old writers are stopped; older versions still mutate the limit. Take a backup before migration; automatic rollback cannot reconstruct historical allowances.
+- The admin customer form only sends `debtLimit` on edit when the operator explicitly changes it, avoiding stale limit overwrites while editing unrelated information.
+
 Listen for `customer:debt-paid` on the existing Socket.IO connection:
 
 ```js

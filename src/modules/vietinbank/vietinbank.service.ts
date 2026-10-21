@@ -440,14 +440,6 @@ export class VietinBankService {
 
           const recoveredDebtAmount =
             Math.max(0, -balanceBefore) - Math.max(0, -balanceAfter);
-          if (recoveredDebtAmount > 0) {
-            await customerRepository.increment(
-              { id: customer.id },
-              'debtLimit',
-              recoveredDebtAmount,
-            );
-          }
-
           const walletTransaction = await walletTransactionRepository.save(
             walletTransactionRepository.create({
               walletId: wallet.id,

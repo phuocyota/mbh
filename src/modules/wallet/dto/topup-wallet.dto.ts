@@ -111,6 +111,15 @@ export class ClearCustomerDebtDto extends RepayCustomerDebtCashDto {
 }
 
 export class WalletBalanceDto {
+  @ApiProperty({ description: 'Giới hạn tổng nợ cố định', example: 50000 })
+  debtLimit: number;
+
+  @ApiProperty({ description: 'Nợ hiện tại từ số dư ví âm', example: 30000 })
+  debt: number;
+
+  @ApiProperty({ description: 'Số tiền còn được nợ thêm', example: 20000 })
+  availableDebtLimit: number;
+
   @ApiProperty({ description: 'Wallet ID' })
   walletId: string;
 

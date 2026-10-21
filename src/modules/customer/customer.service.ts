@@ -134,6 +134,8 @@ export class CustomerService extends BaseService<Customer> {
         class: null,
         walletBalance: 0,
         debtLimit: 0,
+        debt: 0,
+        availableDebtLimit: 0,
       };
     }
 
@@ -171,7 +173,13 @@ export class CustomerService extends BaseService<Customer> {
       studentCode: customer.studentProfile?.studentCode || null,
       studentFullName: customer.studentProfile?.fullName || customer.fullName,
       walletBalance: customer.wallet?.balance || 0,
-      debtLimit: Number(customer.debtLimit || 0),
+      debtLimit: Math.min(Number(customer.debtLimit || 0), 50000),
+      debt: Math.max(0, -Number(customer.wallet?.balance || 0)),
+      availableDebtLimit: Math.max(
+        0,
+        Math.min(Number(customer.debtLimit || 0), 50000) -
+          Math.max(0, -Number(customer.wallet?.balance || 0)),
+      ),
     };
   }
 

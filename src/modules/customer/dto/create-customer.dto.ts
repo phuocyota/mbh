@@ -7,6 +7,7 @@ import {
   IsEnum,
   IsNumber,
   Min,
+  Max,
 } from 'class-validator';
 import {
   ACTIVE_INACTIVE_STATUS_VALUES,
@@ -61,7 +62,7 @@ export class CreateCustomerDto {
 
   @ApiProperty({
     description:
-      'Remaining debt allowance for this customer; actual debt is based on wallet balance',
+      'Maximum total debt for this customer; defaults to 50000 and is not changed by wallet transactions',
     example: 50000,
     required: false,
     default: 50000,
@@ -70,5 +71,6 @@ export class CreateCustomerDto {
   @Type(() => Number)
   @IsNumber()
   @Min(0)
+  @Max(50000)
   debtLimit?: number;
 }

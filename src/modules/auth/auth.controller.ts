@@ -44,7 +44,7 @@ export class AuthController {
   @ApiResponse({
     status: 200,
     description:
-      'Student login successful, returns JWT token, walletBalance and debtLimit (remaining advance allowance as a number)',
+      'Student login successful, returns JWT token, walletBalance and debtLimit (fixed maximum total debt as a number)',
   })
   @ApiResponse({
     status: 401,

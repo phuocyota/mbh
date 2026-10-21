@@ -23,6 +23,7 @@ describe('WalletService credit flows', () => {
       id: customerId,
       customerCode: 'KH001',
       fullName: 'Khách hàng test',
+      debtLimit: 50000,
     };
     const wallet = {
       id: '44444444-4444-4444-8444-444444444444',
@@ -101,6 +102,7 @@ describe('WalletService credit flows', () => {
       }),
     };
     const rootWalletRepository = {
+      ...walletRepository,
       manager: {
         transaction: jest.fn(async (callback) => callback(manager)),
       },
@@ -122,6 +124,7 @@ describe('WalletService credit flows', () => {
 
     return {
       service,
+      customer,
       socketService,
       rootWalletRepository,
       manager,
@@ -134,6 +137,115 @@ describe('WalletService credit flows', () => {
       wallet,
     };
   };
+
+  it.each([
+    [0, 50000, 50000, -50000],
+    [-45000, 5000, 50000, -50000],
+    [10000, 60000, 50000, -50000],
+    [10000, 10000, 0, 0],
+  ])(
+    'charges balance %s by %s within total cap %s',
+    async (balance, amount, cap, after) => {
+      const context = createContext({ balance });
+      context.customer.debtLimit = cap;
+      await context.service.chargeForOrder(customerId, amount, 'order-id');
+      expect(context.wallet.balance).toBe(after);
+      expect(context.customer.debtLimit).toBe(cap);
+      expect(context.customerRepository.increment).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    [-45000, 5001, 50000],
+    [-65000, 5000, 50000],
+    [0, 1, 0],
+    [10000, 60001, 50000],
+    [-50000, 1, 90000],
+  ])(
+    'rejects balance %s charged by %s beyond cap %s without writing money',
+    async (balance, amount, cap) => {
+      const context = createContext({ balance });
+      context.customer.debtLimit = cap;
+      await expect(
+        context.service.chargeForOrder(customerId, amount, 'order-id'),
+      ).rejects.toThrow('Vượt quá tổng nợ cho phép');
+      expect(context.wallet.balance).toBe(balance);
+      expect(context.walletRepository.save).not.toHaveBeenCalled();
+      expect(context.walletTransactionRepository.save).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(['CASH', 'BANK'] as const)(
+    'accepts partial repayment of 17000 by %s and allows borrowing back to 50000',
+    async (paymentMethod) => {
+      const context = createContext({ balance: -50000 });
+      await context.service.clearCustomerDebt(
+        customerId,
+        17000,
+        userId,
+        undefined,
+        fundId,
+        paymentMethod,
+      );
+      expect(context.wallet.balance).toBe(-33000);
+      expect(context.customer.debtLimit).toBe(50000);
+      expect(context.financeService.createMoneyVoucher).toHaveBeenCalledWith(
+        expect.objectContaining({ amount: 17000 }),
+        context.manager,
+      );
+      await context.service.chargeForOrder(customerId, 17000, 'order-id');
+      expect(context.wallet.balance).toBe(-50000);
+      await expect(
+        context.service.chargeForOrder(customerId, 1, 'another-order'),
+      ).rejects.toThrow('Vượt quá tổng nợ cho phép');
+      expect(context.customer.debtLimit).toBe(50000);
+    },
+  );
+
+  it('accepts 17000 repayment for legacy debt of 65000', async () => {
+    const context = createContext({ balance: -65000 });
+    await context.service.clearCustomerDebt(
+      customerId,
+      17000,
+      userId,
+      undefined,
+      fundId,
+      'CASH',
+    );
+    expect(context.wallet.balance).toBe(-48000);
+    await context.service.chargeForOrder(customerId, 2000, 'order-id');
+    expect(context.wallet.balance).toBe(-50000);
+    expect(context.customer.debtLimit).toBe(50000);
+  });
+
+  it('does not replenish the cap when refunding debt', async () => {
+    const context = createContext({ balance: -65000 });
+    await context.service.refundToWallet(
+      customerId,
+      20000,
+      'refund-id',
+      'order',
+      userId,
+    );
+    expect(context.wallet.balance).toBe(-45000);
+    expect(context.customer.debtLimit).toBe(50000);
+    expect(context.customerRepository.increment).not.toHaveBeenCalled();
+  });
+
+  it('can buy again after debt is repaid below the fixed cap', async () => {
+    const context = createContext({ balance: -65000 });
+    await context.service.clearCustomerDebt(
+      customerId,
+      20000,
+      userId,
+      undefined,
+      fundId,
+      'CASH',
+    );
+    await context.service.chargeForOrder(customerId, 5000, 'new-order');
+    expect(context.wallet.balance).toBe(-50000);
+    expect(context.customer.debtLimit).toBe(50000);
+  });
 
   it('clears cash debt and creates the receipt in the same transaction', async () => {
     const context = createContext();
@@ -163,11 +275,8 @@ describe('WalletService credit flows', () => {
       'Thu hồi công nợ',
       fundId,
     );
-    expect(context.customerRepository.increment).toHaveBeenCalledWith(
-      { id: customerId },
-      'debtLimit',
-      30000,
-    );
+    expect(context.customerRepository.increment).not.toHaveBeenCalled();
+    expect(context.customer.debtLimit).toBe(50000);
     expect(context.financeService.createMoneyVoucher).toHaveBeenCalledWith(
       expect.objectContaining({
         fundId,
@@ -259,6 +368,8 @@ describe('WalletService credit flows', () => {
     );
 
     expect(result.balanceAfter).toBe(20000);
+    expect(context.customerRepository.increment).not.toHaveBeenCalled();
+    expect(context.customer.debtLimit).toBe(50000);
     expect(context.socketService.emitCustomerDebtPaid).toHaveBeenCalledTimes(1);
     expect(context.financeService.createMoneyVoucher).toHaveBeenCalledWith(
       expect.objectContaining({

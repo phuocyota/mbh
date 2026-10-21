@@ -111,6 +111,13 @@ export class WalletService extends BaseService<Wallet> {
       customerId: wallet.customerId,
       balance: Number(wallet.balance),
       status: wallet.status,
+      debtLimit: Math.min(Number(customer.debtLimit ?? 50000), 50000),
+      debt: Math.max(0, -Number(wallet.balance)),
+      availableDebtLimit: Math.max(
+        0,
+        Math.min(Number(customer.debtLimit ?? 50000), 50000) -
+          Math.max(0, -Number(wallet.balance)),
+      ),
     };
   }
 
@@ -176,12 +183,8 @@ export class WalletService extends BaseService<Wallet> {
         wallet.balance = balanceAfter;
         wallet.updatedBy = auditUserId;
         await walletRepository.save(wallet);
-        const recoveredDebtAmount = await this.restoreDebtLimitForRecoveredDebt(
-          manager,
-          customerId,
-          balanceBefore,
-          balanceAfter,
-        );
+        const recoveredDebtAmount =
+          Math.max(0, -balanceBefore) - Math.max(0, -balanceAfter);
 
         const tx = walletTransactionRepository.create({
           walletId: wallet.id,
@@ -355,13 +358,6 @@ export class WalletService extends BaseService<Wallet> {
         wallet.updatedBy = auditUserId;
         await walletRepository.save(wallet);
 
-        await this.restoreDebtLimitForRecoveredDebt(
-          manager,
-          customerId,
-          balanceBefore,
-          balanceAfter,
-        );
-
         const tx = walletTransactionRepository.create({
           walletId: wallet.id,
           customerId,
@@ -453,8 +449,7 @@ export class WalletService extends BaseService<Wallet> {
       return null;
     }
 
-    // Debt is represented by a negative wallet balance. debtLimit is the customer's
-    // remaining allowance and is reduced only by newly created debt.
+    // debtLimit is a fixed cap on total debt; transactions never change the cap.
     return this.walletRepository.manager.transaction(async (manager) => {
       const customerRepository = manager.getRepository(Customer);
       const walletRepository = manager.getRepository(Wallet);
@@ -491,19 +486,14 @@ export class WalletService extends BaseService<Wallet> {
 
       const balanceBefore = Number(wallet.balance);
       const balanceAfter = balanceBefore - amount;
-      const debtBefore = Math.max(0, -balanceBefore);
       const debtAfter = Math.max(0, -balanceAfter);
-      const debtIncrease = debtAfter - debtBefore;
-
-      if (debtIncrease > 0) {
-        const debtLimit = Number(customer.debtLimit || 0);
-
-        if (debtIncrease > debtLimit) {
-          throw new BadRequestException('Vượt quá số nợ cho phép');
-        }
-
-        customer.debtLimit = debtLimit - debtIncrease;
-        await customerRepository.save(customer);
+      const debtLimit = Math.min(Number(customer.debtLimit ?? 50000), 50000);
+      if (
+        !Number.isFinite(debtLimit) ||
+        debtLimit < 0 ||
+        debtAfter > debtLimit
+      ) {
+        throw new BadRequestException('Vượt quá tổng nợ cho phép');
       }
 
       wallet.balance = balanceAfter;
@@ -548,12 +538,6 @@ export class WalletService extends BaseService<Wallet> {
     wallet.balance = balanceAfter;
     wallet.updatedBy = updatedBy;
     await this.walletRepository.save(wallet);
-    await this.restoreDebtLimitForRecoveredDebt(
-      this.walletRepository.manager,
-      customerId,
-      balanceBefore,
-      balanceAfter,
-    );
 
     const walletTx = this.walletTransactionRepository.create({
       walletId: wallet.id,
@@ -569,29 +553,6 @@ export class WalletService extends BaseService<Wallet> {
     });
 
     return this.walletTransactionRepository.save(walletTx);
-  }
-
-  private async restoreDebtLimitForRecoveredDebt(
-    manager: EntityManager,
-    customerId: string,
-    balanceBefore: number,
-    balanceAfter: number,
-  ): Promise<number> {
-    // When topup/refund reduces a negative wallet balance, restore that amount
-    // back to the customer's remaining debt allowance.
-    const debtBefore = Math.max(0, -balanceBefore);
-    const debtAfter = Math.max(0, -balanceAfter);
-    const debtDecrease = debtBefore - debtAfter;
-
-    if (debtDecrease <= 0) {
-      return 0;
-    }
-
-    await manager
-      .getRepository(Customer)
-      .increment({ id: customerId }, 'debtLimit', debtDecrease);
-
-    return debtDecrease;
   }
 
   /**
