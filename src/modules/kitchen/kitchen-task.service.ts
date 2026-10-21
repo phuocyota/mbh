@@ -276,6 +276,13 @@ export class KitchenTaskService {
       flow?.payload.snapshot || (await this.requirements(m, source, type));
     const status =
       flow?.status || (source.row.status === 'WAITING' ? 'WAITING' : 'LEGACY');
+    const pendingHandover =
+      status === 'WAITING' &&
+      (flow?.payload.rounds || []).some((round: any) => !round.handover);
+    const handoverSuggestions =
+      status === 'COMPLETED' || pendingHandover
+        ? await this.handoverSuggestions(m, actor, source, type)
+        : null;
     const productIds = [
       ...new Set(
         snapshot.dishes.flatMap((dish) =>
@@ -356,6 +363,7 @@ export class KitchenTaskService {
       ownerId: flow?.payload.ownerId,
       ownerName: flow?.payload.ownerName,
       handover: flow?.payload.handover,
+      handoverSuggestions,
       partialHandovers: flow?.payload.partialHandovers || [],
       pendingHandover: (flow?.status === 'WAITING'
         ? flow.payload.rounds || []
@@ -383,6 +391,62 @@ export class KitchenTaskService {
   }
   async get(actor: any, type: string, id: string) {
     return this.detail(this.db.manager, actor, type, id);
+  }
+  private async handoverSuggestions(
+    m: EntityManager,
+    actor: any,
+    source: any,
+    type: string,
+  ) {
+    const staff = await m.query(
+      `SELECT id, full_name AS name, role FROM users
+       WHERE branch_id=$1 AND status='ACTIVE' AND id<>$2
+         AND role IN ('CASHIER','STAFF','KITCHEN','HEAD_CHEF','MANAGER')
+       ORDER BY CASE WHEN id=$3::uuid THEN 0 WHEN role='CASHIER' THEN 1 ELSE 2 END,full_name,id LIMIT 20`,
+      [
+        source.branchId,
+        actor.userId,
+        type === 'ticket' ? source.row.order?.cashierId || null : null,
+      ],
+    );
+    const recent = await m.query(
+      `SELECT payload->>'receivedBy' AS name, payload->>'receiverPlace' AS place
+       FROM kitchen_operations WHERE branch_id=$1 AND kind='finished-exports' AND status='EXPORTED'
+       ORDER BY created_at DESC,id DESC LIMIT 20`,
+      [source.branchId],
+    );
+    const names = new Set<string>();
+    const recipients = [
+      ...staff.map((row: any) => ({
+        name: row.name,
+        role: row.role,
+        source: 'STAFF',
+      })),
+      {
+        name: type === 'ticket' ? 'Quầy căn tin' : 'Bộ phận chia suất',
+        source: 'DEPARTMENT',
+      },
+      ...recent.map((row: any) => ({ name: row.name, source: 'RECENT' })),
+    ]
+      .filter((row) => {
+        const name = String(row.name || '').trim();
+        if (!name || name.length > 200 || names.has(name)) return false;
+        row.name = name;
+        names.add(name);
+        return true;
+      })
+      .slice(0, 30);
+    const defaultPlace =
+      type === 'ticket' ? 'Quầy căn tin' : 'Khu chia suất bán trú';
+    const places = [
+      ...new Set([
+        defaultPlace,
+        ...recent.map((row: any) => String(row.place || '').trim()),
+      ]),
+    ]
+      .filter((place: string) => place.length > 0 && place.length <= 200)
+      .slice(0, 10);
+    return { recipients, places, defaultPlace };
   }
   private scoped(m: EntityManager, afterCommit: Array<() => void>) {
     const operations = Object.create(this.operations);
@@ -946,6 +1010,11 @@ export class KitchenTaskService {
             'Không có đợt đã hoàn thành chờ bàn giao.',
           );
         const receivedBy = String(dto.receivedBy || '').trim();
+        const receiverPlace =
+          String(dto.receiverPlace || '').trim() ||
+          (type === 'ticket' ? 'Quầy căn tin' : 'Khu chia suất bán trú');
+        if (receiverPlace.length > 200)
+          throw new BadRequestException('Nơi nhận tối đa 200 ký tự.');
         if (!receivedBy || receivedBy.length > 200 || !Array.isArray(dto.items))
           throw new BadRequestException('Cần ghi số lượng giao và người nhận.');
         if (dto.items.length !== batchIds.length)
@@ -972,7 +1041,7 @@ export class KitchenTaskService {
           await ops.write(actor, 'finished-exports', {
             lotId: imported.payload.lotId,
             quantity: Number(item.quantity),
-            receiverPlace: String(dto.receiverPlace || 'Bàn giao bếp'),
+            receiverPlace,
             receivedBy,
             deliveredBy: actor.userId,
           });
@@ -1007,6 +1076,7 @@ export class KitchenTaskService {
         const handover = {
           items: handed,
           receivedBy,
+          receiverPlace,
           deliveredBy: actor.userId,
           deliveredAt: new Date().toISOString(),
         };

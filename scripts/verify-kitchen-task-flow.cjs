@@ -468,8 +468,24 @@ class Pool extends EventEmitter {
     }
     assert.equal(holdState.status, 'COMPLETED');
     assert.equal(holdState.actuals.length, 2, 'both unhanded tranches must be available for final handover');
-    await holdAct('handover', { receivedBy: 'Quầy nhận đủ', items: holdState.actuals.map(row => ({ batchId: row.batchId, quantity: row.quantity })) });
+    const suggestedCashier = await save(E.User, { fullName: 'Thu ngân nhận món', role: 'CASHIER', status: 'ACTIVE', branchId: splitBranch.id, passwordHash: 'not-a-login' });
+    await save(E.User, { fullName: 'Nhân viên ngừng hoạt động', role: 'STAFF', status: 'INACTIVE', branchId: splitBranch.id, passwordHash: 'not-a-login' });
+    await save(E.User, { fullName: 'Thu ngân chi nhánh khác', role: 'CASHIER', status: 'ACTIVE', branchId: otherBranch.id, passwordHash: 'not-a-login' });
+    await db.getRepository(E.Order).update(holdOrder.id, { cashierId: suggestedCashier.id });
+    holdState = await tasks.get(splitActor, 'ticket', holdTicket.id);
+    const suggestions = holdState.handoverSuggestions;
+    assert.equal(suggestions.recipients[0].name, suggestedCashier.fullName, 'prefer the actual cashier on the order');
+    assert.ok(suggestions.recipients.some(row => row.name === 'Quầy đợt 1' && row.source === 'RECENT'));
+    assert.ok(suggestions.recipients.some(row => row.name === 'Quầy căn tin' && row.source === 'DEPARTMENT'));
+    assert.ok(!suggestions.recipients.some(row => ['Nhân viên ngừng hoạt động', 'Thu ngân chi nhánh khác', splitChef.fullName].includes(row.name)));
+    assert.equal(suggestions.defaultPlace, 'Quầy căn tin');
+    assert.ok(suggestions.places.includes('Quầy căn tin'));
+    await holdAct('handover', { receivedBy: suggestedCashier.fullName, receiverPlace: 'Bàn nhận món căn tin', items: holdState.actuals.map(row => ({ batchId: row.batchId, quantity: row.quantity })) });
     assert.equal(holdState.status, 'HANDED_OVER');
+    assert.equal(holdState.handover.receiverPlace, 'Bàn nhận món căn tin');
+    const heldExports = await db.getRepository(E.KitchenOperation).findBy({ branchId: splitBranch.id, kind: 'finished-exports' });
+    assert.ok(heldExports.some(row => row.payload.receivedBy === suggestedCashier.fullName && row.payload.receiverPlace === 'Bàn nhận món căn tin'));
+    console.log('PASS handover suggestions: same-branch active staff, order cashier priority, recent recipients, department fallback, no actor/inactive/foreign candidates, editable place persisted.');
     assert.equal(holdState.progress[0].completedQuantity, 2);
     console.log('PASS split production: 75/100 complete portions, stock-capped FEFO, wait and admin request, remaining demand, pinned recipe quantities, QC, replay, replenish 25 and full-order handover.');
     const legacyOrder = await save(E.Order, { branchId: splitBranch.id, orderCode: 'LEGACY-ADOPT', orderNumber: 102, status: 1, paymentStatus: 'PAID', paidAmount: 20000, totalAmount: 20000 });
@@ -547,6 +563,50 @@ class Pool extends EventEmitter {
     await db.getRepository(E.KitchenProductionBatch).update(legacyBatch.id, { details: {} });
     const migratedBatch = await tasks.action(splitActor, 'batch', legacyBatch.id, 'migrate', { requestId: randomUUID(), expectedVersion: 0, confirmUnissued: true });
     assert.equal(migratedBatch.status, 'WAITING');
+    const { ProductionTraceController } = require('../dist/src/modules/production-trace/production-trace.controller');
+    const { StockTraceService } = require('../dist/src/modules/stock-trace/stock-trace.service');
+    const fullTrace = new StockTraceService(db, ...['StockLot','StockMovement','StockReceiptDetail','StockReceiptImport','StockReceiptExport','Product','Supplier','Branch','Stock','ProductRecipe','ProductRecipeItem','KitchenProductionBatch','KitchenOperation'].map(name => db.getRepository(E[name])));
+    const productionTrace = new ProductionTraceController(db, fullTrace);
+    for (const [o, p, quantity] of [[order, dish, 1], [splitOrder, splitDish, 100], [holdOrder, splitDish, 2]])
+      await save(E.OrderItem, { orderId: o.id, productId: p.id, productName: p.name, quantity, unitPrice: 20000, subtotal: quantity * 20000, totalAmount: quantity * 20000 });
+    const sourceSupplier = await save(E.Supplier, { branchId: branch.id, code: 'ORDER-TRACE-SUPPLIER', name: 'Nhà cung cấp truy xuất đơn' });
+    const sourceReceipt = await save(E.StockReceiptImport, { branchId: branch.id, code: 'ORDER-TRACE-IMPORT', fromType: 'SUPPLIER', fromId: sourceSupplier.id });
+    for (const input of inputs) {
+      await save(E.StockMovement, { stockId: stock.id, productId: input.product.id, lotId: input.lot.id, referenceId: sourceReceipt.id, quantity: input.quantity, createdAt: new Date(Date.now() - 3600000) });
+      await save(E.StockReceiptDetail, { importId: sourceReceipt.id, productId: input.product.id, quantity: input.quantity, receiptType: 'IMPORT', fromType: 'SUPPLIER', fromId: sourceSupplier.id, toType: 'STOCK', toId: stock.id, inputDetails: { lotCode: input.lot.lotCode, purchasedAt: localDate() } });
+    }
+    await assert.rejects(productionTrace.orderProduct({ user: { ...actor, branchId: otherBranch.id } }, order.id, dish.id, {}), /CROSS_BRANCH/);
+    await assert.rejects(productionTrace.orderProduct({ user: actor }, order.id, missingDish.id, {}), /không thuộc đơn/);
+    const originalTrace = await productionTrace.orderProduct({ user: actor }, order.id, dish.id, {});
+    assert.equal(originalTrace.batches.total, 1, 'do not include the unrelated planned batch for the same dish and day');
+    assert.equal(originalTrace.batches.data[0].batchId, linkedBatch);
+    assert.equal(originalTrace.batches.data[0].unitCount, 1);
+    const portion = await db.getRepository(E.FinishedUnit).findOneByOrFail({ batchId: linkedBatch });
+    const portionTrace = await productionTrace.unit({ user: actor }, portion.id);
+    assert.equal(portionTrace.batch.inputs.length, 3);
+    for (const component of portionTrace.batch.inputs) {
+      assert.equal(component.origin.origin.supplier.id, sourceSupplier.id);
+      assert.equal(component.origin.origin.receiptId, sourceReceipt.id);
+    }
+    const porkTrace = portionTrace.batch.inputs.find(row => row.origin.product.id === inputs[1].product.id);
+    assert.equal(porkTrace.issuedQuantity, 60);
+    assert.equal(porkTrace.returnedQuantity, 5);
+    assert.equal(porkTrace.usedQuantity, 50);
+    assert.equal(porkTrace.wasteQuantity, 5);
+    assert.equal(porkTrace.consumedQuantity, 55, 'consumption excludes the 5g returned to the warehouse');
+    const splitTrace = await productionTrace.orderProduct({ user: splitActor }, splitOrder.id, splitDish.id, {});
+    assert.equal(splitTrace.batches.total, 2, 'both the previously handed 75 and final 25 are linked to the order');
+    assert.equal(splitTrace.batches.data.reduce((sum, row) => sum + row.unitCount, 0), 100);
+    const firstBatchPage = await productionTrace.orderProduct({ user: splitActor }, splitOrder.id, splitDish.id, { page: 1, size: 1 });
+    const secondBatchPage = await productionTrace.orderProduct({ user: splitActor }, splitOrder.id, splitDish.id, { page: 2, size: 1 });
+    assert.equal(firstBatchPage.batches.total, 2);
+    assert.notEqual(firstBatchPage.batches.data[0].batchId, secondBatchPage.batches.data[0].batchId);
+    const pendingTraceOrder = await save(E.Order, { branchId: splitBranch.id, orderCode: 'TRACE-NO-PRODUCTION', status: 2, totalAmount: 100000 });
+    for (const quantity of [2, 3]) await save(E.OrderItem, { orderId: pendingTraceOrder.id, productId: splitDish.id, productName: splitDish.name, quantity, unitPrice: 20000, subtotal: quantity * 20000, totalAmount: quantity * 20000 });
+    const pendingTrace = await productionTrace.orderProduct({ user: splitActor }, pendingTraceOrder.id, splitDish.id, {});
+    assert.equal(pendingTrace.orderedQuantity, 5, 'repeated product lines share one aggregate production trace');
+    assert.equal(pendingTrace.batches.total, 0, 'no inferred batches from matching products/dates');
+    console.log('PASS order product trace: branch and item scope, exact batch associations, partial handovers, batch pagination, duplicate product lines, no-history state, real supplier origins and actual used/waste/returned quantities.');
     console.log('PASS legacy adoption: role/branch/version/confirmation guards, movement/export/linked-batch checks, terminal-state protection, audit, idempotency, zero stock mutation on adoption, then full new workflow and per-unit creation.');
     console.log('PASS isolated PostgreSQL: receive → start → actuals → sample/QC → handover; three lots, unused returns, stock once, replay, expiry, branch/owner/version checks, transaction rollback, finished units and order status.');
   } finally { if (db.isInitialized) await db.destroy(); await pg.close(); }
