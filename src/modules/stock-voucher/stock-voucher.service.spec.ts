@@ -143,6 +143,7 @@ describe('StockVoucherService', () => {
   const mockManager: any = {
     getRepository: (entity: any) => mockRepositories[entity.name],
     query: jest.fn().mockResolvedValue([]),
+    update: jest.fn().mockResolvedValue({ affected: 1 }),
   };
   const mockMovements = {
     lockProducts: jest.fn().mockResolvedValue(undefined),
@@ -235,6 +236,49 @@ describe('StockVoucherService', () => {
   });
 
   describe('createImportVoucher', () => {
+    it('creates ordinary supplier imports with lot tracking automatically, without a base unit prerequisite', async () => {
+      mockRepositories.StockFundReceiptReason.findOne.mockResolvedValueOnce({ code: 'NHNCC', isDebt: true, status: 'active' });
+      mockRepositories.Product.findOneBy.mockResolvedValueOnce({
+        id: 'product-id-1', branchId: 'branch-id-1', productType: 'GOODS',
+        lotTrackingEnabled: false, baseUnitId: null,
+      });
+      mockManager.query.mockResolvedValueOnce([]).mockResolvedValueOnce([{ present: false }]);
+      await service.createImportVoucher({
+        branchId: 'branch-id-1', sourceId: 'supplier-id-1', sourceType: 'SUPPLIER',
+        paymentStatus: 'DEBT', reasonCode: 'NHNCC',
+        items: [{ productId: 'product-id-1', quantity: 10, unitPrice: 5000, lotCode: '  GOODS-LOT  ' }],
+      });
+      expect(mockManager.update).toHaveBeenCalledWith(Product, 'product-id-1', { lotTrackingEnabled: true });
+      expect(mockMovements.change).toHaveBeenCalledWith(
+        mockManager, 'stock-id-1', 'product-id-1', 10, 'import-id',
+        expect.objectContaining({ lotCode: 'GOODS-LOT', inputDetails: expect.objectContaining({ lotCode: 'GOODS-LOT' }) }),
+      );
+    });
+
+    it('does not create a receipt or add inventory when existing stock is unallocated', async () => {
+      mockRepositories.Product.findOneBy.mockResolvedValueOnce({
+        id: 'product-id-1', branchId: 'branch-id-1', lotTrackingEnabled: false,
+      });
+      mockManager.query.mockResolvedValueOnce([]).mockResolvedValueOnce([{ present: true }]);
+      await expect(service.createImportVoucher({
+        branchId: 'branch-id-1', sourceId: 'supplier-id-1', sourceType: 'SUPPLIER',
+        paymentStatus: 'DEBT', items: [{ productId: 'product-id-1', quantity: 10, unitPrice: 5000, lotCode: 'LOT-NEW' }],
+      })).rejects.toThrow('tồn chưa phân lô');
+      expect(mockManager.update).not.toHaveBeenCalled();
+      expect(mockMovements.change).not.toHaveBeenCalled();
+      expect(mockRepositories.StockReceiptImport.save).not.toHaveBeenCalled();
+    });
+
+    it('preserves non-lot supplier imports when no lot code is supplied', async () => {
+      mockRepositories.StockFundReceiptReason.findOne.mockResolvedValueOnce({ code: 'NHNCC', isDebt: true, status: 'active' });
+      await service.createImportVoucher({
+        branchId: 'branch-id-1', sourceId: 'supplier-id-1', sourceType: 'SUPPLIER',
+        paymentStatus: 'DEBT', items: [{ productId: 'product-id-1', quantity: 1, unitPrice: 100 }],
+      });
+      expect(mockManager.update).not.toHaveBeenCalled();
+      expect(mockMovements.change).toHaveBeenCalledTimes(1);
+    });
+
     it('defaults fresh food expiry from purchase date, persists it, and replays without mutating the request', async () => {
       mockRepositories.Product.findOneBy.mockResolvedValueOnce({
         id: 'product-id-1',

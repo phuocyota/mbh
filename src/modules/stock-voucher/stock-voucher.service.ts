@@ -365,7 +365,7 @@ export class StockVoucherService {
     );
   }
 
-  private async ensureMaterialLotTracking(manager: EntityManager, product: Product, actorId?: string) {
+  private async ensureImportLotTracking(manager: EntityManager, product: Product, actorId?: string) {
     if (product.lotTrackingEnabled) return;
     // Called under the product lock, inside the receipt transaction. Existing
     // unallocated stock must be reconciled, never silently put into a new lot.
@@ -375,7 +375,7 @@ export class StockVoucherService {
       [product.id],
     );
     if (balance.present)
-      throw new ConflictException('Nguyên liệu đang có tồn chưa phân lô. Cần phân bổ tồn hiện có vào các lô trước khi nhập thêm.');
+      throw new ConflictException('Hàng hóa đang có tồn chưa phân lô. Cần đối soát và phân bổ tồn hiện có vào các lô trước khi nhập thêm; không cần bật theo dõi lô thủ công.');
     await manager.update(Product, product.id, { lotTrackingEnabled: true, ...(actorId ? { updatedBy: actorId } : {}) });
     product.lotTrackingEnabled = true;
   }
@@ -873,7 +873,6 @@ export class StockVoucherService {
           throw new BadRequestException('Vui lòng nhập mã lô.');
         if (item.expiresAt && item.expiresAt < localDate())
           throw new BadRequestException('Không thể nhập lô đã hết hạn.');
-        await this.ensureMaterialLotTracking(manager, product, dto.actorId);
       }
       if (
         !(await canUseStockProduct(
@@ -883,6 +882,12 @@ export class StockVoucherService {
         ))
       )
         throw new BadRequestException('CROSS_BRANCH_PRODUCT');
+      // An import lot code is an instruction to track the received stock by lot,
+      // including ordinary goods. Persist the flag atomically for later exports.
+      if (dto.type === 'IMPORT' && item.lotCode?.trim()) {
+        item.lotCode = item.lotCode.trim();
+        await this.ensureImportLotTracking(manager, product, dto.actorId);
+      }
       const quantity = await this.movements.normalize(manager, product, item);
       const serialInput = prepareImportSerials(item, dto.type, quantity);
       if (serialInput.serials.length) {

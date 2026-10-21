@@ -336,14 +336,14 @@ class Pool extends EventEmitter {
     await assert.rejects(db.transaction(async manager => {
       await movements.lockProducts(manager, [automaticProduct.id]);
       const product = await manager.findOneByOrFail(E.Product, { id: automaticProduct.id });
-      await vouchers.ensureMaterialLotTracking(manager, product, actor.userId);
+      await vouchers.ensureImportLotTracking(manager, product, actor.userId);
       throw Error('ROLLBACK_AUTO_LOT');
     }), /ROLLBACK_AUTO_LOT/);
     assert.equal((await db.getRepository(E.Product).findOneByOrFail({ id: automaticProduct.id })).lotTrackingEnabled, false, 'failed receipt cannot leave tracking configuration behind');
     await db.transaction(async manager => {
       await movements.lockProducts(manager, [automaticProduct.id]);
       const product = await manager.findOneByOrFail(E.Product, { id: automaticProduct.id });
-      await vouchers.ensureMaterialLotTracking(manager, product, actor.userId);
+      await vouchers.ensureImportLotTracking(manager, product, actor.userId);
       await movements.change(manager, stock.id, product.id, 10, randomUUID(), { lotCode: 'AUTO-LOT', expiresAt: '2099-01-01' });
     });
     assert.equal((await db.getRepository(E.Product).findOneByOrFail({ id: automaticProduct.id })).lotTrackingEnabled, true);
@@ -353,10 +353,26 @@ class Pool extends EventEmitter {
     await assert.rejects(db.transaction(async manager => {
       await movements.lockProducts(manager, [legacyProduct.id]);
       const product = await manager.findOneByOrFail(E.Product, { id: legacyProduct.id });
-      await vouchers.ensureMaterialLotTracking(manager, product, actor.userId);
+      await vouchers.ensureImportLotTracking(manager, product, actor.userId);
     }), /tồn chưa phân lô/);
     assert.equal((await db.getRepository(E.Product).findOneByOrFail({ id: legacyProduct.id })).lotTrackingEnabled, false);
-    console.log('PASS automatic material lots: zero-stock preparation and actual lot receipt, transaction rollback, legacy unallocated stock blocked.');
+    const ordinaryProduct = await save(E.Product, { name: 'Hàng hóa tự ghi nhận lô', categoryId: category.id, branchId: branch.id, lotTrackingEnabled: false, unit: 'quyển', price: 5000 });
+    const ordinaryReceipt = randomUUID();
+    await db.transaction(async manager => {
+      await movements.lockProducts(manager, [ordinaryProduct.id]);
+      const product = await manager.findOneByOrFail(E.Product, { id: ordinaryProduct.id });
+      await vouchers.ensureImportLotTracking(manager, product, actor.userId);
+      await movements.change(manager, stock.id, product.id, 10, ordinaryReceipt, { lotCode: 'GOODS-LOT' });
+    });
+    const ordinaryLot = await db.getRepository(E.StockLot).findOneByOrFail({ productId: ordinaryProduct.id, lotCode: 'GOODS-LOT' });
+    assert.equal(Number(ordinaryLot.quantity), 10);
+    assert.equal(ordinaryLot.expiresAt, null, 'ordinary goods do not require an expiry');
+    assert.equal(Number((await db.getRepository(E.StockItem).findOneByOrFail({ stockId: stock.id, productId: ordinaryProduct.id })).quantity), 10, 'received stock is counted once');
+    assert.equal((await db.getRepository(E.Product).findOneByOrFail({ id: ordinaryProduct.id })).lotTrackingEnabled, true);
+    await db.transaction(manager => movements.change(manager, stock.id, ordinaryProduct.id, -2, randomUUID(), { allocations: [{ lotId: ordinaryLot.id, quantity: 2 }] }));
+    assert.equal(Number((await db.getRepository(E.StockLot).findOneByOrFail({ id: ordinaryLot.id })).quantity), 8);
+    assert.equal(Number((await db.getRepository(E.StockItem).findOneByOrFail({ stockId: stock.id, productId: ordinaryProduct.id })).quantity), 8);
+    console.log('PASS automatic import lots: materials and ordinary goods, no base unit or expiry prerequisite for ordinary goods, explicit lot export, transaction rollback, legacy unallocated stock blocked.');
     // Complete-portion split: 100 ordered, only enough pork for 75, then replenish 25.
     const splitBranch = await save(E.Branch, { name: 'Partial production branch' });
     const splitChef = await save(E.User, { fullName: 'Split chef', role: 'HEAD_CHEF', branchId: splitBranch.id, passwordHash: 'not-a-login' });
