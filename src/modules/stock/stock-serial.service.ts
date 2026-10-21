@@ -1,9 +1,12 @@
 import {
   BadRequestException,
+  ConflictException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { DataSource } from 'typeorm';
+import { DataSource, EntityManager } from 'typeorm';
+import { StockReceiptDetail } from '../../entities';
+import { RegisterLotSerialsDto } from './dto/register-lot-serials.dto';
 import { isUUID } from 'class-validator';
 
 // Imported serial identities are receipt detail + ordinal. There is no ledger
@@ -39,6 +42,81 @@ export const stockSerialCte = `WITH serials AS (
 @Injectable()
 export class StockSerialService {
   constructor(private readonly db: DataSource) {}
+  // Retain receipt-detail + ordinal identities used by existing lookup/QR APIs.
+  // Registering serials is metadata-only: no stock movement or quantity update.
+  async registration(branchId: string, lotId: string, manager?: EntityManager) {
+    const db = manager || this.db;
+    const [lot] = await db.query(
+      `SELECT l.id,l.lot_code AS "lotCode",l.product_id AS "productId",l.quantity,
+         p.name AS "productName",COALESCE(u.code,p.unit) AS unit
+       FROM stock_lots l JOIN stocks s ON s.id=l.stock_id
+       JOIN products p ON p.id=l.product_id
+       LEFT JOIN measurement_units u ON u.id=p.base_unit_id
+       WHERE l.id=$1 AND s.branch_id=$2`, [lotId, branchId],
+    );
+    if (!lot) throw new NotFoundException('Không tìm thấy lô trong chi nhánh.');
+    const receipts = await db.query(
+      `SELECT d.id AS "detailId",r.code AS "receiptCode",d.quantity,
+         d.input_details AS "inputDetails"
+       FROM stock_receipt_detail d
+       JOIN stock_receipt_import r ON r.id=d.import_id AND r.branch_id=$2
+       WHERE d.product_id=$3 AND d.receipt_type='IMPORT' AND r.status='COMPLETED'
+         AND d.input_details->>'lotCode'=$4
+         AND EXISTS (SELECT 1 FROM stock_movements m
+           WHERE m.reference_id=r.id AND m.product_id=d.product_id AND m.lot_id=$1 AND m.quantity>0)
+         AND (SELECT COUNT(*) FROM stock_receipt_detail x
+           WHERE x.import_id=r.id AND x.product_id=d.product_id AND x.receipt_type='IMPORT')=1
+         AND d.quantity=(SELECT SUM(m.quantity) FROM stock_movements m
+           WHERE m.reference_id=r.id AND m.product_id=d.product_id AND m.lot_id=$1 AND m.quantity>0)
+       ORDER BY r.created_at,d.id`, [lotId, branchId, lot.productId, lot.lotCode],
+    );
+    return { lot, receipts: receipts.map((r) => {
+      const quantity = Number(r.quantity);
+      const serials = Array.isArray(r.inputDetails?.serials) ? r.inputDetails.serials : [];
+      return { detailId: r.detailId, receiptCode: r.receiptCode, quantity, serials,
+        remaining: Math.max(0, quantity - serials.length),
+        canRegister: Number.isInteger(quantity) && quantity > 0 && quantity <= 10000 && serials.length < quantity,
+      };
+    }) };
+  }
+
+  async register(branchId: string, lotId: string, dto: RegisterLotSerialsDto, actorId: string) {
+    if (!isUUID(dto.detailId) || !Array.isArray(dto.serials) || !dto.serials.length || dto.serials.length > 10000 ||
+        dto.serials.some((s) => typeof s !== 'string' || !s.trim() || s.trim().length > 128))
+      throw new BadRequestException('Mỗi serial phải có từ 1 đến 128 ký tự, tối đa 10.000 serial.');
+    const serials = dto.serials.map((s) => s.trim());
+    if (new Set(serials).size !== serials.length)
+      throw new BadRequestException('Serial không được trùng nhau.');
+    return this.db.transaction(async (manager) => {
+      // Same lock as intake serial registration: prevents duplicate identities
+      // across concurrent receipts and post-intake registration in this branch.
+      await manager.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', ['stock-branch:' + branchId]);
+      const context = await this.registration(branchId, lotId, manager);
+      const receipt = context.receipts.find((r) => r.detailId === dto.detailId);
+      if (!receipt) throw new BadRequestException('Phiếu nhập không thuộc lô hoặc chưa đủ căn cứ để gán serial.');
+      if (!Number.isInteger(receipt.quantity) || receipt.quantity < 1 || receipt.quantity > 10000 || serials.length > receipt.quantity)
+        throw new BadRequestException('Số serial không được vượt số lượng nhập nguyên đơn vị (tối đa 10.000).');
+      if (receipt.serials.some((s, i) => serials[i] !== s))
+        throw new ConflictException('Serial đã lưu không được sửa hoặc xóa. Hãy tải lại và bổ sung serial mới.');
+      const duplicates = await manager.query(
+        `SELECT 1 FROM stock_receipt_detail d JOIN stock_receipt_import r ON r.id=d.import_id
+         WHERE r.branch_id=$1 AND d.product_id=$2 AND d.id<>$3
+           AND (d.input_details->'serials') ?| $4::text[] LIMIT 1`,
+        [branchId, context.lot.productId, dto.detailId, serials],
+      );
+      if (duplicates.length) throw new ConflictException('Serial đã được khai báo cho hàng hóa này trong chi nhánh.');
+      if (serials.length !== receipt.serials.length) {
+        const detail = await manager.getRepository(StockReceiptDetail).findOneByOrFail({ id: dto.detailId });
+        await manager.update(StockReceiptDetail, detail.id, {
+          inputDetails: { ...detail.inputDetails, serialMode: 'MANUAL', serials,
+            serialRegisteredAt: new Date().toISOString(), serialRegisteredBy: actorId },
+          updatedBy: actorId,
+        });
+      }
+      return this.registration(branchId, lotId, manager);
+    });
+  }
+
   async list(branchId: string, q: any) {
     const params: any[] = [branchId];
     const clauses: string[] = [];
