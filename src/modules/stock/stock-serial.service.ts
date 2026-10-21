@@ -107,11 +107,10 @@ export class StockSerialService {
       if (duplicates.length) throw new ConflictException('Serial đã được khai báo cho hàng hóa này trong chi nhánh.');
       if (serials.length !== receipt.serials.length) {
         const detail = await manager.getRepository(StockReceiptDetail).findOneByOrFail({ id: dto.detailId });
-        await manager.update(StockReceiptDetail, detail.id, {
-          inputDetails: { ...detail.inputDetails, serialMode: 'MANUAL', serials,
-            serialRegisteredAt: new Date().toISOString(), serialRegisteredBy: actorId },
-          updatedBy: actorId,
-        });
+        detail.inputDetails = { ...detail.inputDetails, serialMode: 'MANUAL', serials,
+          serialRegisteredAt: new Date().toISOString(), serialRegisteredBy: actorId };
+        detail.updatedBy = actorId;
+        await manager.getRepository(StockReceiptDetail).save(detail);
       }
       return this.registration(branchId, lotId, manager);
     });

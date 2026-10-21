@@ -357,7 +357,9 @@ class Pool extends EventEmitter {
     }), /tồn chưa phân lô/);
     assert.equal((await db.getRepository(E.Product).findOneByOrFail({ id: legacyProduct.id })).lotTrackingEnabled, false);
     const ordinaryProduct = await save(E.Product, { name: 'Hàng hóa tự ghi nhận lô', categoryId: category.id, branchId: branch.id, lotTrackingEnabled: false, unit: 'quyển', price: 5000 });
-    const ordinaryReceipt = randomUUID();
+    const ordinaryHeader = await save(E.StockReceiptImport, { code: 'NK-POST-INTAKE-SERIALS', branchId: branch.id });
+    const ordinaryReceipt = ordinaryHeader.id;
+    const ordinaryDetail = await save(E.StockReceiptDetail, { productId: ordinaryProduct.id, importId: ordinaryReceipt, receiptType: 'IMPORT', fromType: 'SUPPLIER', toType: 'BRANCH', quantity: 10, inputDetails: { lotCode: 'GOODS-LOT', serialMode: 'NONE', serials: [], unitPrice: 5000 } });
     await db.transaction(async manager => {
       await movements.lockProducts(manager, [ordinaryProduct.id]);
       const product = await manager.findOneByOrFail(E.Product, { id: ordinaryProduct.id });
@@ -373,6 +375,37 @@ class Pool extends EventEmitter {
     assert.equal(Number((await db.getRepository(E.StockLot).findOneByOrFail({ id: ordinaryLot.id })).quantity), 8);
     assert.equal(Number((await db.getRepository(E.StockItem).findOneByOrFail({ stockId: stock.id, productId: ordinaryProduct.id })).quantity), 8);
     console.log('PASS automatic import lots: materials and ordinary goods, no base unit or expiry prerequisite for ordinary goods, explicit lot export, transaction rollback, legacy unallocated stock blocked.');
+    const { StockSerialService } = require('../dist/src/modules/stock/stock-serial.service');
+    const serialService = new StockSerialService(db);
+    const registration = await serialService.registration(branch.id, ordinaryLot.id);
+    assert.equal(registration.receipts[0].quantity, 10);
+    assert.equal(registration.receipts[0].canRegister, true);
+    await assert.rejects(serialService.registration(otherBranch.id, ordinaryLot.id), /Không tìm thấy lô/);
+    const register = serials => serialService.register(branch.id, ordinaryLot.id, { detailId: ordinaryDetail.id, serials }, actor.userId);
+    await register([' TAP-001 ', 'TAP-002']);
+    assert.equal((await serialService.list(branch.id, { lotId: ordinaryLot.id })).total, 2);
+    assert.equal((await serialService.detail(branch.id, ordinaryDetail.id, 1)).serial, 'TAP-001');
+    await register(['TAP-001', 'TAP-002']); // Idempotent response-loss retry.
+    await assert.rejects(register(['REPLACE-001', 'TAP-002']), /không được sửa hoặc xóa/);
+    await assert.rejects(register(['TAP-001']), /không được sửa hoặc xóa/);
+    await assert.rejects(register(['TAP-001', 'TAP-001']), /không được trùng/);
+    await assert.rejects(register(Array.from({ length: 11 }, (_, i) => `TAP-${String(i+1).padStart(3,'0')}`)), /không được vượt/);
+    await assert.rejects(serialService.register(branch.id, ordinaryLot.id, { detailId: randomUUID(), serials: ['WRONG-RECEIPT'] }, actor.userId), /không thuộc lô/);
+    // Duplicate checks include other receipts of this product in the same branch.
+    const duplicateHeader = await save(E.StockReceiptImport, { code: 'NK-OTHER-SERIALS', branchId: branch.id });
+    await save(E.StockReceiptDetail, { productId: ordinaryProduct.id, importId: duplicateHeader.id, receiptType: 'IMPORT', fromType: 'SUPPLIER', toType: 'BRANCH', quantity: 1, inputDetails: { serialMode: 'MANUAL', serials: ['TAKEN'] } });
+    await assert.rejects(register(['TAP-001', 'TAP-002', 'TAKEN']), /đã được khai báo/);
+    const completeSerials = Array.from({ length: 10 }, (_, i) => `TAP-${String(i+1).padStart(3,'0')}`);
+    await register(completeSerials);
+    const serialRows = await serialService.list(branch.id, { lotId: ordinaryLot.id });
+    assert.equal(serialRows.total, 10);
+    assert.ok(serialRows.data.every(row => row.receiptCode === ordinaryHeader.code && row.lotId === ordinaryLot.id));
+    assert.equal((await serialService.registration(branch.id, ordinaryLot.id)).receipts[0].canRegister, false);
+    assert.equal((await db.getRepository(E.StockReceiptDetail).findOneByOrFail({ id: ordinaryDetail.id })).inputDetails.unitPrice, 5000, 'unrelated receipt metadata is preserved');
+    assert.equal(Number((await db.getRepository(E.StockLot).findOneByOrFail({ id: ordinaryLot.id })).quantity), 8);
+    assert.equal(Number((await db.getRepository(E.StockItem).findOneByOrFail({ stockId: stock.id, productId: ordinaryProduct.id })).quantity), 8);
+    assert.equal(await db.getRepository(E.StockMovement).countBy({ productId: ordinaryProduct.id }), 2, 'registering serials never creates movements');
+    console.log('PASS post-intake serials: selected lot/receipt, incremental registration, replay, immutable identities, duplicate/capacity/branch checks, provenance and unchanged stock/movements.');
     // Complete-portion split: 100 ordered, only enough pork for 75, then replenish 25.
     const splitBranch = await save(E.Branch, { name: 'Partial production branch' });
     const splitChef = await save(E.User, { fullName: 'Split chef', role: 'HEAD_CHEF', branchId: splitBranch.id, passwordHash: 'not-a-login' });
