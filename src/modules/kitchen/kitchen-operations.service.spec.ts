@@ -85,6 +85,92 @@ function harness() {
 }
 describe('Kitchen operations boundary rules', () => {
   afterEach(() => jest.useRealTimers());
+  it('blocks boarding completion without an actual photo even when yield falls below 31', async () => {
+    const h = harness();
+    h.dish.requiresSample = false;
+    h.batch.source = 'BOARDING';
+    h.batch.plannedQuantity = 100;
+    h.batch.actualQuantity = 30;
+    await expect(h.service.transition(h.actor, 'batch', { expectedVersion: 2 }, 'COMPLETED')).rejects.toThrow('ACTUAL_IMAGE_REQUIRED');
+    expect(h.manager.save).not.toHaveBeenCalled();
+    await h.service.transition(h.actor, 'batch', { expectedVersion: 2, imageUrl: '/uploads/boarding.jpg' }, 'COMPLETED');
+    expect(h.batch.details.imageUrl).toBe('/uploads/boarding.jpg');
+    expect(h.batch.status).toBe('COMPLETED');
+  });
+  it('accepts an earlier same-day dish sample for a subsequent canteen batch', async () => {
+    const h = harness();
+    h.dish.requiresSample = false;
+    h.batch.actualQuantity = 1;
+    h.batch.details.workflowTicketId = 'ticket';
+    h.rows.push({
+      branchId: 'branch',
+      kind: 'samples',
+      parentId: 'earlier-batch',
+      date: '2026-10-08',
+      payload: {
+        productId: 'dish',
+        quantity: 100,
+        sampledAt: '2026-10-08T00:30:00Z',
+      },
+    });
+    await h.service.transition(
+      h.actor,
+      'batch',
+      { expectedVersion: 2 },
+      'COMPLETED',
+    );
+    expect(h.batch.status).toBe('COMPLETED');
+  });
+  it('blocks a small canteen batch without a sample even if the product flag is off', async () => {
+    const h = harness();
+    h.dish.requiresSample = false;
+    h.batch.actualQuantity = 1;
+    h.batch.details.workflowTicketId = 'ticket';
+    await expect(
+      h.service.transition(
+        h.actor,
+        'batch',
+        { expectedVersion: 2 },
+        'COMPLETED',
+      ),
+    ).rejects.toThrow('SAMPLE_REQUIRED');
+    expect(h.manager.save).not.toHaveBeenCalled();
+  });
+  it('requires an actual photo and sample for a plan batch above 30', async () => {
+    const h = harness();
+    h.dish.requiresSample = false;
+    h.batch.actualQuantity = 31;
+    await expect(
+      h.service.transition(
+        h.actor,
+        'batch',
+        { expectedVersion: 2 },
+        'COMPLETED',
+      ),
+    ).rejects.toThrow('ACTUAL_IMAGE_REQUIRED');
+    await expect(
+      h.service.transition(
+        h.actor,
+        'batch',
+        { expectedVersion: 2, imageUrl: '/uploads/actual.jpg' },
+        'COMPLETED',
+      ),
+    ).rejects.toThrow('SAMPLE_REQUIRED');
+    h.rows.push({
+      branchId: 'branch',
+      kind: 'samples',
+      parentId: 'batch',
+      payload: { quantity: 100, sampledAt: '2026-10-08T02:00:00Z' },
+    });
+    await h.service.transition(
+      h.actor,
+      'batch',
+      { expectedVersion: 2, imageUrl: '/uploads/actual.jpg' },
+      'COMPLETED',
+    );
+    expect(h.batch.details.imageUrl).toBe('/uploads/actual.jpg');
+    expect(h.batch.status).toBe('COMPLETED');
+  });
   it('keeps completed portion identities consistent by rejecting quantity edits', async () => {
     const h = harness();
     h.batch.status = 'COMPLETED';

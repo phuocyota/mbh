@@ -34,6 +34,7 @@ import {
   validateTaskActuals,
 } from './kitchen-task.rules';
 import { requestFingerprint } from '../../common/utils/request-fingerprint';
+import { hasKitchenSample, kitchenSamplePolicy } from './kitchen-sample.rules';
 import {
   planTaskRound,
   remainingTaskSnapshot,
@@ -192,7 +193,15 @@ export class KitchenTaskService {
         productId: product.id,
         name: product.name,
         quantity: Number(item.quantity),
-        requiresSample: product.requiresSample,
+        ...kitchenSamplePolicy(
+          product,
+          type === 'ticket'
+            ? {
+                details: { workflowTicketId: source.row.id },
+                plannedQuantity: item.quantity,
+              }
+            : source.row,
+        ),
         recipeId: recipe.id,
         recipeVersion: recipe.version,
         description: recipe.description,
@@ -274,6 +283,42 @@ export class KitchenTaskService {
     });
     const snapshot =
       flow?.payload.snapshot || (await this.requirements(m, source, type));
+    // Re-evaluate old snapshots and actual yields instead of trusting a stale flag.
+    const products = snapshot.dishes.length
+      ? await m
+          .getRepository(Product)
+          .findBy({ id: In(snapshot.dishes.map((dish) => dish.productId)) })
+      : [];
+    const samples = await m
+      .getRepository(KitchenOperation)
+      .findBy({
+        branchId: source.branchId,
+        kind: 'samples',
+        date: source.date,
+      });
+    const currentSnapshot = {
+      ...snapshot,
+      dishes: snapshot.dishes.map((dish) => ({
+        ...dish,
+        actualImageUrl: type === 'batch' ? source.row.details?.imageUrl : undefined,
+        hasValidSample: hasKitchenSample(
+          samples,
+          type === 'ticket'
+            ? { productId: dish.productId, details: { workflowTicketId: id } }
+            : source.row,
+          source.date,
+        ),
+        ...kitchenSamplePolicy(
+          products.find((product) => product.id === dish.productId),
+          type === 'ticket'
+            ? {
+                details: { workflowTicketId: id },
+                plannedQuantity: dish.quantity,
+              }
+            : source.row,
+        ),
+      })),
+    };
     const status =
       flow?.status || (source.row.status === 'WAITING' ? 'WAITING' : 'LEGACY');
     const pendingHandover =
@@ -322,7 +367,7 @@ export class KitchenTaskService {
           ? await this.migrationCheck(m, source, type)
           : null,
       version: flow?.version || 0,
-      ...snapshot,
+      ...currentSnapshot,
       lots: lots.filter((lot: any) => Number(lot.quantity) > 0),
       suggestedRound: type === 'ticket' ? planTaskRound(snapshot, lots) : [],
       waitingForStock: Boolean(flow?.payload.waitingForStock),
@@ -890,14 +935,32 @@ export class KitchenTaskService {
             throw new ConflictException(
               'Sản lượng đạt chưa đủ số lượng đơn hàng.',
             );
-          if (dish.requiresSample) {
-            const sample = dto.samples?.find((row) => row.batchId === batch.id);
-            if (sample)
+          const product = await m
+            .getRepository(Product)
+            .findOneByOrFail({ id: entry.productId });
+          const policy = kitchenSamplePolicy(product, batch);
+          const sample = dto.samples?.find((row) => row.batchId === batch.id);
+          if (policy.requiresImage) {
+            const imageUrl = sample?.imageUrl || batch.details.imageUrl;
+            if (typeof imageUrl !== 'string' || !imageUrl.trim())
+              throw new BadRequestException(
+                'Mẻ bán trú hoặc mẻ kế hoạch trên 30 thành phẩm cần ảnh thực tế.',
+              );
+            batch.details.imageUrl = imageUrl.trim();
+            await m.save(KitchenProductionBatch, batch);
+          }
+          if (policy.requiresSample) {
+            if (
+              sample &&
+              sample.quantity !== undefined &&
+              sample.quantity !== null
+            )
               await ops.write(actor, 'samples', {
                 batchId: batch.id,
                 quantity: taskNumber(sample.quantity),
                 unit: sample.unit,
                 storageLocation: sample.storageLocation,
+                imageUrl: sample.imageUrl,
               });
           }
           batch = await ops.transition(

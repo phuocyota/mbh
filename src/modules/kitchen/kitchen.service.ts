@@ -1,4 +1,5 @@
 import { isUUID } from 'class-validator';
+import { hasKitchenSample, kitchenSamplePolicy } from './kitchen-sample.rules';
 import { recipeCosting } from './recipe-costing';
 import { remainingTaskSnapshot } from './kitchen-task-planning';
 import { KitchenOperationsService } from './kitchen-operations.service';
@@ -1275,15 +1276,44 @@ export class KitchenService {
   }
 
   async getMealPlans(actor: Actor, query: any) {
-    return this.mealPlans.find({
+    const branchId = this.resolveBranch(actor, query.branchId);
+    const plans = await this.mealPlans.find({
       where: {
-        branchId: this.resolveBranch(actor, query.branchId),
+        branchId,
         ...(query.date ? { planDate: query.date } : {}),
         ...(query.mealPeriod ? { mealPeriod: query.mealPeriod } : {}),
       },
       relations: ['batches', 'batches.mealItem'],
       order: { planDate: 'DESC' },
     });
+    if (!['true', true].includes(query.includeSampleStatus)) return plans;
+    const batches = plans.flatMap((plan) => plan.batches || []);
+    if (!batches.length) return plans;
+    const [products, samples] = await Promise.all([
+      this.products.find({
+        where: {
+          id: In([...new Set(batches.map((batch) => batch.productId))]),
+        },
+      }),
+      this.dataSource.getRepository(KitchenOperation).find({
+        where: {
+          branchId,
+          kind: 'samples',
+          parentId: In(batches.map((batch) => batch.id)),
+        },
+      }),
+    ]);
+    return plans.map((plan) => ({
+      ...plan,
+      batches: (plan.batches || []).map((batch) => ({
+        ...batch,
+        ...kitchenSamplePolicy(
+          products.find((product) => product.id === batch.productId),
+          batch,
+        ),
+        hasValidSample: hasKitchenSample(samples, batch, plan.planDate),
+      })),
+    }));
   }
 
   async createMealPlan(actor: Actor, dto: any) {
@@ -1702,26 +1732,21 @@ export class KitchenService {
         })
       : [];
     const byId = new Map(products.map((product) => [product.id, product]));
-    const samples = batches.length
+    const sampleBatches = plans.flatMap((plan) => plan.batches || []);
+    const samples = sampleBatches.length
       ? await this.dataSource.getRepository(KitchenOperation).find({
           where: {
             branchId,
             kind: 'samples',
-            parentId: In(batches.map((batch) => batch.id)),
+            parentId: In(sampleBatches.map((batch) => batch.id)),
           },
         })
       : [];
-    const pendingSamples = batches.filter(
+    const pendingSamples = sampleBatches.filter(
       (batch) =>
-        byId.get(batch.productId)?.requiresSample &&
+        kitchenSamplePolicy(byId.get(batch.productId), batch).requiresSample &&
         ['PREPARING', 'READY', 'COMPLETED'].includes(batch.status) &&
-        !samples.some(
-          (sample) =>
-            sample.parentId === batch.id &&
-            Number(sample.payload.quantity) > 0 &&
-            Date.parse(sample.payload.sampledAt) >=
-              new Date(batch.startedAt!).getTime(),
-        ),
+        !hasKitchenSample(samples, batch, date),
     );
     const shortages = [...ingredients.values()]
       .map((line) => ({
@@ -1798,7 +1823,9 @@ export class KitchenService {
         ...line,
         unit: units.find((unit) => unit.id === line.unitId)?.code || '',
       })),
-      missingSampleCount: pendingSamples.length,
+      missingSampleCount: new Set(pendingSamples.map((batch) =>
+        batch.details?.workflowTicketId ? `sale:${batch.productId}` : batch.id,
+      )).size,
     };
   }
 

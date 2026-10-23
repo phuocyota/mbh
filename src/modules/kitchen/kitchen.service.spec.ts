@@ -192,6 +192,32 @@ describe('KitchenService authorization and concurrency', () => {
       'branch1',
     );
   });
+  it('returns sample requirements for plan and sale batches using authenticated branch scope', async () => {
+    const service = createService();
+    const findPlans = jest.fn().mockResolvedValue([{
+      planDate: '2026-10-20', batches: [
+        { id: 'plan-batch', productId: 'dish', plannedQuantity: 31, startedAt: '2026-10-20T01:00:00Z' },
+        { id: 'sale-batch', productId: 'dish', plannedQuantity: 1, startedAt: '2026-10-20T02:00:00Z', details: { workflowTicketId: 'ticket' } },
+      ],
+    }]);
+    service.mealPlans = { find: findPlans };
+    service.products = { find: jest.fn().mockResolvedValue([{ id: 'dish', requiresSample: false }]) };
+    const findSamples = jest.fn().mockResolvedValue([{
+      parentId: 'plan-batch', payload: { quantity: 100, sampledAt: '2026-10-20T01:30:00Z' },
+    }]);
+    service.dataSource = { getRepository: () => ({ find: findSamples }) };
+    const result = await service.getMealPlans(
+      { userId: 'u', userType: 'KITCHEN', branchId: 'branch1' },
+      { date: '2026-10-20', includeSampleStatus: 'true' },
+    );
+    expect(findPlans).toHaveBeenCalledWith(expect.objectContaining({ where: { branchId: 'branch1', planDate: '2026-10-20' } }));
+    expect(findSamples).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ branchId: 'branch1', kind: 'samples' }) }));
+    expect(result[0].batches).toEqual([
+      expect.objectContaining({ id: 'plan-batch', requiresSample: true, requiresImage: true, hasValidSample: true }),
+      expect.objectContaining({ id: 'sale-batch', requiresSample: true, requiresImage: false, hasValidSample: false }),
+    ]);
+  });
+
   it('aggregates staff work from real batches and checks demand once for the whole day', async () => {
     const service = createService();
     service.mealPlans = {

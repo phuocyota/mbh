@@ -1,4 +1,5 @@
 import { requestFingerprint } from '../../common/utils/request-fingerprint';
+import { hasKitchenSample, kitchenSamplePolicy } from './kitchen-sample.rules';
 import {
   BadRequestException,
   ConflictException,
@@ -879,18 +880,16 @@ export class KitchenOperationsService {
       if (target === 'COMPLETED') {
         if (batch.actualQuantity === null || batch.actualQuantity === undefined)
           throw new BadRequestException('ACTUAL_QUANTITY_REQUIRED');
-        if (product.requiresSample) {
+        const policy = kitchenSamplePolicy(product, batch);
+        if (policy.requiresImage && !String(dto.imageUrl || batch.details.imageUrl || '').trim())
+          throw new ConflictException('ACTUAL_IMAGE_REQUIRED');
+        if (policy.requiresSample) {
           const samples = await m
             .getRepository(KitchenOperation)
-            .findBy({ branchId, kind: 'samples', parentId: id });
-          if (
-            !samples.some(
-              (s) =>
-                Date.parse(s.payload.sampledAt) >=
-                  new Date(batch.startedAt!).getTime() &&
-                positive(s.payload.quantity) > 0,
-            )
-          )
+            .findBy({ branchId, kind: 'samples',
+              ...(batch.details?.workflowTicketId ? { date: plan.planDate } : { parentId: id }),
+            });
+          if (!hasKitchenSample(samples, batch, plan.planDate))
             throw new ConflictException('SAMPLE_REQUIRED');
         }
       }
