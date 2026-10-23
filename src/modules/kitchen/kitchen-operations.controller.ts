@@ -34,7 +34,7 @@ export class KitchenOperationsController {
     return this.operations.history(req.user, q);
   }
   @Get('reports/meal-flow')
-  @Roles(UserType.ADMIN, UserType.MANAGER)
+  @Roles(UserType.ADMIN, UserType.MANAGER, UserType.HEAD_CHEF)
   report(@Req() req: any, @Query() q: any) {
     return this.operations.summary(req.user, q);
   }

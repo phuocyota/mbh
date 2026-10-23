@@ -1,4 +1,6 @@
 import { isUUID } from 'class-validator';
+import { warehouseRange } from '../stock/warehouse-query';
+import { kitchenMaterialInventorySql } from './kitchen-material-inventory.query';
 import { hasKitchenSample, kitchenSamplePolicy } from './kitchen-sample.rules';
 import { recipeCosting } from './recipe-costing';
 import { remainingTaskSnapshot } from './kitchen-task-planning';
@@ -2240,5 +2242,12 @@ export class KitchenService {
       consumption: consumption[0],
       shortages: shortages[0],
     };
+  }
+
+  async materialInventoryReport(actor: Actor, query: any) {
+    const branchId = this.resolveBranch(actor, query.branchId);
+    const { from, to } = warehouseRange(query);
+    const data = await this.dataSource.query(kitchenMaterialInventorySql, [branchId, from, to]);
+    return { from, to, data };
   }
 }

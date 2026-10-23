@@ -411,8 +411,14 @@ export class KitchenController {
   }
 
   @Get('reports/operations')
-  @Roles(...MANAGERS)
+  @Roles(...MANAGERS, UserType.HEAD_CHEF)
   report(@Req() req: any, @Query() query: any) {
     return this.kitchen.operationsReport(req.user, query);
+  }
+
+  @Get('reports/material-inventory')
+  @Roles(...MANAGERS, UserType.HEAD_CHEF)
+  materialInventoryReport(@Req() req: any, @Query() query: any) {
+    return this.kitchen.materialInventoryReport(req.user, query);
   }
 }
