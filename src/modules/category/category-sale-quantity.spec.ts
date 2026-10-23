@@ -84,26 +84,22 @@ describe('Sale quantities in the parent product catalog', () => {
     );
   });
 
-  it('uses only active, unexpired available finished lots for cooked products', () => {
+  it('uses the active recipe and branch input stock to estimate whole portions', () => {
     const sql = saleQuantitySql('branch-a');
     expect(sql).toContain('product.requires_cooking = true');
     expect(sql).toContain("product.product_type = 'FINISHED_GOOD'");
-    expect(sql).toContain('lot.branch_id = :branchId');
-    expect(sql).toContain("lot.kind = 'finished-inventory'");
-    expect(sql).toContain("lot.status = 'ACTIVE'");
-    expect(sql).toContain("lot.payload->>'productId' = product.id::text");
-    expect(sql).toContain(
-      "(lot.payload->>'expiresAt')::timestamptz > CURRENT_TIMESTAMP",
-    );
-    expect(sql).toContain("lot.payload->>'availableQuantity'");
-    expect(sql).not.toContain('quarantinedQuantity');
+    expect(sql).toContain('r.branch_id = :branchId');
+    expect(sql).toContain("r.status = 'ACTIVE'");
+    expect(sql).toContain('FLOOR(MIN(');
+    expect(sql).toContain('item_unit.dimension = stock_unit.dimension');
+    expect(sql).not.toContain('kitchen_operations');
     expect(sql).toContain('stock.branch_id = :branchId');
   });
 
-  it('does not read finished inventory across branches for a shared catalog', async () => {
+  it('does not estimate recipe quantities across branches for a shared catalog', async () => {
     const h = harness([{ id: 'food', products: [{ id: 'bread' }] }], []);
     await h.service.findActiveWithProducts({ hasInventory: true });
-    expect(saleQuantitySql()).not.toContain('kitchen_operations');
+    expect(saleQuantitySql()).not.toContain('kitchen_recipes');
     expect(h.inventory.getRawMany).not.toHaveBeenCalled();
   });
 });
