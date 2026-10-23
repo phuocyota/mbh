@@ -1,4 +1,4 @@
-import { traceStatus, portionCount, defaultServingExpiry } from './production-trace.rules';
+import { traceStatus, portionCount, servingExpiryFromReady } from './production-trace.rules';
 import {
   consumeBatchLots,
   createFinishedUnits,
@@ -8,13 +8,20 @@ import { StockLot, Stock, Product } from '../../entities';
 
 const now = new Date('2026-10-19T06:00:00Z');
 describe('production traceability', () => {
-  it('sets 17:00 Vietnam on the production date, including month/year boundaries', () => {
-    expect(defaultServingExpiry('2026-10-21')).toBe('2026-10-21T10:00:00.000Z');
-    expect(defaultServingExpiry('2026-12-31')).toBe('2026-12-31T10:00:00.000Z');
-    expect(() => defaultServingExpiry('2026-02-30')).toThrow('INVALID_PRODUCTION_DATE');
-    const expiry = defaultServingExpiry('2026-10-21');
-    expect(traceStatus('UNIT', 'COMPLETED', expiry, new Date('2026-10-21T09:59:59Z'))).toBe('READY');
-    expect(traceStatus('UNIT', 'COMPLETED', expiry, new Date('2026-10-21T10:00:00Z'))).toBe('EXPIRED');
+  it('sets expiry from READY after 17:00 and across year boundaries', () => {
+    expect(servingExpiryFromReady('2026-10-23T17:31:00+07:00', 120)).toBe('2026-10-23T12:31:00.000Z');
+    expect(servingExpiryFromReady('2026-12-31T23:30:00+07:00', 90)).toBe('2026-12-31T18:00:00.000Z');
+    const expiry = servingExpiryFromReady(new Date('2026-10-23T10:31:00Z'), 120);
+    expect(traceStatus('UNIT', 'COMPLETED', expiry, new Date('2026-10-23T12:30:59Z'))).toBe('READY');
+    expect(traceStatus('UNIT', 'COMPLETED', expiry, new Date('2026-10-23T12:31:00Z'))).toBe('EXPIRED');
+  });
+  it.each([0, -1, NaN, Infinity, 1.5, Number.MAX_SAFE_INTEGER])(
+    'rejects invalid recommended use minutes %s', (minutes) => {
+      expect(() => servingExpiryFromReady(now, minutes)).toThrow('INVALID_RECOMMENDED_USE_MINUTES');
+    },
+  );
+  it('rejects a missing or invalid READY instant', () => {
+    expect(() => servingExpiryFromReady('invalid', 120)).toThrow('INVALID_BATCH_READY_TIME');
   });
   it('keeps date-only materials usable through the expiry day in local time', () => {
     expect(traceStatus('LOT', '', '2026-10-19', now)).toBe('IN STOCK');

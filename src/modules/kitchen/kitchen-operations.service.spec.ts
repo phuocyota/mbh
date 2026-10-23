@@ -84,6 +84,7 @@ function harness() {
   return { actor, rows, batch, repo, manager, service, socket, dish };
 }
 describe('Kitchen operations boundary rules', () => {
+  afterEach(() => jest.useRealTimers());
   it('keeps completed portion identities consistent by rejecting quantity edits', async () => {
     const h = harness();
     h.batch.status = 'COMPLETED';
@@ -136,9 +137,17 @@ describe('Kitchen operations boundary rules', () => {
     expect(h.manager.save).toHaveBeenCalledWith(h.batch);
     expect(h.socket.emitKitchenBatchUpdated).toHaveBeenCalled();
   });
-  it('fixes serving expiry at 17:00 Vietnam on the production date and preserves the snapshot', async () => {
+  it('allows completing food made after 17:00 and preserves its READY expiry snapshot', async () => {
     const h = harness();
     h.batch.status = 'PREPARING';
+    h.batch.actualQuantity = 1;
+    h.batch.details.traceabilityVersion = 1;
+    h.dish.requiresSample = false;
+    const finishedUnits = { countBy: jest.fn(async () => 0), insert: jest.fn() };
+    const original = h.manager.getRepository;
+    h.manager.getRepository = (type: any) =>
+      type.name === 'FinishedUnit' ? finishedUnits : original(type);
+    jest.useFakeTimers({ now: new Date('2026-10-08T10:31:00Z') });
     const ready = await h.service.transition(
       h.actor,
       'batch',
@@ -146,7 +155,8 @@ describe('Kitchen operations boundary rules', () => {
       'READY',
     );
     const expiry = ready.details.servingExpiresAt;
-    expect(expiry).toBe('2026-10-08T10:00:00.000Z');
+    expect(expiry).toBe('2026-10-08T12:31:00.000Z');
+    expect(new Date(expiry).getTime() - ready.readyAt.getTime()).toBe(120 * 60_000);
     h.dish.recommendedUseMinutes = 1000;
     await h.service.transition(
       h.actor,
@@ -155,7 +165,29 @@ describe('Kitchen operations boundary rules', () => {
       'UPDATE',
     );
     expect(h.batch.details.servingExpiresAt).toBe(expiry);
+    await h.service.transition(
+      h.actor,
+      'batch',
+      { expectedVersion: h.batch.version },
+      'COMPLETED',
+    );
+    expect(finishedUnits.insert).toHaveBeenCalled();
+    expect(h.batch.details.servingExpiresAt).toBe(expiry);
   });
+  it.each([undefined, '2026-10-08T10:00:00.000Z'])(
+    'anchors import expiry to READY and preserves an existing snapshot %s',
+    async (snapshot) => {
+      const h = harness();
+      h.batch.status = 'COMPLETED';
+      h.batch.readyAt = new Date('2026-10-08T10:31:00Z');
+      h.batch.details.servingExpiresAt = snapshot;
+      jest.spyOn(h.service, 'product').mockResolvedValue(h.dish as any);
+      const imported = await h.service.write(h.actor, 'finished-imports', {
+        batchId: 'batch', quantity: 1, receiverArea: 'Bếp', receivedBy: 'staff',
+      });
+      expect(imported.payload.expiresAt).toBe(snapshot || '2026-10-08T12:31:00.000Z');
+    },
+  );
   it('rejects cumulative imports above measured actual production', async () => {
     const h = harness();
     h.batch.actualQuantity = 10;

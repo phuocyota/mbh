@@ -27,12 +27,18 @@ export function portionCount(quantity: unknown) {
   return count;
 }
 
-/** Default finished-food deadline: 17:00 Vietnam time on the production date. */
-export function defaultServingExpiry(productionDate: string) {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(productionDate))
-    throw new BadRequestException('INVALID_PRODUCTION_DATE');
-  const midnight = new Date(`${productionDate}T00:00:00Z`);
-  if (!Number.isFinite(midnight.getTime()) || midnight.toISOString().slice(0, 10) !== productionDate)
-    throw new BadRequestException('INVALID_PRODUCTION_DATE');
-  return new Date(`${productionDate}T17:00:00+07:00`).toISOString();
+/** Snapshot the product's use window from the instant the food becomes ready. */
+export function servingExpiryFromReady(
+  readyAt: Date | string,
+  recommendedUseMinutes: number,
+) {
+  const readyTime = new Date(readyAt).getTime();
+  if (!Number.isFinite(readyTime))
+    throw new BadRequestException('INVALID_BATCH_READY_TIME');
+  if (!Number.isSafeInteger(recommendedUseMinutes) || recommendedUseMinutes <= 0)
+    throw new BadRequestException('INVALID_RECOMMENDED_USE_MINUTES');
+  const expiry = new Date(readyTime + recommendedUseMinutes * 60_000);
+  if (!Number.isFinite(expiry.getTime()))
+    throw new BadRequestException('INVALID_RECOMMENDED_USE_MINUTES');
+  return expiry.toISOString();
 }

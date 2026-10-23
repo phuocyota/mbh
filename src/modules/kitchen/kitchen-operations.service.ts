@@ -15,7 +15,7 @@ import {
   consumeBatchLots,
   createFinishedUnits,
 } from '../production-trace/production-trace.writer';
-import { portionCount, defaultServingExpiry } from '../production-trace/production-trace.rules';
+import { portionCount, servingExpiryFromReady } from '../production-trace/production-trace.rules';
 import {
   KitchenOperation,
   KitchenProductionBatch,
@@ -347,14 +347,14 @@ export class KitchenOperationsService {
           required(payload.receiverArea, 'RECEIVER_AREA');
           if (!batch.readyAt)
             throw new ConflictException('BATCH_READY_TIME_REQUIRED');
-          await this.product(m, branchId, batch.productId);
+          const product = await this.product(m, branchId, batch.productId);
           payload.importedAt = instant(
             payload.importedAt || new Date().toISOString(),
             'IMPORTED_AT',
           );
           payload.expiresAt =
             batch.details.servingExpiresAt ||
-            defaultServingExpiry(plan.planDate);
+            servingExpiryFromReady(batch.readyAt, product.recommendedUseMinutes);
         }
         if (kind === 'samples') {
           if (!['PREPARING', 'READY', 'COMPLETED'].includes(batch.status))
@@ -911,7 +911,10 @@ export class KitchenOperationsService {
       }
       if (target === 'READY') {
         batch.readyAt = new Date();
-        batch.details.servingExpiresAt = defaultServingExpiry(plan.planDate);
+        batch.details.servingExpiresAt = servingExpiryFromReady(
+          batch.readyAt,
+          product.recommendedUseMinutes,
+        );
       }
       if (target === 'COMPLETED') {
         batch.completedAt = new Date();
