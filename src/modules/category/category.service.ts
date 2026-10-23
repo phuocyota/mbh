@@ -6,7 +6,8 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { FindOptionsWhere, IsNull, Repository } from 'typeorm';
 import { Category } from '../../entities/category.entity';
-import { StockItem } from '../../entities/stock-item.entity';
+import { Product } from '../../entities/product.entity';
+import { saleQuantitySql } from './sale-quantity';
 import { BaseService } from '../../common/sql/base.service';
 import { JwtPayload } from '../../common/interface/jwt-payload.interface';
 import { COMMON_STATUS } from '../../common/constant/constant';
@@ -144,16 +145,9 @@ export class CategoryService extends BaseService<Category> {
       productConditions.push('product.branch_id IS NULL');
     }
 
+    const saleQuantity = saleQuantitySql(filter.branchId);
     if (filter.hasInventory === true) {
-      const branchCondition = filter.branchId
-        ? 'AND stock.branch_id = :branchId'
-        : '';
-      productConditions.push(`
-        (SELECT COALESCE(SUM(si.quantity), 0)
-         FROM stock_items si
-         INNER JOIN stocks stock ON stock.id = si.stock_id
-         WHERE si.product_id = product.id ${branchCondition}) > 0
-      `);
+      productConditions.push(`(${saleQuantity}) > 0`);
     }
 
     if (filter.productType) {
@@ -217,14 +211,12 @@ export class CategoryService extends BaseService<Category> {
     }
 
     const stockRows = await this.categoryRepository.manager
-      .getRepository(StockItem)
-      .createQueryBuilder('stockItem')
-      .innerJoin('stockItem.stock', 'stock')
-      .select('stockItem.productId', 'productId')
-      .addSelect('SUM(stockItem.quantity)', 'quantity')
-      .where('stock.branchId = :branchId', { branchId: filter.branchId })
-      .andWhere('stockItem.productId IN (:...productIds)', { productIds })
-      .groupBy('stockItem.productId')
+      .getRepository(Product)
+      .createQueryBuilder('product')
+      .select('product.id', 'productId')
+      .addSelect(saleQuantity, 'quantity')
+      .where('product.id IN (:...productIds)', { productIds })
+      .setParameter('branchId', filter.branchId)
       .getRawMany<{ productId: string; quantity: string }>();
 
     const stockByProductId = new Map(
@@ -233,7 +225,9 @@ export class CategoryService extends BaseService<Category> {
 
     paginatedCategories.forEach((category) => {
       (category.products || []).forEach((product) => {
-        (product as any).remain = stockByProductId.get(product.id) || 0;
+        const quantity = stockByProductId.get(product.id) || 0;
+        (product as any).remain = quantity;
+        (product as any).quantity = quantity;
       });
     });
 

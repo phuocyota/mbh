@@ -117,7 +117,7 @@ export class ProductController {
     required: false,
     type: Boolean,
     description:
-      'When true, only return products with total stock quantity > 0',
+      'When true, only return products with sale quantity > 0. Cooked dishes use unexpired available finished inventory in the branch; other products use warehouse stock. Products return this quantity as remain and quantity.',
   })
   @ApiQuery({ name: 'branchId', required: false })
   @ApiQuery({ name: 'minPrice', required: false, type: Number })
