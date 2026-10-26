@@ -1360,6 +1360,8 @@ export class KitchenService {
   }
 
   async lockMealPlan(actor: Actor, planId: string) {
+    if (!['ADMIN', 'MANAGER', 'HEAD_CHEF'].includes(actor.userType))
+      throw new ForbiddenException('Bạn không có quyền tiếp nhận kế hoạch bán trú.');
     const plan = await this.mealPlans.findOne({ where: { id: planId } });
     if (!plan) throw new NotFoundException('Kitchen meal plan not found');
     this.resolveBranch(actor, plan.branchId);

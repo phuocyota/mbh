@@ -23,6 +23,7 @@ Danh sách là hàng đợi chung. Nhân viên xác nhận nguyên liệu trở 
 - `GET /kitchen/meal-plans?date=YYYY-MM-DD&includePlannedItems=true` bổ sung `plannedItems: [{id,productId,productName,level,expectedQuantity}]`. Bếp trưởng xem cột món/số suất dự kiến trong Kế hoạch bán trú; dùng Làm mới để đọc thay đổi từ Admin.
 - Sửa món giữ nguyên MealItem ID; cập nhật số lượng/xóa món phản ánh ở kế hoạch DRAFT. Kế hoạch đã khóa từ chối thêm/sửa/xóa thực đơn của ngày/bữa đó, dùng nghiệp vụ điều chỉnh mẻ hiện có.
 - Khóa kế hoạch mới sinh batch. Số đăng ký ACTIVE lớn hơn 0 được ưu tiên; chưa có đăng ký thì dùng số suất Admin dự kiến. Không dùng chuỗi SQL `"0"` để vô hiệu hóa fallback.
+- Bếp trưởng dùng **Tiếp nhận & tạo mẻ chế biến** tại dòng DRAFT, gọi `POST /kitchen/meal-plans/:id/lock`. HEAD_CHEF chỉ được tiếp nhận kế hoạch cùng cơ sở trong JWT; ADMIN/MANAGER vẫn có quyền này. Quyền tạo kế hoạch thủ công và điều chỉnh số suất vẫn thuộc ADMIN/MANAGER. Thao tác lặp lại trả kế hoạch đã khóa, không sinh trùng mẻ và không trừ tồn nguyên liệu.
 - Thực đơn đã lưu trước bản cập nhật chưa tự backfill header: lưu lại món để đồng bộ, hoặc dùng thao tác tạo kế hoạch hiện có. Món định kỳ không có ngày cụ thể vẫn theo scheduler/khóa kế hoạch hiện tại.
 - Kiểm thử riêng bằng `WAREHOUSE_PGLITE_PATH=<package-path> node scripts/verify-kitchen-task-flow.cjs --boarding-only` sau build. Script sử dụng PostgreSQL độc lập, không đọc `.env`/DB production.
 

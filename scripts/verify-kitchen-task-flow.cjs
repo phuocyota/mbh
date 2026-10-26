@@ -100,10 +100,15 @@ class Pool extends EventEmitter {
     const beforeInvalid = await db.getRepository(E.MealItem).countBy({ branchId: boardingBranch.id });
     await assert.rejects(mealService.createMealItem({ ...planBody, dateKey: '2027-02-30' }, boardingActor), /Ngày thực đơn/);
     assert.equal(await db.getRepository(E.MealItem).countBy({ branchId: boardingBranch.id }), beforeInvalid);
-    const lockedBoarding = await planService.lockMealPlan(boardingActor, boardingPlans[0].id);
+    const receivingChef = { ...boardingActor, userType: 'HEAD_CHEF' };
+    await assert.rejects(planService.lockMealPlan({ ...receivingChef, branchId: branch.id }, boardingPlans[0].id), /CROSS_BRANCH/);
+    await assert.rejects(planService.lockMealPlan({ ...boardingActor, userType: 'KITCHEN' }, boardingPlans[0].id), /quyền tiếp nhận/);
+    const lockedBoarding = await planService.lockMealPlan(receivingChef, boardingPlans[0].id);
+    assert.equal(lockedBoarding.status, 'LOCKED');
+    assert.equal(lockedBoarding.lockedBy, receivingChef.userId);
     assert.equal(lockedBoarding.batches.length, 1);
     assert.equal(lockedBoarding.batches[0].plannedQuantity, 240, 'zero registrations must fall back to Admin expected portions');
-    const replayLocked = await planService.lockMealPlan(boardingActor, lockedBoarding.id);
+    const replayLocked = await planService.lockMealPlan(receivingChef, lockedBoarding.id);
     assert.equal(replayLocked.batches[0].id, lockedBoarding.batches[0].id);
     await assert.rejects(mealService.updateMealItem(mealLine.id, { expectedQuantity: 500 }, boardingActor), /đã khóa/);
     await assert.rejects(mealService.delete(mealLine.id, boardingActor), /đã khóa/);

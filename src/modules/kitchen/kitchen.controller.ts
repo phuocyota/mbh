@@ -303,7 +303,7 @@ export class KitchenController {
   }
 
   @Post('meal-plans/:id/lock')
-  @Roles(...MANAGERS)
+  @Roles(...MANAGERS, UserType.HEAD_CHEF)
   lockPlan(@Req() req: any, @Param('id') id: string) {
     return this.kitchen.lockMealPlan(req.user, id);
   }
