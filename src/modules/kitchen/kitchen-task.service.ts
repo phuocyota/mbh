@@ -32,6 +32,7 @@ import {
   assertTaskAction,
   taskNumber,
   validateTaskActuals,
+  validateBoardingTransport,
 } from './kitchen-task.rules';
 import { requestFingerprint } from '../../common/utils/request-fingerprint';
 import { hasKitchenSample, kitchenSamplePolicy } from './kitchen-sample.rules';
@@ -348,7 +349,7 @@ export class KitchenTaskService {
       status === 'WAITING' &&
       (flow?.payload.rounds || []).some((round: any) => !round.handover);
     const handoverSuggestions =
-      status === 'COMPLETED' || pendingHandover
+      ['COMPLETED', 'IN_TRANSIT'].includes(status) || pendingHandover
         ? await this.handoverSuggestions(m, actor, source, type)
         : null;
     const productIds = [
@@ -379,6 +380,8 @@ export class KitchenTaskService {
       date: source.date,
       shift: source.shift,
       sourceStatus: source.row.status,
+      canTransport: type === 'batch' && source.row.source === 'BOARDING',
+      transport: flow?.payload.transport || null,
       deadline: source.row.details?.deadline || null,
       name:
         type === 'ticket'
@@ -407,7 +410,7 @@ export class KitchenTaskService {
               ),
             0,
           );
-          const current = ['COMPLETED', 'HANDED_OVER'].includes(
+          const current = ['COMPLETED', 'IN_TRANSIT', 'HANDED_OVER'].includes(
             flow?.status || '',
           )
             ? Number(
@@ -581,7 +584,7 @@ export class KitchenTaskService {
       assertTaskAction(status, action);
       if (
         source.date !== localDate() &&
-        !['handover', 'handover-partial'].includes(action)
+        !['dispatch', 'handover', 'handover-partial'].includes(action)
       )
         throw new ConflictException(
           'Chỉ thao tác chế biến cho nhiệm vụ trong ngày hôm nay.',
@@ -1108,8 +1111,58 @@ export class KitchenTaskService {
           flow.status = 'COMPLETED';
         }
       }
+      if (action === 'dispatch') {
+        const transport = validateBoardingTransport(
+          type,
+          source.row.source,
+          dto,
+        );
+        const batchIds: string[] = flow.payload.batchIds || [];
+        if (batchIds.length !== 1 || batchIds[0] !== id)
+          throw new ConflictException('Mẻ bán trú chưa có đủ hồ sơ hoàn tất.');
+        const batch = await m
+          .getRepository(KitchenProductionBatch)
+          .findOneByOrFail({ id });
+        if (!(new Date(batch.details.servingExpiresAt).getTime() > Date.now()))
+          throw new ConflictException(
+            'Thành phẩm đã hết hạn hoặc thiếu hạn sử dụng.',
+          );
+        const imported = await repo.findOneByOrFail({
+          kind: 'finished-imports',
+          parentId: id,
+          branchId: source.branchId,
+          status: 'CONFIRMED',
+        });
+        const exported = await ops.write(actor, 'finished-exports', {
+          lotId: imported.payload.lotId,
+          quantity: taskNumber(batch.actualQuantity),
+          receiverPlace: transport.destinationPlace,
+          receivedBy: transport.carrierName,
+          deliveredBy: actor.userId,
+        });
+        flow.payload.transport = {
+          ...transport,
+          items: [{ batchId: id, quantity: Number(batch.actualQuantity) }],
+          exportId: exported.id,
+          servingExpiresAt: batch.details.servingExpiresAt,
+          dispatchedBy: actor.userId,
+          dispatchedAt: new Date().toISOString(),
+        };
+        flow.status = 'IN_TRANSIT';
+      }
       if (action === 'handover' || action === 'handover-partial') {
         const partial = action === 'handover-partial';
+        const transport =
+          flow.status === 'IN_TRANSIT' ? flow.payload.transport : null;
+        if (flow.status === 'IN_TRANSIT' && !transport)
+          throw new ConflictException('Thiếu hồ sơ vận chuyển.');
+        if (
+          transport &&
+          !(new Date(transport.servingExpiresAt).getTime() > Date.now())
+        )
+          throw new ConflictException(
+            'Thành phẩm đã hết hạn sử dụng, không thể xác nhận giao để phục vụ.',
+          );
         if (
           partial &&
           (type !== 'ticket' ||
@@ -1133,6 +1186,7 @@ export class KitchenTaskService {
           );
         const receivedBy = String(dto.receivedBy || '').trim();
         const receiverPlace =
+          transport?.destinationPlace ||
           String(dto.receiverPlace || '').trim() ||
           (type === 'ticket' ? 'Quầy căn tin' : 'Khu chia suất bán trú');
         if (receiverPlace.length > 200)
@@ -1160,13 +1214,14 @@ export class KitchenTaskService {
             branchId: source.branchId,
             status: 'CONFIRMED',
           });
-          await ops.write(actor, 'finished-exports', {
-            lotId: imported.payload.lotId,
-            quantity: Number(item.quantity),
-            receiverPlace,
-            receivedBy,
-            deliveredBy: actor.userId,
-          });
+          if (!transport)
+            await ops.write(actor, 'finished-exports', {
+              lotId: imported.payload.lotId,
+              quantity: Number(item.quantity),
+              receiverPlace,
+              receivedBy,
+              deliveredBy: actor.userId,
+            });
           handed.push({ batchId, quantity: Number(item.quantity) });
         }
         if (type === 'ticket' && !partial) {
@@ -1209,6 +1264,11 @@ export class KitchenTaskService {
             handover,
           ];
         } else {
+          if (transport) {
+            transport.receivedBy = receivedBy;
+            transport.receivedAt = handover.deliveredAt;
+            transport.confirmedBy = actor.userId;
+          }
           flow.payload.handover = handover;
           flow.status = 'HANDED_OVER';
         }
