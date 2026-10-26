@@ -23,6 +23,7 @@ async function bootstrap() {
         'https://fe.parent.kidocanteen.kidoedu.vn',
         'https://fe.admin.kidocanteen.kidoedu.vn',
         'https://fe.kitchen.kidocanteen.kidoedu.vn',
+        'https://school.food.safety.kidoedu.vn',
         'http://localhost:5173',
         'https://localhost:5173',
         'http://localhost:5171',
