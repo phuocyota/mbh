@@ -36,6 +36,7 @@ export class ProductController {
   }
 
   @ApiOperation({ summary: 'Get all products' })
+  @ApiQuery({ name: 'isBoarding', required: false, type: Boolean })
   @ApiQuery({ name: 'categoryId', required: false })
   @ApiQuery({ name: 'branchId', required: false })
   @ApiQuery({ name: 'minPrice', required: false, type: Number })
@@ -70,6 +71,7 @@ export class ProductController {
     @Query('size') size?: string,
     @Query('limit') limit?: string,
     @Query('recipeStatus') recipeStatus?: string,
+    @Query('isBoarding') isBoarding?: string,
   ) {
     return this.productService.findProducts(categoryId, {
       minPrice,
@@ -78,6 +80,7 @@ export class ProductController {
       productType,
       recipeStatus,
       isCanteenItem: parseOptionalBoolean(isCanteenItem),
+      isBoarding: parseOptionalBoolean(isBoarding),
       search,
       displayStatus,
       stockStatus,

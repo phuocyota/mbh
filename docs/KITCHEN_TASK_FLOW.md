@@ -17,6 +17,15 @@ Danh sách là hàng đợi chung. Nhân viên xác nhận nguyên liệu trở 
 
 ## API
 
+### Đồng bộ thực đơn Admin vào kế hoạch bán trú
+
+- Admin lưu món có `isBoarding=true`, ngày cụ thể và `expectedQuantity>0`: backend lưu MealItem và bảo đảm có kế hoạch DRAFT cho đúng branch/ngày/bữa trong cùng transaction. Lưu nhiều món cùng ngày/bữa dùng chung header; không tạo mẻ hoặc trừ tồn ở bước này.
+- `GET /kitchen/meal-plans?date=YYYY-MM-DD&includePlannedItems=true` bổ sung `plannedItems: [{id,productId,productName,level,expectedQuantity}]`. Bếp trưởng xem cột món/số suất dự kiến trong Kế hoạch bán trú; dùng Làm mới để đọc thay đổi từ Admin.
+- Sửa món giữ nguyên MealItem ID; cập nhật số lượng/xóa món phản ánh ở kế hoạch DRAFT. Kế hoạch đã khóa từ chối thêm/sửa/xóa thực đơn của ngày/bữa đó, dùng nghiệp vụ điều chỉnh mẻ hiện có.
+- Khóa kế hoạch mới sinh batch. Số đăng ký ACTIVE lớn hơn 0 được ưu tiên; chưa có đăng ký thì dùng số suất Admin dự kiến. Không dùng chuỗi SQL `"0"` để vô hiệu hóa fallback.
+- Thực đơn đã lưu trước bản cập nhật chưa tự backfill header: lưu lại món để đồng bộ, hoặc dùng thao tác tạo kế hoạch hiện có. Món định kỳ không có ngày cụ thể vẫn theo scheduler/khóa kế hoạch hiện tại.
+- Kiểm thử riêng bằng `WAREHOUSE_PGLITE_PATH=<package-path> node scripts/verify-kitchen-task-flow.cjs --boarding-only` sau build. Script sử dụng PostgreSQL độc lập, không đọc `.env`/DB production.
+
 - `GET /kitchen/tasks?date=YYYY-MM-DD&type=ticket|batch` (type tùy chọn).
 - `GET /kitchen/tasks/:type/:id` trả hồ sơ, công thức, lô khả dụng và lịch sử.
 - `POST /kitchen/tasks/:type/:id/:action` với `action` thuộc receive/start/record/complete/handover. Body luôn có `expectedVersion` và `requestId` UUID; giữ nguyên body/requestId khi thử lại cùng yêu cầu.

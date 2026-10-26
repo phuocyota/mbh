@@ -25,6 +25,7 @@ type ProductPriceFilter = {
   maxPrice?: number;
   branchId?: string;
   isCanteenItem?: boolean;
+  isBoarding?: boolean;
   productType?: string;
   recipeStatus?: string;
   hasInventory?: boolean;
@@ -105,6 +106,12 @@ export class ProductService extends BaseService<Product> {
     if (filter.isCanteenItem !== undefined) {
       query.andWhere('p.is_canteen_item = :isCanteenItem', {
         isCanteenItem: filter.isCanteenItem,
+      });
+    }
+
+    if (filter.isBoarding !== undefined) {
+      query.andWhere('p.is_boarding = :isBoarding', {
+        isBoarding: filter.isBoarding,
       });
     }
 

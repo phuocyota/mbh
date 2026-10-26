@@ -70,6 +70,48 @@ class Pool extends EventEmitter {
       products: db.getRepository(E.Product), operations: ops, movements,
     });
     const chef = { ...actor, userType: 'HEAD_CHEF' }, admin = { ...actor, userId: randomUUID(), userType: 'ADMIN' };
+    // Admin schedule -> persisted draft plan -> head-chef preview -> locked batches.
+    // A dedicated branch prevents these planned quantities affecting the task fixtures above.
+    const { MealItemService } = require('../dist/src/modules/meal-item/meal-item.service');
+    const boardingBranch = await save(E.Branch, { name: 'Boarding plan integration' });
+    const boardingCategory = await save(E.Category, { name: 'Boarding dishes', branchId: boardingBranch.id });
+    const boardingActor = { ...admin, branchId: boardingBranch.id, userType: 'MANAGER' };
+    const boardingDish = await save(E.Product, { name: 'Món bán trú', categoryId: boardingCategory.id, branchId: boardingBranch.id, isBoarding: true, productType: 'FINISHED_GOOD', requiresCooking: true });
+    const mealService = new MealItemService(db.getRepository(E.MealItem), db.getRepository(E.Customer), db.getRepository(E.CustomerMealItem));
+    const planService = Object.assign(Object.create(KitchenService.prototype), {
+      dataSource: db, mealPlans: db.getRepository(E.KitchenMealPlan), mealItems: db.getRepository(E.MealItem),
+      operations: ops, socketService: { emitKitchenMealPlanLocked() {} },
+    });
+    const stockBeforePlans = await db.query('SELECT id,quantity FROM stock_items ORDER BY id');
+    const planBody = { branchId: boardingBranch.id, productId: boardingDish.id, dateKey: '2027-01-04', mealPeriod: 'LUNCH', level: 'primary', expectedQuantity: 300, status: 'ACTIVE' };
+    const mealLine = await mealService.createMealItem(planBody, boardingActor);
+    let boardingPlans = await planService.getMealPlans({ ...boardingActor, userType: 'HEAD_CHEF' }, { date: planBody.dateKey, includePlannedItems: true });
+    assert.equal(boardingPlans.length, 1); assert.equal(boardingPlans[0].status, 'DRAFT');
+    assert.equal(boardingPlans[0].batches.length, 0, 'draft planning never starts production');
+    assert.equal(boardingPlans[0].plannedItems[0].expectedQuantity, 300);
+    await mealService.updateMealItem(mealLine.id, { expectedQuantity: 240 }, boardingActor);
+    const extraLine = await mealService.createMealItem({ ...planBody, level: 'preschool', expectedQuantity: 60 }, boardingActor);
+    boardingPlans = await planService.getMealPlans(boardingActor, { date: planBody.dateKey, includePlannedItems: true });
+    assert.equal(boardingPlans.length, 1, 'same day/meal reuses its plan');
+    assert.deepEqual(boardingPlans[0].plannedItems.map(i => i.expectedQuantity).sort((a,b) => a-b), [60,240]);
+    await mealService.delete(extraLine.id, boardingActor);
+    assert.equal((await planService.getMealPlans(boardingActor, { date: planBody.dateKey, includePlannedItems: true }))[0].plannedItems.length, 1);
+    await assert.rejects(planService.getMealPlans({ ...boardingActor, userType: 'HEAD_CHEF' }, { branchId: branch.id, includePlannedItems: true }), /CROSS_BRANCH/);
+    const beforeInvalid = await db.getRepository(E.MealItem).countBy({ branchId: boardingBranch.id });
+    await assert.rejects(mealService.createMealItem({ ...planBody, dateKey: '2027-02-30' }, boardingActor), /Ngày thực đơn/);
+    assert.equal(await db.getRepository(E.MealItem).countBy({ branchId: boardingBranch.id }), beforeInvalid);
+    const lockedBoarding = await planService.lockMealPlan(boardingActor, boardingPlans[0].id);
+    assert.equal(lockedBoarding.batches.length, 1);
+    assert.equal(lockedBoarding.batches[0].plannedQuantity, 240, 'zero registrations must fall back to Admin expected portions');
+    const replayLocked = await planService.lockMealPlan(boardingActor, lockedBoarding.id);
+    assert.equal(replayLocked.batches[0].id, lockedBoarding.batches[0].id);
+    await assert.rejects(mealService.updateMealItem(mealLine.id, { expectedQuantity: 500 }, boardingActor), /đã khóa/);
+    await assert.rejects(mealService.delete(mealLine.id, boardingActor), /đã khóa/);
+    await assert.rejects(mealService.createMealItem({ ...planBody, expectedQuantity: 50 }, boardingActor), /đã khóa/);
+    assert.equal((await db.getRepository(E.MealItem).findOneByOrFail({ id: mealLine.id })).expectedQuantity, 240);
+    assert.deepEqual(await db.query('SELECT id,quantity FROM stock_items ORDER BY id'), stockBeforePlans, 'planning and locking never mutate stock');
+    console.log('PASS boarding plan sync: Admin expected portions, head-chef preview, unique plan, stable edit identity, delete sync, locked-plan guards, replay, branch scope, invalid-date rollback and zero inventory mutations.');
+    if (process.argv.includes('--boarding-only')) return;
     for (const [index, costPrice] of [2000, 100, 50].entries()) await db.getRepository(E.Product).update(inputs[index].product.id, { costPrice });
     const recipeBody = { productId: dish.id, branchId: branch.id, yieldQuantity: 1, yieldUnitId: piece.id, expectedWastePercent: 5,
       items: inputs.map(input => ({ ingredientProductId: input.product.id, unitId: input.unit.id, quantity: input.requirement })) };

@@ -19,7 +19,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Between, DataSource, EntityManager, In, Repository } from 'typeorm';
+import { Between, DataSource, EntityManager, In, IsNull, Repository } from 'typeorm';
 import {
   CustomerMealItem,
   Employee,
@@ -1279,7 +1279,7 @@ export class KitchenService {
 
   async getMealPlans(actor: Actor, query: any) {
     const branchId = this.resolveBranch(actor, query.branchId);
-    const plans = await this.mealPlans.find({
+    let plans = await this.mealPlans.find({
       where: {
         branchId,
         ...(query.date ? { planDate: query.date } : {}),
@@ -1288,6 +1288,39 @@ export class KitchenService {
       relations: ['batches', 'batches.mealItem'],
       order: { planDate: 'DESC' },
     });
+    if (['true', true].includes(query.includePlannedItems) && plans.length) {
+      const dates = [...new Set(plans.map((plan) => plan.planDate))];
+      const scope = { branchId, status: COMMON_STATUS.ACTIVE };
+      const items = await this.mealItems.find({
+        where: [
+          { ...scope, dateKey: In(dates) },
+          { ...scope, dateKey: IsNull() },
+        ],
+        relations: ['product'],
+        order: { sortOrder: 'ASC', id: 'ASC' },
+      });
+      plans = plans.map((plan) => ({
+        ...plan,
+        plannedItems: items
+          .filter(
+            (item) =>
+              item.mealPeriod === plan.mealPeriod &&
+              item.product?.isBoarding === true &&
+              Number(item.expectedQuantity) > 0 &&
+              (item.dateKey === plan.planDate ||
+                (!item.dateKey &&
+                  item.dayOfWeek ===
+                    new Date(`${plan.planDate}T00:00:00Z`).getUTCDay())),
+          )
+          .map((item) => ({
+            id: item.id,
+            productId: item.productId,
+            productName: item.product.name,
+            level: item.level,
+            expectedQuantity: Number(item.expectedQuantity),
+          })),
+      }));
+    }
     if (!['true', true].includes(query.includeSampleStatus)) return plans;
     const batches = plans.flatMap((plan) => plan.batches || []);
     if (!batches.length) return plans;
@@ -1336,31 +1369,36 @@ export class KitchenService {
         date: plan.planDate,
         mealPeriod: plan.mealPeriod,
       }).then((rows) => rows[0]);
-    const date = new Date(`${plan.planDate}T00:00:00+07:00`);
-    const weekday = date.getDay();
-    const items = await this.mealItems
-      .createQueryBuilder('mi')
-      .leftJoin(
-        KitchenProductStation,
-        'ps',
-        'ps.product_id=mi.product_id AND ps.branch_id=mi.branch_id',
-      )
-      .select([
-        'mi.id AS "id"',
-        'mi.product_id AS "productId"',
-        'mi.expected_quantity AS "expectedQuantity"',
-        'ps.station_id AS "stationId"',
-      ])
-      .where('mi.branch_id=:branchId', { branchId: plan.branchId })
-      .andWhere('mi.meal_period=:mealPeriod', { mealPeriod: plan.mealPeriod })
-      .andWhere('mi.status=:status', { status: COMMON_STATUS.ACTIVE })
-      .andWhere(
-        '(mi.date_key=:date OR (mi.date_key IS NULL AND mi.day_of_week=:weekday))',
-        { date: plan.planDate, weekday },
-      )
-      .getRawMany();
     await this.dataSource.transaction(async (manager) => {
       await this.operations.lock(manager, plan.branchId);
+      const weekday = new Date(`${plan.planDate}T00:00:00Z`).getUTCDay();
+      const items = await manager
+        .getRepository(MealItem)
+        .createQueryBuilder('mi')
+        .innerJoin(
+          Product,
+          'product',
+          'product.id=mi.product_id AND product.is_boarding=true',
+        )
+        .leftJoin(
+          KitchenProductStation,
+          'ps',
+          'ps.product_id=mi.product_id AND ps.branch_id=mi.branch_id',
+        )
+        .select([
+          'mi.id AS "id"',
+          'mi.product_id AS "productId"',
+          'mi.expected_quantity AS "expectedQuantity"',
+          'ps.station_id AS "stationId"',
+        ])
+        .where('mi.branch_id=:branchId', { branchId: plan.branchId })
+        .andWhere('mi.meal_period=:mealPeriod', { mealPeriod: plan.mealPeriod })
+        .andWhere('mi.status=:status', { status: COMMON_STATUS.ACTIVE })
+        .andWhere(
+          '(mi.date_key=:date OR (mi.date_key IS NULL AND mi.day_of_week=:weekday))',
+          { date: plan.planDate, weekday },
+        )
+        .getRawMany();
       for (const shift of ['Ca sáng', 'Ca trưa', 'Ca chiều'])
         await this.operations.unlocked(
           manager,
@@ -1387,7 +1425,7 @@ export class KitchenService {
             productId: item.productId,
             stationId: item.stationId || null,
             plannedQuantity: Number(
-              count?.quantity || item.expectedQuantity || 0,
+              Number(count?.quantity) || item.expectedQuantity || 0,
             ),
             adjustmentQuantity: 0,
             shift:

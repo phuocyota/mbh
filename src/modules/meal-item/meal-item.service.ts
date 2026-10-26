@@ -1,8 +1,9 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { KitchenMealPlan } from '../../entities/kitchen.entity';
+import { BadRequestException, ConflictException, Injectable } from '@nestjs/common';
 import { Product } from '../../entities/product.entity';
 import { canUseStockProduct } from '../stock/stock-scope';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, Repository } from 'typeorm';
+import { EntityManager, In, Repository } from 'typeorm';
 import { MealItem } from '../../entities/meal-item.entity';
 import { Customer } from '../../entities/customer.entity';
 import { CustomerMealItem } from '../../entities/customer-meal-item.entity';
@@ -451,21 +452,113 @@ export class MealItemService extends BaseService<MealItem> {
   }
 
   async createMealItem(dto: CreateMealItemDto, user: JwtPayload) {
-    await this.validateProduct(dto.productId, dto.branchId);
-    return this.create(dto, user);
+    return this.mealItemRepository.manager.transaction(async (manager) => {
+      await this.lockPlanning(manager, [dto.branchId]);
+      await this.assertPlanEditable(manager, dto);
+      const product = await this.validateProduct(
+        dto.productId,
+        dto.branchId,
+        manager,
+      );
+      const item = await this.create(dto, user, manager);
+      await this.ensureBoardingPlan(manager, item, product, user);
+      return item;
+    });
   }
 
   async updateMealItem(id: string, dto: UpdateMealItemDto, user: JwtPayload) {
     const current = await this.findOne(id);
-    await this.validateProduct(
-      dto.productId || current.productId,
-      dto.branchId || current.branchId,
-    );
-    return this.update(id, dto, user);
+    return this.mealItemRepository.manager.transaction(async (manager) => {
+      await this.lockPlanning(manager, [
+        current.branchId,
+        dto.branchId || current.branchId,
+      ]);
+      const repo = manager.getRepository(MealItem);
+      const item = await repo.findOneOrFail({
+        where: { id },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (item.branchId !== current.branchId)
+        throw new ConflictException('MEAL_ITEM_CHANGED');
+      const next = { ...item, ...dto };
+      await this.assertPlanEditable(manager, item);
+      await this.assertPlanEditable(manager, next);
+      const product = await this.validateProduct(
+        next.productId,
+        next.branchId,
+        manager,
+      );
+      Object.assign(item, dto, { updatedBy: user.userId });
+      const saved = await repo.save(item);
+      await this.ensureBoardingPlan(manager, saved, product, user);
+      return saved;
+    });
   }
 
-  private async validateProduct(productId: string, branchId?: string | null) {
-    const manager = this.mealItemRepository.manager;
+  private async lockPlanning(manager: EntityManager, branchIds: string[]) {
+    for (const branchId of [...new Set(branchIds)].sort())
+      await manager.query(
+        'SELECT pg_advisory_xact_lock(hashtextextended($1,0))',
+        [`kitchen:${branchId}`],
+      );
+  }
+
+  private async assertPlanEditable(
+    manager: EntityManager,
+    item: { branchId: string; dateKey?: string; mealPeriod: string },
+  ) {
+    if (!item.dateKey) return;
+    if (
+      !/^\d{4}-\d{2}-\d{2}$/.test(item.dateKey) ||
+      !Number.isFinite(Date.parse(item.dateKey)) ||
+      new Date(item.dateKey).toISOString().slice(0, 10) !== item.dateKey
+    )
+      throw new BadRequestException('Ngày thực đơn không hợp lệ.');
+    const plan = await manager.getRepository(KitchenMealPlan).findOneBy({
+      branchId: item.branchId,
+      planDate: item.dateKey,
+      mealPeriod: item.mealPeriod,
+    });
+    if (plan && plan.status !== 'DRAFT')
+      throw new ConflictException(
+        'Kế hoạch bán trú đã khóa. Vui lòng điều chỉnh số suất tại kế hoạch, không sửa hoặc xóa món trong thực đơn.',
+      );
+  }
+
+  private async ensureBoardingPlan(
+    manager: EntityManager,
+    item: MealItem,
+    product: Product,
+    user: JwtPayload,
+  ) {
+    if (
+      !item.dateKey ||
+      !product.isBoarding ||
+      item.status !== COMMON_STATUS.ACTIVE ||
+      Number(item.expectedQuantity) <= 0
+    )
+      return;
+    // Insert only: never overwrite a plan which a scheduler/manager already locked.
+    await manager
+      .getRepository(KitchenMealPlan)
+      .createQueryBuilder()
+      .insert()
+      .values({
+        branchId: item.branchId,
+        planDate: item.dateKey,
+        mealPeriod: item.mealPeriod,
+        status: 'DRAFT',
+        createdBy: user.userId,
+      })
+      .orIgnore()
+      .execute();
+  }
+
+  private async validateProduct(
+    productId: string,
+    branchId?: string | null,
+    manager = this.mealItemRepository.manager,
+  ) {
     const product = await manager
       .getRepository(Product)
       .findOneBy({ id: productId, isActive: true });
@@ -476,12 +569,24 @@ export class MealItemService extends BaseService<MealItem> {
       throw new BadRequestException('FINISHED_GOOD_REQUIRED');
     if (branchId && !(await canUseStockProduct(manager, product, branchId)))
       throw new BadRequestException('CROSS_BRANCH_PRODUCT');
+    return product;
   }
 
   async delete(id: string, user: JwtPayload): Promise<MealItem> {
-    const item = await this.findOne(id);
-    item.updatedBy = user.userId;
-    await this.mealItemRepository.remove(item);
-    return item;
+    const current = await this.findOne(id);
+    return this.mealItemRepository.manager.transaction(async (manager) => {
+      await this.lockPlanning(manager, [current.branchId]);
+      const repo = manager.getRepository(MealItem);
+      const item = await repo.findOneOrFail({
+        where: { id },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (item.branchId !== current.branchId)
+        throw new ConflictException('MEAL_ITEM_CHANGED');
+      await this.assertPlanEditable(manager, item);
+      item.updatedBy = user.userId;
+      await repo.remove(item);
+      return item;
+    });
   }
 }
