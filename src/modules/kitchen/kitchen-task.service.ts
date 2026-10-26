@@ -140,6 +140,7 @@ export class KitchenTaskService {
           Number(grouped.get(item.productId)?.quantity || 0),
       });
     const items = [...grouped.values()];
+    const missingRecipeDetails: any[] = [];
     const dishes = [] as any[],
       missingRecipes = [] as string[];
     for (const item of items) {
@@ -162,6 +163,11 @@ export class KitchenTaskService {
       });
       if (!recipe || !recipe.items.length) {
         missingRecipes.push(product.name);
+        const latest = await m.getRepository(KitchenRecipe).findOne({
+          where: { branchId: source.branchId, productId: product.id }, order: { version: 'DESC' },
+        });
+        missingRecipeDetails.push({ productId: product.id, name: product.name,
+          recipeId: latest?.id || null, status: latest?.status || 'MISSING' });
         continue;
       }
       const requirements = [] as any[];
@@ -208,7 +214,7 @@ export class KitchenTaskService {
         requirements,
       });
     }
-    return { dishes, missingRecipes };
+    return { dishes, missingRecipes, missingRecipeDetails };
   }
   private async migrationCheck(m: EntityManager, source: any, type: string) {
     if (source.date !== localDate())
@@ -319,6 +325,23 @@ export class KitchenTaskService {
         ),
       })),
     };
+    const confirmationBatches = flow?.payload.received?.length
+      ? await m.getRepository(KitchenProductionBatch).findBy({
+          id: In(flow.payload.received.map((entry) => entry.batchId)),
+        })
+      : [];
+    const confirmations = confirmationBatches.map((batch) => ({
+      batchId: batch.id,
+      productId: batch.productId,
+      source: batch.source,
+      name: snapshot.dishes.find((dish) => dish.productId === batch.productId)?.name,
+      plannedQuantity: Number(batch.plannedQuantity) + Number(batch.adjustmentQuantity),
+      actualQuantity: batch.actualQuantity === null ? null : Number(batch.actualQuantity),
+      actualImageUrl: batch.details?.imageUrl || '',
+      note: batch.details?.completionNote || '',
+      ...kitchenSamplePolicy(products.find((product) => product.id === batch.productId), batch),
+      hasValidSample: hasKitchenSample(samples, batch, source.date),
+    }));
     const status =
       flow?.status || (source.row.status === 'WAITING' ? 'WAITING' : 'LEGACY');
     const pendingHandover =
@@ -360,7 +383,7 @@ export class KitchenTaskService {
       name:
         type === 'ticket'
           ? `Đơn ${source.row.order?.orderNumber || source.row.orderId}`
-          : snapshot.dishes[0]?.name || 'Mẻ chế biến',
+          : snapshot.dishes[0]?.name || snapshot.missingRecipeDetails?.[0]?.name || 'Mẻ chế biến',
       status,
       migration:
         status === 'LEGACY' && !flow
@@ -405,6 +428,7 @@ export class KitchenTaskService {
       history: flow?.payload.history || [],
       received: flow?.payload.received || [],
       actuals: flow?.payload.actuals || [],
+      confirmations,
       ownerId: flow?.payload.ownerId,
       ownerName: flow?.payload.ownerName,
       handover: flow?.payload.handover,
@@ -876,6 +900,18 @@ export class KitchenTaskService {
           const batch = await m
             .getRepository(KitchenProductionBatch)
             .findOneByOrFail({ id: entry.batchId });
+          const product = await m.getRepository(Product).findOneByOrFail({ id: entry.productId });
+          const imageValue = actual.imageUrl === undefined ? batch.details.imageUrl : actual.imageUrl;
+          if (imageValue != null && (typeof imageValue !== 'string' || imageValue.length > 2048))
+            throw new BadRequestException('Ảnh thành phẩm thực tế không hợp lệ.');
+          const imageUrl = String(imageValue || '').trim();
+          if (kitchenSamplePolicy(product, { ...batch, actualQuantity: quantity }).requiresImage && !imageUrl)
+            throw new BadRequestException('Cần ảnh thành phẩm thực tế tại bước Ghi nhận thực tế.');
+          if (imageUrl !== (batch.details.imageUrl || '')) {
+            batch.details.actualImageRecordedBy = actor.userId;
+            batch.details.actualImageRecordedAt = new Date().toISOString();
+          }
+          batch.details.imageUrl = imageUrl;
           batch.details = { ...batch.details, actualLots: losses };
           batch.actualQuantity = quantity;
           await m.save(KitchenProductionBatch, batch);
@@ -883,6 +919,7 @@ export class KitchenTaskService {
             batchId: batch.id,
             quantity,
             note: String(actual.note || '').trim(),
+            imageUrl,
             lots: losses,
           });
         }
@@ -892,6 +929,19 @@ export class KitchenTaskService {
       if (action === 'complete') {
         if (dto.qualityPassed !== true)
           throw new BadRequestException('Cần xác nhận thành phẩm đạt yêu cầu.');
+        if (dto.samples !== undefined && (
+          !Array.isArray(dto.samples) || dto.samples.length > flow.payload.received.length ||
+          dto.samples.some((sample) => !sample || !flow.payload.received.some((entry) => entry.batchId === sample.batchId)) ||
+          new Set(dto.samples.map((sample) => sample.batchId)).size !== dto.samples.length
+        )) throw new BadRequestException('Hồ sơ lưu mẫu không hợp lệ.');
+        if (dto.finishedImages !== undefined && (
+          !Array.isArray(dto.finishedImages) ||
+          dto.finishedImages.length > flow.payload.received.length ||
+          dto.finishedImages.some((image) => !image || !flow.payload.received.some((entry) => entry.batchId === image.batchId) ||
+            typeof image.imageUrl !== 'string' || image.imageUrl.length > 2048 ||
+            (image.note !== undefined && (typeof image.note !== 'string' || image.note.length > 2000))) ||
+          new Set(dto.finishedImages.map((image) => image.batchId)).size !== dto.finishedImages.length
+        )) throw new BadRequestException('Minh chứng thành phẩm không hợp lệ.');
         for (const entry of flow.payload.received) {
           const actual = flow.payload.actuals.find(
             (row) => row.batchId === entry.batchId,
@@ -940,13 +990,21 @@ export class KitchenTaskService {
             .findOneByOrFail({ id: entry.productId });
           const policy = kitchenSamplePolicy(product, batch);
           const sample = dto.samples?.find((row) => row.batchId === batch.id);
-          if (policy.requiresImage) {
-            const imageUrl = sample?.imageUrl || batch.details.imageUrl;
+          const evidence = dto.finishedImages?.find((row) => row.batchId === batch.id);
+          const imageUrl = batch.details.imageUrl;
+          if (evidence?.imageUrl?.trim() && evidence.imageUrl.trim() !== imageUrl)
+            throw new BadRequestException('Ảnh thành phẩm phải được lưu tại bước Ghi nhận thực tế trước khi hoàn thành.');
+          if (policy.requiresImage || imageUrl) {
             if (typeof imageUrl !== 'string' || !imageUrl.trim())
               throw new BadRequestException(
                 'Mẻ bán trú hoặc mẻ kế hoạch trên 30 thành phẩm cần ảnh thực tế.',
               );
             batch.details.imageUrl = imageUrl.trim();
+            batch.details.finishedImageConfirmedBy = actor.userId;
+            batch.details.finishedImageConfirmedAt = new Date().toISOString();
+          }
+          if (evidence?.note !== undefined) batch.details.completionNote = evidence.note.trim();
+          if (imageUrl || evidence?.note !== undefined) {
             await m.save(KitchenProductionBatch, batch);
           }
           if (policy.requiresSample) {
@@ -961,6 +1019,7 @@ export class KitchenTaskService {
                 unit: sample.unit,
                 storageLocation: sample.storageLocation,
                 imageUrl: sample.imageUrl,
+                sampledAt: sample.sampledAt,
               });
           }
           batch = await ops.transition(

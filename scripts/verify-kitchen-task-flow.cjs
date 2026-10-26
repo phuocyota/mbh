@@ -75,13 +75,80 @@ class Pool extends EventEmitter {
     const { MealItemService } = require('../dist/src/modules/meal-item/meal-item.service');
     const boardingBranch = await save(E.Branch, { name: 'Boarding plan integration' });
     const boardingCategory = await save(E.Category, { name: 'Boarding dishes', branchId: boardingBranch.id });
-    const boardingActor = { ...admin, branchId: boardingBranch.id, userType: 'MANAGER' };
+    const boardingManager = await save(E.User, { fullName: 'Boarding manager', role: 'MANAGER', branchId: boardingBranch.id, passwordHash: 'not-a-login' });
+    const boardingChef = await save(E.User, { fullName: 'Boarding head chef', role: 'HEAD_CHEF', branchId: boardingBranch.id, passwordHash: 'not-a-login' });
+    await save(E.Employee, { code: 'BOARDING-CHEF', fullName: 'Boarding head chef', branchId: boardingBranch.id, userId: boardingChef.id, status: 'working' });
+    const boardingActor = { userId: boardingManager.id, branchId: boardingBranch.id, userType: 'MANAGER' };
     const boardingDish = await save(E.Product, { name: 'Món bán trú', categoryId: boardingCategory.id, branchId: boardingBranch.id, isBoarding: true, productType: 'FINISHED_GOOD', requiresCooking: true });
     const mealService = new MealItemService(db.getRepository(E.MealItem), db.getRepository(E.Customer), db.getRepository(E.CustomerMealItem));
     const planService = Object.assign(Object.create(KitchenService.prototype), {
       dataSource: db, mealPlans: db.getRepository(E.KitchenMealPlan), mealItems: db.getRepository(E.MealItem),
       operations: ops, socketService: { emitKitchenMealPlanLocked() {} },
+      recipes: db.getRepository(E.KitchenRecipe), products: db.getRepository(E.Product), units: db.getRepository(E.MeasurementUnit), movements,
     });
+    if (process.argv.includes('--recipe-product-only')) {
+      const productService = new ProductService(db.getRepository(E.Product), db.getRepository(E.ProductPriceHistory), {});
+      const stockBefore = await db.query('SELECT id,quantity FROM stock_items ORDER BY id');
+      const body = { branchId: boardingBranch.id, categoryId: boardingCategory.id, code: 'AUTO-BOARDING', name: 'Món bán trú mới cần công thức',
+        isBoarding: true, requiresCooking: true, isActive: true, baseUnitId: piece.id, createdBy: boardingActor.userId };
+      const createdDish = await productService.createProduct(body);
+      const requestFor = (productId) => db.getRepository(E.KitchenOperation).findBy({ branchId: boardingBranch.id, kind: 'recipe-request', parentId: productId });
+      let notices = await requestFor(createdDish.id);
+      assert.equal(notices.length, 1); assert.equal(notices[0].status, 'OPEN');
+      assert.equal(notices[0].createdBy, boardingActor.userId);
+      assert.ok(notices[0].payload.recipientIds.includes(boardingChef.id));
+      assert.equal(notices[0].payload.productSetupRequired, true);
+      assert.equal(notices[0].payload.source, 'PRODUCT');
+      assert.equal(await db.getRepository(E.KitchenMealPlan).countBy({ branchId: boardingBranch.id }), 0);
+      assert.equal(await db.getRepository(E.KitchenProductionBatch).count(), 0, 'notification precedes any production batch');
+      const version = notices[0].version;
+      await productService.updateProduct(createdDish.id, { description: 'Cập nhật mô tả', updatedBy: boardingActor.userId });
+      notices = await requestFor(createdDish.id);
+      assert.equal(notices.length, 1); assert.equal(notices[0].version, version, 'unchanged setup notice is not sent again');
+      await mealService.createMealItem({ branchId: boardingBranch.id, productId: createdDish.id, dateKey: '2027-01-05', mealPeriod: 'LUNCH', expectedQuantity: 0, status: 'ACTIVE' }, boardingActor);
+      assert.equal((await requestFor(createdDish.id)).length, 1, 'menu creation reuses the product notice, including zero expected portions');
+      await planService.reconcileProductionRecipeRequests();
+      assert.equal((await requestFor(createdDish.id))[0].status, 'OPEN', 'scheduler retains product setup requests even with no batches');
+      for (const [code, flags] of [['NO-COOKING', { requiresCooking: false }], ['NO-BOARDING', { isBoarding: false }], ['INACTIVE-DISH', { isActive: false }]]) {
+        const excluded = await productService.createProduct({ ...body, code, ...flags });
+        assert.equal((await requestFor(excluded.id)).length, 0, 'only eligible boarding/cooking products notify chefs');
+      }
+      const toggled = await productService.createProduct({ ...body, code: 'LATER-COOKING', requiresCooking: false });
+      assert.equal((await requestFor(toggled.id)).length, 0);
+      await productService.updateProduct(toggled.id, { requiresCooking: true, updatedBy: boardingActor.userId });
+      assert.equal((await requestFor(toggled.id)).length, 1, 'enabling cooking creates the missing setup notice');
+      const ingredient = await save(E.Product, { name: 'Setup recipe ingredient', categoryId: boardingCategory.id, branchId: boardingBranch.id, productType: 'INGREDIENT', baseUnitId: gram.id });
+      const validRecipe = await save(E.KitchenRecipe, { branchId: boardingBranch.id, productId: createdDish.id, status: 'ACTIVE', version: 1, yieldQuantity: 1, yieldUnitId: piece.id });
+      await save(E.KitchenRecipeItem, { recipeId: validRecipe.id, ingredientProductId: ingredient.id, quantity: 1, unitId: gram.id });
+      await planService.reconcileProductionRecipeRequests();
+      assert.equal((await requestFor(createdDish.id))[0].status, 'RESOLVED');
+      await productService.updateProduct(createdDish.id, { description: 'Đã có công thức hợp lệ', updatedBy: boardingActor.userId });
+      assert.equal((await requestFor(createdDish.id)).filter((row) => row.status !== 'RESOLVED').length, 0, 'approved populated recipe does not raise another notice');
+      const pendingRecipe = await save(E.KitchenRecipe, { branchId: boardingBranch.id, productId: toggled.id, status: 'PENDING_REVIEW', version: 1, yieldQuantity: 1, yieldUnitId: piece.id });
+      await productService.updateProduct(toggled.id, { description: 'Chờ duyệt', updatedBy: boardingActor.userId });
+      assert.equal((await requestFor(toggled.id))[0].status, 'SUBMITTED');
+      assert.equal((await requestFor(toggled.id))[0].payload.recipeId, pendingRecipe.id);
+      const sharedDish = await productService.createProduct({ ...body, branchId: null, code: 'SHARED-BOARDING' });
+      assert.equal(await db.getRepository(E.KitchenOperation).countBy({ kind: 'recipe-request', parentId: sharedDish.id }), 0, 'no branch means no cross-school broadcast');
+      await mealService.createMealItem({ branchId: boardingBranch.id, productId: sharedDish.id, dateKey: '2027-01-05', mealPeriod: 'BREAKFAST', expectedQuantity: 0, status: 'ACTIVE' }, boardingActor);
+      assert.equal((await requestFor(sharedDish.id)).length, 1, 'shared product notifies only when assigned to a concrete branch');
+      const historyBeforeFailure = await db.getRepository(E.ProductPriceHistory).count();
+      await db.query(`CREATE FUNCTION reject_setup_notice() RETURNS trigger LANGUAGE plpgsql AS $$
+        BEGIN IF NEW.kind='recipe-request' AND NEW.payload->>'productName'='ROLLBACK-NOTICE'
+          THEN RAISE EXCEPTION 'test notice write failed'; END IF; RETURN NEW; END $$`);
+      await db.query('CREATE TRIGGER reject_setup_notice BEFORE INSERT ON kitchen_operations FOR EACH ROW EXECUTE FUNCTION reject_setup_notice()');
+      try {
+        await assert.rejects(productService.createProduct({ ...body, code: 'ROLLBACK-NOTICE', name: 'ROLLBACK-NOTICE' }), /test notice write failed/);
+        assert.equal(await db.getRepository(E.Product).countBy({ code: 'ROLLBACK-NOTICE' }), 0, 'failed notification rolls back product creation');
+        assert.equal(await db.getRepository(E.ProductPriceHistory).count(), historyBeforeFailure, 'failed notification rolls back price history');
+      } finally {
+        await db.query('DROP TRIGGER reject_setup_notice ON kitchen_operations');
+        await db.query('DROP FUNCTION reject_setup_notice()');
+      }
+      assert.deepEqual(await db.query('SELECT id,quantity FROM stock_items ORDER BY id'), stockBefore);
+      console.log('PASS product recipe notifications: immediate transactional creation, branch recipients, no plan/batch prerequisite, eligibility flags, dedupe, enabling cooking, approved/pending recipes, shared-product scope, scheduler retention and unchanged stock.');
+      return;
+    }
     const stockBeforePlans = await db.query('SELECT id,quantity FROM stock_items ORDER BY id');
     const planBody = { branchId: boardingBranch.id, productId: boardingDish.id, dateKey: '2027-01-04', mealPeriod: 'LUNCH', level: 'primary', expectedQuantity: 300, status: 'ACTIVE' };
     const mealLine = await mealService.createMealItem(planBody, boardingActor);
@@ -100,7 +167,7 @@ class Pool extends EventEmitter {
     const beforeInvalid = await db.getRepository(E.MealItem).countBy({ branchId: boardingBranch.id });
     await assert.rejects(mealService.createMealItem({ ...planBody, dateKey: '2027-02-30' }, boardingActor), /Ngày thực đơn/);
     assert.equal(await db.getRepository(E.MealItem).countBy({ branchId: boardingBranch.id }), beforeInvalid);
-    const receivingChef = { ...boardingActor, userType: 'HEAD_CHEF' };
+    const receivingChef = { ...boardingActor, userId: boardingChef.id, userType: 'HEAD_CHEF' };
     await assert.rejects(planService.lockMealPlan({ ...receivingChef, branchId: branch.id }, boardingPlans[0].id), /CROSS_BRANCH/);
     await assert.rejects(planService.lockMealPlan({ ...boardingActor, userType: 'KITCHEN' }, boardingPlans[0].id), /quyền tiếp nhận/);
     const lockedBoarding = await planService.lockMealPlan(receivingChef, boardingPlans[0].id);
@@ -117,6 +184,108 @@ class Pool extends EventEmitter {
     assert.deepEqual(await db.query('SELECT id,quantity FROM stock_items ORDER BY id'), stockBeforePlans, 'planning and locking never mutate stock');
     console.log('PASS boarding plan sync: Admin expected portions, head-chef preview, unique plan, stable edit identity, delete sync, locked-plan guards, replay, branch scope, invalid-date rollback and zero inventory mutations.');
     if (process.argv.includes('--boarding-only')) return;
+    if (process.argv.includes('--recipe-production-only')) {
+      let requests = await planService.listRecipeRequests(receivingChef, {});
+      assert.equal(requests.length, 1, 'locking a plan automatically notifies its head chefs');
+      assert.equal(requests[0].status, 'OPEN'); assert.equal(requests[0].automatic, true);
+      const requestDoc = await db.getRepository(E.KitchenOperation).findOneByOrFail({ id: requests[0].id });
+      assert.ok(requestDoc.payload.recipientIds.includes(boardingChef.id));
+      assert.equal(requestDoc.createdBy, boardingManager.id);
+      const currentPlan = await save(E.KitchenMealPlan, { branchId: boardingBranch.id, planDate: localDate(), mealPeriod: 'DINNER', status: 'LOCKED', createdBy: boardingManager.id });
+      const oldBatch = await save(E.KitchenProductionBatch, { mealPlanId: currentPlan.id, productId: boardingDish.id, plannedQuantity: 100, source: 'BOARDING', shift: 'Ca chiều', status: 'WAITING', details: {} });
+      await db.getRepository(E.KitchenOperation).delete(requestDoc.id); // Simulate a batch created before automatic notifications existed.
+      await planService.reconcileProductionRecipeRequests();
+      requests = await planService.listRecipeRequests(receivingChef, {});
+      assert.equal(requests.length, 1); assert.equal(requests[0].batchCount, 2, 'same product across batches uses one notice');
+      const noticeId = requests[0].id;
+      const beforeRetry = await db.getRepository(E.KitchenOperation).findOneByOrFail({ id: noticeId });
+      await planService.reconcileProductionRecipeRequests();
+      assert.equal((await db.getRepository(E.KitchenOperation).findOneByOrFail({ id: noticeId })).version, beforeRetry.version, 'scheduler replay must not rewrite an unchanged notice');
+      const recipeTasks = new KitchenTaskService(db, ops, movements);
+      let blockedTask = await recipeTasks.get(receivingChef, 'batch', oldBatch.id);
+      assert.equal(blockedTask.name, boardingDish.name);
+      assert.equal(blockedTask.missingRecipeDetails[0].status, 'MISSING');
+      await assert.rejects(recipeTasks.action(receivingChef, 'batch', oldBatch.id, 'receive', { requestId: randomUUID(), expectedVersion: 0, dishes: [] }), /Chưa có công thức/);
+      await assert.rejects(planService.listRecipeRequests({ ...receivingChef, branchId: branch.id }, { branchId: boardingBranch.id }), /CROSS_BRANCH/);
+      const stockSnapshot = await db.query('SELECT id,quantity FROM stock_items ORDER BY id');
+      const ingredient = await save(E.Product, { name: 'Recipe notification ingredient', categoryId: boardingCategory.id, branchId: boardingBranch.id, productType: 'INGREDIENT', baseUnitId: gram.id, costPrice: 1 });
+      await db.getRepository(E.Product).update(boardingDish.id, { baseUnitId: piece.id });
+      const productionRecipeBody = { branchId: boardingBranch.id, productId: boardingDish.id, yieldQuantity: 1, yieldUnitId: piece.id, items: [{ ingredientProductId: ingredient.id, quantity: 1, unitId: gram.id }] };
+      let productionRecipe = await planService.createRecipe(receivingChef, productionRecipeBody);
+      assert.equal((await planService.listRecipeRequests(receivingChef, {}))[0].status, 'DRAFTED');
+      await planService.reviewRecipe(receivingChef, productionRecipe.id, 'submit');
+      await planService.reconcileProductionRecipeRequests();
+      assert.equal((await planService.listRecipeRequests(receivingChef, {}))[0].status, 'SUBMITTED');
+      assert.equal((await planService.listRecipeNotifications(boardingActor)).unreadCount, 1, 'Admin/manager who planned the meal receives the review request');
+      blockedTask = await recipeTasks.get(receivingChef, 'batch', oldBatch.id);
+      assert.equal(blockedTask.missingRecipeDetails[0].status, 'PENDING_REVIEW');
+      await planService.reviewRecipe(boardingActor, productionRecipe.id, 'request-changes', 'Điều chỉnh định lượng');
+      assert.equal((await planService.listRecipeRequests(receivingChef, {}))[0].status, 'REVISION_REQUESTED');
+      productionRecipe = await planService.createRecipe(receivingChef, productionRecipeBody);
+      await planService.reviewRecipe(receivingChef, productionRecipe.id, 'submit');
+      await planService.reviewRecipe(boardingActor, productionRecipe.id, 'approve');
+      assert.equal((await planService.listRecipeRequests(receivingChef, {}))[0].status, 'APPROVED');
+      await planService.reconcileProductionRecipeRequests();
+      assert.equal((await db.getRepository(E.KitchenOperation).findOneByOrFail({ id: noticeId })).status, 'RESOLVED');
+      assert.equal((await recipeTasks.get(receivingChef, 'batch', oldBatch.id)).missingRecipes.length, 0);
+      assert.deepEqual(await db.query('SELECT id,quantity FROM stock_items ORDER BY id'), stockSnapshot, 'notifications and recipe approval do not mutate stock');
+      console.log('PASS production recipe notifications: automatic enqueue, legacy batch reconciliation, branch recipients, no duplicates, draft/submit/revision/approval lifecycle, requester notification, task status and unchanged stock.');
+      return;
+    }
+    if (process.argv.includes('--confirmation-only')) {
+      const confirmationTasks = new KitchenTaskService(db, ops, movements);
+      const confirmationStock = await save(E.Stock, { name: 'Boarding production stock', branchId: boardingBranch.id });
+      const material = await save(E.Product, { name: 'Nguyên liệu xác nhận mẻ', categoryId: boardingCategory.id, branchId: boardingBranch.id, productType: 'INGREDIENT', baseUnitId: gram.id, lotTrackingEnabled: true });
+      const materialLot = await save(E.StockLot, { stockId: confirmationStock.id, productId: material.id, lotCode: 'CONFIRM-LOT', expiresAt: '2099-01-01', quantity: 1000 });
+      await save(E.StockItem, { stockId: confirmationStock.id, productId: material.id, quantity: 1000 });
+      await db.getRepository(E.Product).update(boardingDish.id, { requiresSample: false, baseUnitId: piece.id, recommendedUseMinutes: 120 });
+      const confirmationRecipe = await save(E.KitchenRecipe, { branchId: boardingBranch.id, productId: boardingDish.id, status: 'ACTIVE', version: 1, yieldQuantity: 1, yieldUnitId: piece.id });
+      await save(E.KitchenRecipeItem, { recipeId: confirmationRecipe.id, ingredientProductId: material.id, quantity: 1, unitId: gram.id });
+      const todayPlan = await save(E.KitchenMealPlan, { branchId: boardingBranch.id, planDate: localDate(), mealPeriod: 'LUNCH', status: 'LOCKED' });
+      for (const quantity of [31, 30]) {
+        const production = await save(E.KitchenProductionBatch, { mealPlanId: todayPlan.id, productId: boardingDish.id, plannedQuantity: 31, source: 'BOARDING', shift: 'Ca trưa', status: 'WAITING', details: {} });
+        let confirmationState = await confirmationTasks.get(receivingChef, 'batch', production.id);
+        const command = async (action, body = {}, requestId = randomUUID()) => {
+          confirmationState = await confirmationTasks.action(receivingChef, 'batch', production.id, action, { ...body, requestId, expectedVersion: confirmationState.version });
+          return confirmationState;
+        };
+        await command('receive', { dishes: [{ productId: boardingDish.id, inputLots: [{ lotId: materialLot.id, quantity: 31 }] }] });
+        await command('start');
+        const recording = { actuals: [{ batchId: production.id, quantity, note: 'Sản lượng thực tế', lots: [{ lotId: materialLot.id, used: quantity, waste: 0 }] }] };
+        await assert.rejects(command('record', recording), /ảnh thành phẩm thực tế/);
+        assert.equal((await db.getRepository(E.KitchenProductionBatch).findOneByOrFail({ id: production.id })).actualQuantity, null);
+        recording.actuals[0].imageUrl = '/uploads/finished.jpg';
+        await command('record', recording);
+        assert.equal(confirmationState.actuals[0].imageUrl, '/uploads/finished.jpg');
+        assert.equal((await db.getRepository(E.KitchenProductionBatch).findOneByOrFail({ id: production.id })).details.actualImageRecordedBy, receivingChef.userId);
+        assert.equal(confirmationState.confirmations[0].actualQuantity, quantity);
+        assert.equal(confirmationState.confirmations[0].requiresImage, true);
+        assert.equal(confirmationState.confirmations[0].requiresSample, quantity > 30, 'threshold uses actual yield, not planned 31');
+        const balanceBeforeFailure = await db.query('SELECT quantity FROM stock_items WHERE stock_id=$1 AND product_id=$2', [confirmationStock.id, material.id]);
+        await assert.rejects(command('complete', { qualityPassed: true, finishedImages: [], samples: {} }), /Hồ sơ lưu mẫu không hợp lệ/);
+        await assert.rejects(command('complete', { qualityPassed: true, finishedImages: [{ batchId: production.id, imageUrl: '/uploads/replacement-at-qc.jpg' }] }), /bước Ghi nhận thực tế/);
+        const finishedImages = [{ batchId: production.id, imageUrl: '/uploads/finished.jpg', note: 'Đã kiểm tra mẻ thực tế' }];
+        if (quantity > 30) await assert.rejects(command('complete', { qualityPassed: true, finishedImages }), /SAMPLE_REQUIRED/);
+        assert.deepEqual(await db.query('SELECT quantity FROM stock_items WHERE stock_id=$1 AND product_id=$2', [confirmationStock.id, material.id]), balanceBeforeFailure);
+        assert.equal((await db.getRepository(E.KitchenProductionBatch).findOneByOrFail({ id: production.id })).details.imageUrl, '/uploads/finished.jpg', 'failed QC preserves the recorded photo');
+        const body = { qualityPassed: true, finishedImages,
+          samples: quantity > 30 ? [{ batchId: production.id, quantity: 10, unit: 'g', storageLocation: 'Tủ mẫu 1', imageUrl: '/uploads/sample-only.jpg' }] : [],
+        };
+        const requestId = randomUUID(), originalVersion = confirmationState.version;
+        await command('complete', body, requestId);
+        assert.equal(confirmationState.status, 'COMPLETED');
+        const savedProduction = await db.getRepository(E.KitchenProductionBatch).findOneByOrFail({ id: production.id });
+        assert.equal(savedProduction.details.imageUrl, '/uploads/finished.jpg');
+        assert.equal(savedProduction.details.completionNote, 'Đã kiểm tra mẻ thực tế');
+        assert.equal(savedProduction.details.finishedImageConfirmedBy, receivingChef.userId);
+        assert.equal(await db.getRepository(E.KitchenOperation).countBy({ branchId: boardingBranch.id, kind: 'samples', parentId: production.id }), quantity > 30 ? 1 : 0);
+        assert.equal(await db.getRepository(E.FinishedUnit).countBy({ batchId: production.id }), quantity);
+        await confirmationTasks.action(receivingChef, 'batch', production.id, 'complete', { ...body, requestId, expectedVersion: originalVersion });
+        assert.equal(await db.getRepository(E.FinishedUnit).countBy({ batchId: production.id }), quantity, 'replay must not duplicate finished units');
+      }
+      console.log('PASS batch confirmation: actual 30/31 boundary, mandatory boarding photo, separate sample/finished photos, sample dossier, notes/actor, rollback and replay.');
+      return;
+    }
     for (const [index, costPrice] of [2000, 100, 50].entries()) await db.getRepository(E.Product).update(inputs[index].product.id, { costPrice });
     const recipeBody = { productId: dish.id, branchId: branch.id, yieldQuantity: 1, yieldUnitId: piece.id, expectedWastePercent: 5,
       items: inputs.map(input => ({ ingredientProductId: input.product.id, unitId: input.unit.id, quantity: input.requirement })) };

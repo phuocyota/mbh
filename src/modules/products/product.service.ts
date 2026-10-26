@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   ForbiddenException,
   Injectable,
   NotFoundException,
@@ -11,6 +12,7 @@ import { StockItem } from '../../entities/stock-item.entity';
 import { BaseService } from '../../common/sql/base.service';
 import { ERROR_MESSAGES } from '../../common/constant/error-messages.constant';
 import { CategoryService } from '../category/category.service';
+import { ensureKitchenRecipeRequest } from '../kitchen/kitchen-recipe-request';
 import {
   stockProductCondition,
   canUseStockProduct,
@@ -337,6 +339,8 @@ export class ProductService extends BaseService<Product> {
       productDto.isCanteenItem = false;
 
     return this.productRepository.manager.transaction(async (manager) => {
+      if (productDto.branchId)
+        await manager.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', [`kitchen:${productDto.branchId}`]);
       const productRepository = manager.getRepository(Product);
       const historyRepository = manager.getRepository(ProductPriceHistory);
 
@@ -370,14 +374,20 @@ export class ProductService extends BaseService<Product> {
         }),
       );
 
+      await this.notifyBoardingRecipeSetup(manager, savedProduct, productDto.createdBy);
       return savedProduct;
     });
   }
 
   async updateProduct(id: string, updateProductDto: any) {
     const productDto = this.withoutQuantity(updateProductDto);
+    const reference = await this.productRepository.findOne({ where: { id } });
 
     await this.productRepository.manager.transaction(async (manager) => {
+      // Use the same lock order as recipe approval: branch before product.
+      const branches = [reference?.branchId, productDto.branchId].filter((branch): branch is string => Boolean(branch));
+      for (const branch of [...new Set(branches)].sort())
+        await manager.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', [`kitchen:${branch}`]);
       await this.lockProductClassification(manager, id);
       const productRepository = manager.getRepository(Product);
       const historyRepository = manager.getRepository(ProductPriceHistory);
@@ -388,6 +398,8 @@ export class ProductService extends BaseService<Product> {
           ERROR_MESSAGES.NOT_FOUND_WITH_ID('Product', id),
         );
       }
+      if (product.branchId !== reference?.branchId)
+        throw new ConflictException('PRODUCT_CHANGED_RETRY');
 
       if (
         productDto.requiresCooking === false &&
@@ -417,9 +429,16 @@ export class ProductService extends BaseService<Product> {
             : Number(savedProduct.costPrice),
         changeType: 'UPDATE',
       });
+      await this.notifyBoardingRecipeSetup(manager, savedProduct, productDto.updatedBy);
     });
 
     return this.findOne(id);
+  }
+
+  private async notifyBoardingRecipeSetup(manager: EntityManager, product: Product, requestedBy?: string) {
+    if (!product.branchId || !product.isBoarding || !product.requiresCooking || !product.isActive) return;
+    await ensureKitchenRecipeRequest(manager, { branchId: product.branchId, productId: product.id,
+      productName: product.name, requestedBy, source: 'PRODUCT' });
   }
 
   async updateBulk(

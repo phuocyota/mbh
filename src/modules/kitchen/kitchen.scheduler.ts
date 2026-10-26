@@ -18,11 +18,14 @@ export class KitchenScheduler implements OnModuleInit, OnModuleDestroy {
   }
 
   private async run() {
-    try {
-      await this.kitchen.lockDuePlans();
-      await this.kitchen.reconcilePaidTickets();
-    } catch (error) {
-      console.error('Kitchen scheduler failed', error);
+    const jobs = [
+      () => this.kitchen.lockDuePlans(),
+      () => this.kitchen.reconcilePaidTickets(),
+      () => this.kitchen.reconcileProductionRecipeRequests(),
+    ];
+    for (const job of jobs) {
+      try { await job(); }
+      catch (error) { console.error('Kitchen scheduler failed', error); }
     }
   }
 }

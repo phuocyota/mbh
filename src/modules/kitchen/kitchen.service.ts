@@ -1,3 +1,4 @@
+import { ensureKitchenRecipeRequest } from './kitchen-recipe-request';
 import { isUUID } from 'class-validator';
 import { warehouseRange } from '../stock/warehouse-query';
 import { kitchenMaterialInventorySql } from './kitchen-material-inventory.query';
@@ -277,12 +278,17 @@ export class KitchenService {
           AND newer.version>recipe.version)`);
     if (query.productId) revisionQuery.andWhere('recipe.product_id = :productId', { productId: query.productId });
     const revisions = await revisionQuery.getMany();
+    const linkedRecipeIds = rows.map((row) => row.payload.recipeId).filter(Boolean);
+    const linkedRecipes = linkedRecipeIds.length
+      ? await this.recipes.findBy({ branchId, id: In(linkedRecipeIds) })
+      : [];
     const result = rows.map((row) => {
       const revision = revisions.find((recipe) => recipe.id === row.payload.recipeId);
+      const linked = linkedRecipes.find((recipe) => recipe.id === row.payload.recipeId);
       return {
       id: row.id,
       productId: row.parentId,
-      status: revision ? 'REVISION_REQUESTED' : row.status,
+      status: linked?.status === 'ACTIVE' ? 'APPROVED' : revision ? 'REVISION_REQUESTED' : row.status,
       productName: row.payload.productName,
       note: row.payload.note,
       revisionReason: revision?.approval?.reason || row.payload.revisionReason || null,
@@ -290,6 +296,9 @@ export class KitchenService {
       createdAt: row.createdAt,
       reviewedAt: revision?.approval?.reviewedAt || row.payload.reviewedAt || null,
       recipeId: row.payload.recipeId || null,
+      automatic: Boolean(row.payload.automatic),
+      productionDate: row.payload.productionDate || null,
+      batchCount: row.payload.batchCount || 0,
       link: `/dashboard/menu/recipes?productId=${row.parentId}`,
       };
     });
@@ -306,6 +315,9 @@ export class KitchenService {
         createdAt: recipe.createdAt,
         reviewedAt: recipe.approval?.reviewedAt || null,
         recipeId: recipe.id,
+        automatic: false,
+        productionDate: null,
+        batchCount: 0,
         link: `/dashboard/menu/recipes?productId=${recipe.productId}`,
       });
     }
@@ -562,6 +574,74 @@ export class KitchenService {
       );
       return { id: row.id, alreadyRequested: false, status: row.status };
     });
+  }
+
+  /** Caller holds the branch kitchen lock. Reuse the recipe-request lifecycle. */
+  private async syncProductionRecipeRequests(manager: EntityManager, branchId: string) {
+    const blocked = await manager.query(`
+      SELECT b.id AS "batchId", b.product_id AS "productId", p.name,
+        mp.plan_date::text AS date, mp.created_by AS "requestedBy"
+      FROM kitchen_production_batches b
+      JOIN kitchen_meal_plans mp ON mp.id=b.meal_plan_id
+      JOIN products p ON p.id=b.product_id
+      WHERE mp.branch_id=$1 AND mp.plan_date >= $2::date
+        AND b.status IN ('WAITING','PREPARING','READY')
+        AND NOT (b.details ? 'workflowTicketId') AND p.product_type='FINISHED_GOOD'
+        AND NOT EXISTS(SELECT 1 FROM kitchen_operations f
+          WHERE f.branch_id=mp.branch_id AND f.parent_id=b.id AND f.kind='task-flow'
+            AND CASE WHEN jsonb_typeof(f.payload->'snapshot'->'dishes')='array'
+              THEN jsonb_array_length(f.payload->'snapshot'->'dishes') ELSE 0 END>0)
+        AND NOT EXISTS(SELECT 1 FROM kitchen_recipes r
+          WHERE r.branch_id=mp.branch_id AND r.product_id=b.product_id AND r.status='ACTIVE'
+            AND EXISTS(SELECT 1 FROM kitchen_recipe_items ri WHERE ri.recipe_id=r.id))
+      ORDER BY mp.plan_date,b.id`, [branchId, localDate()]);
+    const repo = manager.getRepository(KitchenOperation);
+    let changed = 0;
+    const outstanding = await repo.findBy({ branchId, kind: 'recipe-request', status: In(['OPEN', 'DRAFTED', 'REVISION_REQUESTED', 'SUBMITTED']) });
+    for (const request of outstanding) {
+      if (request.payload.automatic && !blocked.some((batch) => batch.productId === request.parentId)) {
+        if (request.payload.productSetupRequired && request.parentId) {
+          const product = await manager.getRepository(Product).findOneBy({ id: request.parentId });
+          if (product?.isActive && product.isBoarding && product.requiresCooking && await canUseStockProduct(manager, product, branchId)) {
+            const active = await manager.getRepository(KitchenRecipe).find({
+              where: { branchId, productId: product.id, status: 'ACTIVE' }, relations: ['items'],
+            });
+            if (!active.some((recipe) => recipe.items.length > 0)) continue;
+          }
+        }
+        request.status = 'RESOLVED';
+        request.payload = { ...request.payload, resolvedAt: new Date().toISOString() };
+        request.updatedBy = 'system:production-recipe-check';
+        await repo.save(request);
+        changed++;
+      }
+    }
+    for (const productId of new Set<string>(blocked.map((batch) => batch.productId))) {
+      const batches = blocked.filter((batch) => batch.productId === productId);
+      const first = batches[0];
+      if (await ensureKitchenRecipeRequest(manager, { branchId, productId, productName: first.name,
+        requestedBy: first.requestedBy, source: 'PRODUCTION', productionDate: first.date,
+        batchIds: batches.map((batch) => batch.batchId) })) changed++;
+    }
+    return changed;
+  }
+
+  async reconcileProductionRecipeRequests() {
+    const branches = await this.dataSource.query(`SELECT DISTINCT mp.branch_id AS id
+      FROM kitchen_meal_plans mp JOIN kitchen_production_batches b ON b.meal_plan_id=mp.id
+      WHERE mp.plan_date >= $1::date AND b.status IN ('WAITING','PREPARING','READY')
+        AND NOT (b.details ? 'workflowTicketId')
+      UNION SELECT branch_id AS id FROM kitchen_operations
+        WHERE kind='recipe-request' AND status IN ('OPEN','DRAFTED','REVISION_REQUESTED','SUBMITTED')
+          AND payload->>'automatic'='true'`, [localDate()]);
+    let changed = 0;
+    for (const branch of branches) {
+      changed += await this.dataSource.transaction(async (manager) => {
+        await this.operations.lock(manager, branch.id);
+        return this.syncProductionRecipeRequests(manager, branch.id);
+      });
+    }
+    return { changed };
   }
 
   async createRecipe(actor: Actor, dto: any) {
@@ -1448,6 +1528,7 @@ export class KitchenService {
         lockedBy: actor.userId,
         updatedBy: actor.userId,
       });
+      await this.syncProductionRecipeRequests(manager, plan.branchId);
     });
     const updated = (
       await this.getMealPlans(actor, {

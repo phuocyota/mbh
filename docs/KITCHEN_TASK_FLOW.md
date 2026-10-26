@@ -9,7 +9,7 @@ Màn `Nhận việc & Chế biến` dùng chung cho đơn căn tin đã thanh to
 | 1–2 | Xem thông báo/nhiệm vụ | WAITING | Xem số lượng, công thức đang áp dụng, định mức, thời hạn nếu đã thiết lập |
 | 3 | `receive` | RECEIVED | Chọn đủ nguyên liệu theo từng lô còn hạn. Chụp công thức/định mức và ghi người nhận; chưa trừ kho |
 | 4 | `start` | PREPARING | Kiểm tra tồn và hạn dùng lại, trừ từng lô, ghi người và thời gian bắt đầu |
-| 5 | `record` | RECORDED | Ghi sản lượng đạt, lượng thực dùng/hao hụt của từng lô. Có thể chỉnh lại trước QC |
+| 5 | `record` | RECORDED | Ghi sản lượng đạt, lượng thực dùng/hao hụt và ảnh thành phẩm thực tế. Có thể chỉnh lại trước QC |
 | 6 | `complete` | COMPLETED | Xác nhận chất lượng, bắt buộc mẫu hợp lệ với món yêu cầu; hoàn nguyên liệu thừa về lô gốc; tạo thành phẩm/QR và nhập tồn thành phẩm tại bếp |
 | 7 | `handover` | HANDED_OVER | Giao toàn bộ sản lượng đạt, ghi người nhận/nơi nhận/thời gian, trừ tồn thành phẩm tại bếp; đơn chuyển DONE |
 
@@ -38,13 +38,36 @@ Các trường riêng theo thao tác:
 {
   "receive": {"dishes":[{"productId":"UUID","inputLots":[{"lotId":"UUID","quantity":1}]}]},
   "start": {},
-  "record": {"actuals":[{"batchId":"UUID","quantity":1,"note":"Lý do hao hụt nếu có","lots":[{"lotId":"UUID","used":1,"waste":0}]}]},
+  "record": {"actuals":[{"batchId":"UUID","quantity":1,"imageUrl":"https://backend/uploads/actual.jpg","note":"Lý do hao hụt nếu có","lots":[{"lotId":"UUID","used":1,"waste":0}]}]},
   "complete": {"qualityPassed":true,"samples":[{"batchId":"UUID","quantity":10,"unit":"g","storageLocation":"Tủ mẫu 1"}]},
   "handover": {"receivedBy":"Người nhận","receiverPlace":"Quầy căn tin","items":[{"batchId":"UUID","quantity":1}]}
 }
 ```
 
 ## Ràng buộc và giới hạn
+
+### Thông báo công thức chặn mẻ chế biến
+
+- Ngay khi lưu sản phẩm hoạt động có cả `isBoarding=true` và `requiresCooking=true`, Backend tạo yêu cầu công thức nếu chưa có recipe ACTIVE kèm dòng định lượng, cùng transaction với sản phẩm/lịch sử giá. Bật cờ chế biến sau khi đã tạo sản phẩm cũng kích hoạt kiểm tra này. Không chờ số suất, kế hoạch hay mẻ.
+- Lưu món vào thực đơn bán trú cũng kiểm tra cùng quy tắc, kể cả `expectedQuantity=0`; dùng lại thông báo của sản phẩm nếu đã có. Sản phẩm dùng chung chưa xác định branch không phát thông báo tới mọi cơ sở: chỉ tạo khi được gắn vào thực đơn của một branch cụ thể.
+- Thông báo khởi tạo món được giữ cho tới khi có công thức hợp lệ hoặc món không còn áp dụng; scheduler không đóng thông báo chỉ vì chưa có batch. Nháp/chờ duyệt/cần sửa dùng chung trạng thái yêu cầu hiện có, không tạo yêu cầu OPEN trùng.
+- Tiếp nhận/khóa kế hoạch tự bảo đảm có recipe-request cho món trong mẻ chưa có công thức ACTIVE với định lượng. Dùng lại cùng loại chứng từ và luồng tạo nháp → gửi duyệt → yêu cầu chỉnh sửa → phê duyệt hiện có; không cần Admin gửi yêu cầu thủ công riêng.
+- Một món/cơ sở có một yêu cầu đang mở, kèm số mẻ cần công thức. Khi kế hoạch do Admin/Manager lập, giữ người lập làm người nhận thông báo công thức đã gửi duyệt. Bếp trưởng cùng cơ sở xem thông báo và badge trên chuông; công thức PENDING_REVIEW hiện là SUBMITTED/Chờ Admin, không yêu cầu bếp trưởng tạo lại.
+- Scheduler rà soát mẻ kế hoạch chưa hoàn thành từ hôm nay trở đi khi khởi động và mỗi 60 giây, gồm cả mẻ đã tồn tại trước bản cập nhật. Không báo thiếu công thức cho nhiệm vụ đã có snapshot định lượng nhận hợp lệ. Yêu cầu tự sinh được đóng khi không còn mẻ bị chặn; yêu cầu thủ công không bị tự xóa.
+- `listRecipeRequests` bổ sung automatic/productionDate/batchCount. Recipe đã ACTIVE không còn tính vào badge cần theo dõi. Màn nhiệm vụ trả missingRecipeDetails gồm productId/name/recipeId/status để hiển thị đúng thiếu, nháp, chờ duyệt hoặc cần chỉnh sửa, và mở đúng món.
+- Thông báo là dữ liệu in-app, cập nhật khi mở màn hình/Làm mới; sau tiếp nhận kế hoạch, giao diện cập nhật lại chuông. Không gửi email, push ngoài ứng dụng hoặc thêm frontend polling/socket.
+- Kiểm thử riêng sau build: `WAREHOUSE_PGLITE_PATH=<package-path> node scripts/verify-kitchen-task-flow.cjs --recipe-production-only` (DB độc lập, không đọc `.env`).
+- Kiểm thử thời điểm tạo món: dùng cùng script với `--recipe-product-only`, gồm cờ điều kiện, scope cơ sở, không tạo trùng, lưu thực đơn 0 suất, recipe đã duyệt/chờ duyệt và rollback nếu không ghi được thông báo.
+
+### Xác nhận thành phẩm, ảnh và mẫu
+
+- `record` nhận `actuals[].imageUrl` cùng sản lượng và lô thực tế. Backend kiểm tra ảnh bắt buộc theo source và sản lượng vừa nhập, lưu URL cùng actualImageRecordedBy/At. Không đủ ảnh thì không chuyển sang RECORDED.
+- Sau `record`, bước Kiểm tra & hoàn thành chỉ xem lại ảnh đã lưu, nhập lượng/đơn vị/vị trí mẫu và ghi chú. Muốn thay ảnh, quay lại Ghi nhận thực tế. Trạng thái ảnh/mẫu lấy từ dữ liệu thực, không xác nhận bằng checkbox thay cho hồ sơ.
+- `GET /kitchen/tasks/:type/:id` trả thêm `confirmations` theo batch: batchId/productId/source/name/plannedQuantity/actualQuantity/actualImageUrl/note/requiresImage/requiresSample/hasValidSample.
+- `complete` nhận `samples: [{batchId,quantity,unit,storageLocation,imageUrl?}]` và có thể nhận `finishedImages: [{batchId,imageUrl,note?}]` để gửi ghi chú kèm ảnh đã ghi nhận. Không chấp nhận URL ảnh khác với ảnh lưu ở bước record; ảnh mẫu không được thay thế ảnh thành phẩm. Mẻ RECORDED từ phiên bản cũ chưa có ảnh bắt buộc cần quay lại ghi nhận và lưu ảnh trước khi hoàn tất.
+- Mọi mẻ BOARDING bắt buộc ảnh thực tế. Sản lượng thực tế >30 bắt buộc mẫu theo chính mẻ; đúng 30 không bắt buộc nếu flag requiresSample của món tắt. Flag yêu cầu mẫu riêng và quy tắc món căn tin lưu mẫu trong ngày vẫn giữ nguyên.
+- Ảnh đi qua `POST /upload/images`, multipart field `file`, dùng response đã unwrap từ httpClient; có thể dùng camera sau trên thiết bị hỗ trợ. Khi ảnh đang tải hoặc thiếu ảnh bắt buộc, nút Ghi nhận thực tế bị khóa. Khi thiếu mẫu/QC bắt buộc, nút hoàn thành bị khóa. Backend kiểm tra lại toàn bộ và rollback khi lỗi; ghi người/thời điểm xác nhận ảnh và ghi chú trong batch.details.
+- Kiểm tra riêng: sau build chạy `WAREHOUSE_PGLITE_PATH=<package-path> node scripts/verify-kitchen-task-flow.cjs --confirmation-only`; Kitchen chạy `node test/batch-confirmation-ssr.mjs` để kiểm tra form và upload contract mà không gọi API thật.
 
 - Nhiệm vụ lưu trong `kitchen_operations`, kind `task-flow`; không cần thêm bảng. Công thức được chụp khi nhận nguyên liệu để sửa công thức sau đó không đổi nhiệm vụ đang làm.
 - Giao dịch, khóa chi nhánh/nguồn, kiểm tra phiên bản và chống lặp request bảo vệ trừ kho/nhập thành phẩm/bàn giao. Socket backend chỉ phát sau commit; frontend vẫn tắt socket.

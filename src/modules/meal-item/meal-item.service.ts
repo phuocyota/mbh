@@ -2,6 +2,7 @@ import { KitchenMealPlan } from '../../entities/kitchen.entity';
 import { BadRequestException, ConflictException, Injectable } from '@nestjs/common';
 import { Product } from '../../entities/product.entity';
 import { canUseStockProduct } from '../stock/stock-scope';
+import { ensureKitchenRecipeRequest } from '../kitchen/kitchen-recipe-request';
 import { InjectRepository } from '@nestjs/typeorm';
 import { EntityManager, In, Repository } from 'typeorm';
 import { MealItem } from '../../entities/meal-item.entity';
@@ -531,6 +532,9 @@ export class MealItemService extends BaseService<MealItem> {
     product: Product,
     user: JwtPayload,
   ) {
+    if (product.isBoarding && product.requiresCooking && product.isActive && item.status === COMMON_STATUS.ACTIVE)
+      await ensureKitchenRecipeRequest(manager, { branchId: item.branchId, productId: product.id,
+        productName: product.name, requestedBy: user.userId, source: 'MEAL_PLAN' });
     if (
       !item.dateKey ||
       !product.isBoarding ||
