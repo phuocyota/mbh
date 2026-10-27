@@ -56,11 +56,24 @@ describe('Public stock trace API', () => {
         .expect(400);
     },
   );
-  it('still validates public query parameters', async () => {
+  it.each(['', '   ', 'x'.repeat(256)])(
+    'rejects invalid identities %p',
+    async (value) => {
+      await request(app.getHttpServer())
+        .get('/stock-trace/full')
+        .query({ lotId: value })
+        .expect(400);
+    },
+  );
+  it('accepts a lot code in lotId without a token and trims whitespace', async () => {
+    const code = 'LO-78e74975-7024-49d6-87c1-0b112e3e94ff';
     await request(app.getHttpServer())
       .get('/stock-trace/full')
-      .query({ lotId: 'invalid' })
-      .expect(400);
+      .query({ lotId: ` ${code} ` })
+      .expect(200);
+    expect(service.getFullTrace).toHaveBeenLastCalledWith(
+      expect.objectContaining({ lotId: code }),
+    );
   });
   it('requires an identity', async () => {
     await request(app.getHttpServer()).get('/stock-trace/full').expect(400);

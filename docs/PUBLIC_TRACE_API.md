@@ -4,17 +4,19 @@
 
 ## Định danh duy nhất
 
-Client chỉ truyền `GET /stock-trace/full?lotId=<UUID>`, không cần token.
+Client chỉ truyền `GET /stock-trace/full?lotId=<UUID-hoặc-mã-lô>`, không cần token.
 
-Backend dùng một truy vấn `UNION ALL` để dò ID trong:
+Ví dụ: `GET /stock-trace/full?lotId=LO-78e74975-7024-49d6-87c1-0b112e3e94ff`.
 
-- `stock_lots`: lô nguyên/nhiên liệu hoặc lô kho.
+Backend so khớp chính xác UUID hoặc mã lô, dùng một truy vấn `UNION ALL` để dò ID trong:
+
+- `stock_lots`: dò `id` hoặc `lot_code` của lô nguyên/nhiên liệu/lô kho.
 - `kitchen_production_batches`: mẻ chế biến.
 - `finished_units`: một phần thành phẩm, có serial riêng.
-- `kitchen_operations` với `kind='finished-inventory'`: lô thành phẩm trong bếp, trỏ về mẻ qua `payload.batchId`.
+- `kitchen_operations` với `kind='finished-inventory'`: dò `id` hoặc `payload.lotCode` của lô thành phẩm trong bếp, trỏ về mẻ qua `payload.batchId`.
 
 Tự trả đúng loại dữ liệu theo bản ghi tìm được. Client không gửi `batchId`, `unitId`, loại sản phẩm hay chi nhánh.
-Thiếu/sai định dạng `lotId` trả HTTP 400; không tìm thấy trả HTTP 404 (`TRACE_ID_NOT_FOUND`).
+`lotId` bắt buộc, không được rỗng và tối đa 255 ký tự. Giá trị không hợp lệ trả HTTP 400; không tìm thấy trả HTTP 404 (`TRACE_ID_NOT_FOUND`).
 ID khớp nhiều loại trả HTTP 409 (`TRACE_ID_AMBIGUOUS`), không chọn tuỳ tiện một bản ghi.
 Các cờ `includeTimeline`, `includeMovements`, `includeConsumption`, `includeRecipe` vẫn là tuỳ chọn, không phải định danh.
 

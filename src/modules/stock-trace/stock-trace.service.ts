@@ -1,6 +1,7 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
+import { isUUID } from 'class-validator';
 import {
   StockLot,
   StockMovement,
@@ -808,21 +809,27 @@ export class StockTraceService {
   // ============================================
 
   async getFullTrace(query: FullTraceQueryDto) {
-    if (query.lotId) {
+    let resolvedLotId = query.lotId;
+    if (query.lotId !== undefined) {
+      if (typeof query.lotId !== 'string' || !query.lotId.trim() || query.lotId.trim().length > 255)
+        throw new BadRequestException('Mã truy xuất không hợp lệ (tối đa 255 ký tự).');
+      const identity = query.lotId.trim();
       const matches = await this.dataSource.query(
-        `SELECT 'LOT' AS kind, id, NULL::text AS "batchId" FROM stock_lots WHERE id=$1::uuid
+        `SELECT 'LOT' AS kind, id, NULL::text AS "batchId" FROM stock_lots WHERE id=$1::uuid OR lot_code=$2
          UNION ALL
          SELECT 'BATCH', id, id::text FROM kitchen_production_batches WHERE id=$1::uuid
          UNION ALL
          SELECT 'UNIT', id, batch_id::text FROM finished_units WHERE id=$1::uuid
          UNION ALL
          SELECT 'FINISHED_LOT', id, payload->>'batchId' FROM kitchen_operations
-         WHERE id=$1::uuid AND kind='finished-inventory'`,
-        [query.lotId],
+         WHERE kind='finished-inventory' AND (id=$1::uuid OR payload->>'lotCode'=$2)
+         LIMIT 2`,
+        [isUUID(identity) ? identity : null, identity],
       );
       if (!matches.length) throw new NotFoundException('TRACE_ID_NOT_FOUND');
       if (matches.length > 1) throw new ConflictException('TRACE_ID_AMBIGUOUS');
       const match = matches[0];
+      resolvedLotId = match.id;
       if (match.kind === 'UNIT') {
         const unit = await this.dataSource
           .getRepository(FinishedUnit)
@@ -835,7 +842,7 @@ export class StockTraceService {
         return this.getProductionFullTrace(match.batchId, query);
       }
     }
-    const lot = await this.resolveLot(query);
+    const lot = await this.resolveLot({ ...query, lotId: resolvedLotId });
     if (!lot) {
       throw new NotFoundException('Không tìm thấy lô với tham số đã cung cấp');
     }

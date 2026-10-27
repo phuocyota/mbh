@@ -155,7 +155,7 @@ describe('StockTraceService', () => {
     };
 
     mockDataSource = {
-      query: jest.fn(async (_sql, args) => [{ kind: 'LOT', id: args[0] }]),
+      query: jest.fn(async (_sql, args) => [{ kind: 'LOT', id: args[0] || args[1] }]),
       manager: {
         getRepository: jest.fn((entity: any) => {
           const entityName = entity.name || entity;
@@ -452,11 +452,32 @@ describe('StockTraceService', () => {
       mockDataSource.query.mockResolvedValue([{ kind: 'LOT' }, { kind: 'BATCH' }]);
       await expect(service.getFullTrace({ lotId: 'duplicate' })).rejects.toThrow('TRACE_ID_AMBIGUOUS');
     });
+    it('resolves a material lot code to its UUID before fetching the trace', async () => {
+      const code = 'LO-78e74975-7024-49d6-87c1-0b112e3e94ff';
+      const id = '5a8d861e-301f-4de2-b13a-2991beb29864';
+      mockDataSource.query.mockResolvedValue([{ kind: 'LOT', id }]);
+      await service.getFullTrace({ lotId: ` ${code} `, includeMovements: false });
+      expect(mockDataSource.query).toHaveBeenCalledWith(expect.stringContaining('lot_code=$2'), [null, code]);
+      expect(mockRepositories.stockLotRepository.findOne).toHaveBeenCalledWith({ where: { id } });
+    });
+    it('keeps UUID lookup available and binds the UUID without casting lot codes', async () => {
+      const id = '5a8d861e-301f-4de2-b13a-2991beb29864';
+      mockDataSource.query.mockResolvedValue([{ kind: 'LOT', id }]);
+      await service.getFullTrace({ lotId: id, includeMovements: false });
+      expect(mockDataSource.query).toHaveBeenCalledWith(expect.stringContaining('UNION ALL'), [id, id]);
+    });
+    it('resolves finished lot codes and reports duplicates instead of choosing a lot', async () => {
+      setupBatch();
+      mockDataSource.query.mockResolvedValue([{ kind: 'FINISHED_LOT', id: 'finished-lot', batchId: 'batch-1' }]);
+      expect(await service.getFullTrace({ lotId: 'ME-12345678' })).toMatchObject({ production: { batchId: 'batch-1' } });
+      mockDataSource.query.mockResolvedValue([{ kind: 'LOT', id: 'lot-a' }, { kind: 'LOT', id: 'lot-b' }]);
+      await expect(service.getFullTrace({ lotId: 'LO-DUPLICATE' })).rejects.toThrow('TRACE_ID_AMBIGUOUS');
+    });
     it('resolves a finished inventory lot through the same lotId parameter', async () => {
       setupBatch();
       mockDataSource.query.mockResolvedValue([{ kind: 'FINISHED_LOT', id: 'finished-lot', batchId: 'batch-1' }]);
       expect(await service.getFullTrace({ lotId: 'finished-lot' })).toMatchObject({ production: { batchId: 'batch-1' } });
-      expect(mockDataSource.query).toHaveBeenCalledWith(expect.stringContaining('UNION ALL'), ['finished-lot']);
+      expect(mockDataSource.query).toHaveBeenCalledWith(expect.stringContaining('UNION ALL'), [null, 'finished-lot']);
     });
   });
 

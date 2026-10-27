@@ -1,4 +1,11 @@
-import { IsOptional, IsUUID, IsString, IsBoolean } from 'class-validator';
+import {
+  IsOptional,
+  IsUUID,
+  IsString,
+  IsBoolean,
+  IsNotEmpty,
+  MaxLength,
+} from 'class-validator';
 import { Transform } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional, PickType } from '@nestjs/swagger';
 
@@ -81,8 +88,11 @@ export class PublicFullTraceQueryDto extends PickType(FullTraceQueryDto, [
 ] as const) {
   @ApiProperty({
     description:
-      'UUID của lô nguyên/nhiên liệu, lô thành phẩm, mẻ hoặc phần thành phẩm; API tự xác định loại.',
+      'UUID hoặc mã lô (ví dụ LO-78e74975-7024-49d6-87c1-0b112e3e94ff); API tự xác định loại.',
   })
-  @IsUUID()
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(255)
   lotId: string;
 }
