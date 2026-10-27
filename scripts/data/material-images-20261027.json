@@ -1,0 +1,73 @@
+{
+  "branchId": "4a3ce246-0adb-4b06-8065-71714eeab9c7",
+  "branchName": "Tiểu học Thị Trấn",
+  "purpose": "Photographic product illustrations, not evidence of actual supplied lots or production batches",
+  "items": [
+    {
+      "id": "8037a3b5-5a85-4a09-a2ad-c24103b955e0",
+      "code": "NL-BANH-MI-KHONG",
+      "name": "Bánh mì không",
+      "imageUrl": "https://upload.wikimedia.org/wikipedia/commons/2/20/Baguette-246424.jpg",
+      "source": "https://commons.wikimedia.org/wiki/File:Baguette-246424.jpg",
+      "author": "cocoparisienne",
+      "license": "CC0",
+      "licenseUrl": "http://creativecommons.org/publicdomain/zero/1.0/deed.en",
+      "changes": "None; original external image URL"
+    },
+    {
+      "id": "06883548-9cfd-4500-997a-d7cd4e01de3d",
+      "code": "NL-CHA",
+      "name": "Chả",
+      "imageUrl": "https://upload.wikimedia.org/wikipedia/commons/1/1f/Gio_lua_2.jpg",
+      "source": "https://commons.wikimedia.org/wiki/File:Gio_lua_2.jpg",
+      "author": "Bánh_chưng_và_giò_lụa.jpg : Yun Huang Yong derivative work: Phó Nháy ( talk )",
+      "license": "CC BY 2.0",
+      "licenseUrl": "https://creativecommons.org/licenses/by/2.0",
+      "changes": "None; original external image URL"
+    },
+    {
+      "id": "711c0adc-b8af-4555-81da-7577521af852",
+      "code": "DEMO-DAU",
+      "name": "DEMO - Dầu ăn",
+      "imageUrl": "https://upload.wikimedia.org/wikipedia/commons/8/8b/%D0%A4%D0%B8%D0%B3%D1%83%D1%80%D0%BD%D0%B0%D1%8F_%D0%B1%D1%83%D1%82%D1%8B%D0%BB%D0%BA%D0%B0_%D1%81_%D0%BF%D0%BE%D0%B4%D1%81%D0%BE%D0%BB%D0%BD%D0%B5%D1%87%D0%BD%D1%8B%D0%BC_%D0%BC%D0%B0%D1%81%D0%BB%D0%BE%D0%BC.jpg",
+      "source": "https://commons.wikimedia.org/wiki/File:%D0%A4%D0%B8%D0%B3%D1%83%D1%80%D0%BD%D0%B0%D1%8F_%D0%B1%D1%83%D1%82%D1%8B%D0%BB%D0%BA%D0%B0_%D1%81_%D0%BF%D0%BE%D0%B4%D1%81%D0%BE%D0%BB%D0%BD%D0%B5%D1%87%D0%BD%D1%8B%D0%BC_%D0%BC%D0%B0%D1%81%D0%BB%D0%BE%D0%BC.jpg",
+      "author": "George Shuklin",
+      "license": "Public domain",
+      "licenseUrl": null,
+      "changes": "None; original external image URL"
+    },
+    {
+      "id": "4e70be97-5289-481a-be26-f828fe02e604",
+      "code": "DEMO-GAO",
+      "name": "DEMO - Gạo",
+      "imageUrl": "https://upload.wikimedia.org/wikipedia/commons/a/a3/White_rice.jpg",
+      "source": "https://commons.wikimedia.org/wiki/File:White_rice.jpg",
+      "author": "Lucy Gull",
+      "license": "CC BY-SA 3.0",
+      "licenseUrl": "https://creativecommons.org/licenses/by-sa/3.0",
+      "changes": "None; original external image URL"
+    },
+    {
+      "id": "d7d062f0-7cb0-4a9f-9945-327d1b22264b",
+      "code": "DEMO-HEO",
+      "name": "DEMO - Thịt heo",
+      "imageUrl": "https://upload.wikimedia.org/wikipedia/commons/0/0d/Raw_pork_spareribs.jpg",
+      "source": "https://commons.wikimedia.org/wiki/File:Raw_pork_spareribs.jpg",
+      "author": "Mendaliv",
+      "license": "Public domain",
+      "licenseUrl": null,
+      "changes": "None; original external image URL"
+    },
+    {
+      "id": "99ce2677-d735-4a0c-9766-f6976441de9b",
+      "code": "NL-RAU",
+      "name": "Rau",
+      "imageUrl": "https://upload.wikimedia.org/wikipedia/commons/0/0b/Romaine_lettuce_%2820241112%29.jpg",
+      "source": "https://commons.wikimedia.org/wiki/File:Romaine_lettuce_(20241112).jpg",
+      "author": "Fumikas Sagisavas",
+      "license": "CC0",
+      "licenseUrl": "http://creativecommons.org/publicdomain/zero/1.0/deed.en",
+      "changes": "None; original external image URL"
+    }
+  ]
+}

@@ -1033,6 +1033,7 @@ export class StockTraceService {
                   id: inputProduct.id,
                   name: inputProduct.name,
                   productType: inputProduct.productType,
+                  imageUrl: inputProduct.imageUrl?.trim() || null,
                 }
               : null,
             ...quantities,

@@ -56,7 +56,7 @@ Bổ sung các trường ở cấp response data:
 
 Mỗi phần tử `inputs` có:
 
-- `lotId`, `lotCode`, `product` (ID, tên, loại nguyên/nhiên liệu).
+- `lotId`, `lotCode`, `product` (ID, tên, loại nguyên/nhiên liệu, `imageUrl` ảnh minh hoạ hoặc null).
 - `receivedAt`, `purchasedAt`: ngày nhập và ngày mua của riêng lô đó.
 - `origin`: chứng từ nhập và nhà cung cấp theo contract hiện có.
 - `issuedQuantity`, `returnedQuantity`, `consumedQuantity`: số lượng đã xuất, hoàn trả và còn lại sau hoàn trả.
