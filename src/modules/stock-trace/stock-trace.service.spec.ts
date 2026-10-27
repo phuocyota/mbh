@@ -155,6 +155,7 @@ describe('StockTraceService', () => {
     };
 
     mockDataSource = {
+      query: jest.fn(async (_sql, args) => [{ kind: 'LOT', id: args[0] }]),
       manager: {
         getRepository: jest.fn((entity: any) => {
           const entityName = entity.name || entity;
@@ -264,4 +265,199 @@ describe('StockTraceService', () => {
       expect(result.data).toBeDefined();
     });
   });
+  describe('public full trace for materials and cooked portions', () => {
+    const setupBatch = (imageUrl: string | null = '/uploads/actual.jpg') => {
+      const batch = {
+        id: 'batch-1',
+        productId: 'dish',
+        status: 'COMPLETED',
+        actualQuantity: 50,
+        startedAt: new Date('2026-10-20T02:00:00Z'),
+        readyAt: new Date('2026-10-20T02:30:00Z'),
+        completedAt: new Date('2026-10-20T02:31:00Z'),
+        details: {
+          imageUrl,
+          servingExpiresAt: '2026-10-20T04:30:00Z',
+          actualLots: [{ lotId: 'food', used: 4, waste: 1 }],
+        },
+      };
+      mockDataSource.query.mockImplementation(async () => [{ kind: 'BATCH', id: batch.id, batchId: batch.id }]);
+      mockRepositories.kitchenBatchRepository.findOne.mockResolvedValue(batch);
+      mockRepositories.productRepository.findOne.mockImplementation(
+        async ({ where }) =>
+          where.id === 'dish'
+            ? {
+                id: 'dish',
+                name: 'Cơm thịt kho trứng',
+                productType: 'FINISHED_GOOD',
+                imageUrl: '/uploads/illustration.jpg',
+              }
+            : {
+                id: where.id,
+                name: where.id,
+                productType: where.id === 'fuel' ? 'FUEL' : 'INGREDIENT',
+              },
+      );
+      mockRepositories.stockLotRepository.findOne.mockImplementation(
+        async ({ where }) => ({
+          id: where.id,
+          lotCode: where.id,
+          productId: where.id,
+        }),
+      );
+      mockRepositories.stockMovementRepository.find.mockImplementation(
+        async ({ where }) =>
+          where.referenceId
+            ? [
+                { lotId: 'food', quantity: -6 },
+                { lotId: 'food', quantity: 1 },
+                { lotId: 'fuel', quantity: -2 },
+                { lotId: 'returned', quantity: -3 },
+                { lotId: 'returned', quantity: 3 },
+              ]
+            : [
+                {
+                  lotId: where.lotId,
+                  quantity: 10,
+                  referenceId: `receipt-${where.lotId}`,
+                },
+              ],
+      );
+      mockRepositories.stockReceiptImportRepository.findOne.mockImplementation(
+        async ({ where }) => ({
+          id: where.id,
+          fromType: 'SUPPLIER',
+          createdAt: new Date(
+            where.id === 'receipt-food'
+              ? '2026-10-19T01:00:00Z'
+              : '2026-10-18T01:00:00Z',
+          ),
+        }),
+      );
+      mockRepositories.stockReceiptDetailRepository.find.mockImplementation(
+        async ({ where }) => [
+          {
+            inputDetails: {
+              lotCode: where.productId,
+              purchasedAt:
+                where.productId === 'food' ? '2026-10-18' : '2026-10-17',
+            },
+          },
+        ],
+      );
+      return batch;
+    };
+    it('exposes receipt time separately from purchase time for ingredients', async () => {
+      mockRepositories.stockReceiptImportRepository.findOne.mockResolvedValue({
+        ...mockImportReceipt,
+        createdAt: new Date('2026-10-19T01:00:00Z'),
+      });
+      const trace = await service.getFullTrace({
+        lotId: mockLot.id,
+        includeMovements: false,
+      });
+      expect(trace).toMatchObject({
+        type: 'INGREDIENT',
+        receivedAt: '2026-10-19T01:00:00.000Z',
+        purchasedAt: null,
+      });
+    });
+    it('traces actual ingredient and fuel lots with individual receipt dates and lifecycle', async () => {
+      setupBatch();
+      const trace = await service.getFullTrace({ lotId: 'batch-1' });
+      expect(trace).toMatchObject({
+        type: 'FINISHED_GOOD',
+        imageSource: 'ACTUAL',
+        imageUrl: '/uploads/actual.jpg',
+        lifecycle: {
+          inStockAt: '2026-10-18T01:00:00.000Z',
+          readyAt: new Date('2026-10-20T02:30:00Z'),
+        },
+      });
+      expect(trace.inputs).toHaveLength(2);
+      expect(trace.inputs).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            lotId: 'food',
+            receivedAt: '2026-10-19T01:00:00.000Z',
+            purchasedAt: '2026-10-18',
+            consumedQuantity: 5,
+            usedQuantity: 4,
+            wasteQuantity: 1,
+          }),
+          expect.objectContaining({
+            lotId: 'fuel',
+            receivedAt: '2026-10-18T01:00:00.000Z',
+            product: expect.objectContaining({ productType: 'FUEL' }),
+          }),
+        ]),
+      );
+      expect(trace.timeline.map((row) => row.type)).toEqual([
+        'IN_STOCK',
+        'IN_STOCK',
+        'MAKE',
+        'READY',
+        'COMPLETED',
+        'EXPIRED_AT',
+      ]);
+    });
+    it.each([null, '', '   '])(
+      'falls back to the illustration for missing batch photo %p',
+      async (image) => {
+        setupBatch(image);
+        expect(
+          await service.getFullTrace({ lotId: 'batch-1' }),
+        ).toMatchObject({
+          imageSource: 'ILLUSTRATION',
+          imageUrl: '/uploads/illustration.jpg',
+        });
+      },
+    );
+    it('returns null when neither photo exists and honors timeline suppression', async () => {
+      setupBatch(null);
+      mockRepositories.productRepository.findOne.mockResolvedValue({
+        id: 'dish',
+        productType: 'FINISHED_GOOD',
+        imageUrl: null,
+      });
+      expect(
+        await service.getFullTrace({
+          lotId: 'batch-1',
+          includeTimeline: false,
+        }),
+      ).toMatchObject({ imageUrl: null, imageSource: null, timeline: [] });
+    });
+    it('resolves a portion QR to its own batch, serial and immutable expiry', async () => {
+      setupBatch();
+      const unit = {
+        id: 'unit-1',
+        batchId: 'batch-1',
+        serial: 1,
+        expiresAt: new Date('2026-10-20T03:30:00Z'),
+      };
+      mockDataSource.query.mockResolvedValue([{ kind: 'UNIT', id: unit.id, batchId: unit.batchId }]);
+      mockDataSource.getRepository = jest.fn(() => ({
+        findOne: jest.fn(async () => unit),
+      }));
+      expect(
+        await service.getFullTrace({ lotId: 'unit-1' }),
+      ).toMatchObject({
+        unit: { id: 'unit-1', serial: 1, batchId: 'batch-1' },
+        lifecycle: { expiresAt: unit.expiresAt },
+      });
+    });
+    it('returns 404 for unknown identities and rejects ambiguous identities', async () => {
+      mockDataSource.query.mockResolvedValue([]);
+      await expect(service.getFullTrace({ lotId: 'missing' })).rejects.toThrow('TRACE_ID_NOT_FOUND');
+      mockDataSource.query.mockResolvedValue([{ kind: 'LOT' }, { kind: 'BATCH' }]);
+      await expect(service.getFullTrace({ lotId: 'duplicate' })).rejects.toThrow('TRACE_ID_AMBIGUOUS');
+    });
+    it('resolves a finished inventory lot through the same lotId parameter', async () => {
+      setupBatch();
+      mockDataSource.query.mockResolvedValue([{ kind: 'FINISHED_LOT', id: 'finished-lot', batchId: 'batch-1' }]);
+      expect(await service.getFullTrace({ lotId: 'finished-lot' })).toMatchObject({ production: { batchId: 'batch-1' } });
+      expect(mockDataSource.query).toHaveBeenCalledWith(expect.stringContaining('UNION ALL'), ['finished-lot']);
+    });
+  });
+
 });

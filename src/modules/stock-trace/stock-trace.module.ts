@@ -4,6 +4,7 @@ import { StockSerialService } from '../stock/stock-serial.service';
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { StockTraceController } from './stock-trace.controller';
+import { PublicStockTraceController } from './public-stock-trace.controller';
 import { StockTraceService } from './stock-trace.service';
 import { ProductionTraceController } from '../production-trace/production-trace.controller';
 import {
@@ -42,6 +43,7 @@ import {
   ],
   controllers: [
     StockTraceController,
+    PublicStockTraceController,
     ProductionTraceController,
     TraceLookupController,
   ],

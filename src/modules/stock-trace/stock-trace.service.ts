@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
 import {
@@ -25,8 +25,10 @@ import {
   ExpiringLotsQueryDto,
   ConsumedLotsQueryDto,
 } from './dto/trace-query.dto';
+import { FinishedUnit } from '../../entities/finished-unit.entity';
 import { FullTraceQueryDto } from './dto/full-trace-query.dto';
 import { normalizePagination, toPaginationResponse } from '../../common/dto/pagination.dto';
+import { traceStatus } from '../production-trace/production-trace.rules';
 import { localDate } from '../stock/stock-movement.service';
 
 export interface LotDetails {
@@ -806,6 +808,33 @@ export class StockTraceService {
   // ============================================
 
   async getFullTrace(query: FullTraceQueryDto) {
+    if (query.lotId) {
+      const matches = await this.dataSource.query(
+        `SELECT 'LOT' AS kind, id, NULL::text AS "batchId" FROM stock_lots WHERE id=$1::uuid
+         UNION ALL
+         SELECT 'BATCH', id, id::text FROM kitchen_production_batches WHERE id=$1::uuid
+         UNION ALL
+         SELECT 'UNIT', id, batch_id::text FROM finished_units WHERE id=$1::uuid
+         UNION ALL
+         SELECT 'FINISHED_LOT', id, payload->>'batchId' FROM kitchen_operations
+         WHERE id=$1::uuid AND kind='finished-inventory'`,
+        [query.lotId],
+      );
+      if (!matches.length) throw new NotFoundException('TRACE_ID_NOT_FOUND');
+      if (matches.length > 1) throw new ConflictException('TRACE_ID_AMBIGUOUS');
+      const match = matches[0];
+      if (match.kind === 'UNIT') {
+        const unit = await this.dataSource
+          .getRepository(FinishedUnit)
+          .findOne({ where: { id: match.id } });
+        if (!unit) throw new NotFoundException('FINISHED_UNIT_NOT_FOUND');
+        return this.getProductionFullTrace(unit.batchId, query, unit);
+      }
+      if (match.kind === 'BATCH' || match.kind === 'FINISHED_LOT') {
+        if (!match.batchId) throw new NotFoundException('BATCH_NOT_FOUND');
+        return this.getProductionFullTrace(match.batchId, query);
+      }
+    }
     const lot = await this.resolveLot(query);
     if (!lot) {
       throw new NotFoundException('Không tìm thấy lô với tham số đã cung cấp');
@@ -845,7 +874,20 @@ export class StockTraceService {
         ? this.buildTimeline(lot, origin, movementsEnriched, consumption)
         : [];
 
+    const productionTrace =
+      origin.type === 'PRODUCTION' && origin.batchId
+        ? await this.getProductionFullTrace(origin.batchId, query)
+        : null;
     return {
+      ...(productionTrace
+        ? productionTrace
+        : {
+            type: product?.productType || 'LOT',
+            imageUrl: product?.imageUrl?.trim() || null,
+            imageSource: product?.imageUrl?.trim() ? 'ILLUSTRATION' : null,
+            receivedAt: 'receivedAt' in origin ? origin.receivedAt : null,
+            purchasedAt: 'purchasedAt' in origin ? origin.purchasedAt : null,
+          }),
       generatedAt: new Date().toISOString(),
       lot: {
         id: lot.id,
@@ -860,6 +902,7 @@ export class StockTraceService {
         ? {
             id: product.id,
             name: product.name,
+            imageUrl: product.imageUrl?.trim() || null,
             code: (product as any).code,
             productType: product.productType,
             unit: (product as any).unit,
@@ -887,8 +930,7 @@ export class StockTraceService {
               : null,
             items: (recipe.items ?? []).map((it) => ({
               ingredientProductId: it.ingredientProductId,
-              ingredientName:
-                (it as any).ingredientProduct?.name ?? 'Unknown',
+              ingredientName: (it as any).ingredientProduct?.name ?? 'Unknown',
               quantity: Number(it.quantity),
               unitId: it.unitId,
               wasteFactor: Number(it.wasteFactor ?? 0),
@@ -898,7 +940,179 @@ export class StockTraceService {
         : null,
       consumption,
       movements: movementsEnriched,
-      timeline,
+      timeline: productionTrace
+        ? [...productionTrace.timeline, ...timeline]
+        : timeline,
+    };
+  }
+
+  private async getProductionFullTrace(
+    batchId: string,
+    query: FullTraceQueryDto,
+    unit?: FinishedUnit,
+  ) {
+    const batch = await this.kitchenBatchRepository.findOne({
+      where: { id: batchId },
+    });
+    if (!batch) throw new NotFoundException('BATCH_NOT_FOUND');
+    const [product, movements] = await Promise.all([
+      this.productRepository.findOne({ where: { id: batch.productId } }),
+      this.stockMovementRepository.find({
+        where: { referenceId: batch.id },
+        order: { createdAt: 'ASC' },
+      }),
+    ]);
+    // Trace actual lots issued to this batch, never infer origins from the current recipe.
+    const issued = new Map<
+      string,
+      { issuedQuantity: number; returnedQuantity: number }
+    >();
+    for (const movement of movements) {
+      if (!movement.lotId) continue;
+      const value = issued.get(movement.lotId) || {
+        issuedQuantity: 0,
+        returnedQuantity: 0,
+      };
+      const quantity = Number(movement.quantity);
+      if (quantity < 0) value.issuedQuantity -= quantity;
+      else value.returnedQuantity += quantity;
+      issued.set(movement.lotId, value);
+    }
+    const inputs = await Promise.all(
+      [...issued.entries()]
+        .filter(
+          ([, value]) =>
+            value.issuedQuantity - value.returnedQuantity > 0.00005,
+        )
+        .map(async ([lotId, quantities]) => {
+          const lot = await this.stockLotRepository.findOne({
+            where: { id: lotId },
+          });
+          if (!lot)
+            return {
+              lotId,
+              ...quantities,
+              traceabilityComplete: false,
+              product: null,
+              lotCode: null,
+              receivedAt: null,
+              purchasedAt: null,
+              origin: null,
+              usedQuantity: null,
+              wasteQuantity: null,
+              consumedQuantity: Number(
+                (
+                  quantities.issuedQuantity - quantities.returnedQuantity
+                ).toFixed(4),
+              ),
+            };
+          const [inputProduct, inputMovements] = await Promise.all([
+            this.productRepository.findOne({ where: { id: lot.productId } }),
+            this.stockMovementRepository.find({
+              where: { lotId },
+              order: { createdAt: 'ASC' },
+            }),
+          ]);
+          const origin = await this.resolveOrigin(lot, inputMovements);
+          const actual = Array.isArray(batch.details?.actualLots)
+            ? batch.details.actualLots.find((row: any) => row.lotId === lotId)
+            : null;
+          return {
+            lotId,
+            lotCode: lot.lotCode,
+            tracePath: `/stock-trace/full?lotId=${encodeURIComponent(lotId)}`,
+            product: inputProduct
+              ? {
+                  id: inputProduct.id,
+                  name: inputProduct.name,
+                  productType: inputProduct.productType,
+                }
+              : null,
+            ...quantities,
+            consumedQuantity: Number(
+              (quantities.issuedQuantity - quantities.returnedQuantity).toFixed(
+                4,
+              ),
+            ),
+            usedQuantity: actual ? Number(actual.used) : null,
+            wasteQuantity: actual ? Number(actual.waste) : null,
+            purchasedAt: 'purchasedAt' in origin ? origin.purchasedAt : null,
+            receivedAt: 'receivedAt' in origin ? origin.receivedAt : null,
+            origin,
+            traceabilityComplete: origin.type !== 'UNKNOWN',
+          };
+        }),
+    );
+    const receivedDates = inputs
+      .map((input) => input.receivedAt)
+      .filter((date): date is string => !!date)
+      .sort();
+    const actualImage =
+      typeof batch.details?.imageUrl === 'string'
+        ? batch.details.imageUrl.trim()
+        : '';
+    const illustration = product?.imageUrl?.trim() || null;
+    const lifecycle = {
+      inStockAt: receivedDates[0] || null,
+      startedAt: batch.startedAt || null,
+      readyAt: batch.readyAt || null,
+      completedAt: batch.completedAt || null,
+      expiresAt: unit?.expiresAt || batch.details?.servingExpiresAt || null,
+    };
+    return {
+      generatedAt: new Date().toISOString(),
+      type: 'FINISHED_GOOD',
+      unit: unit
+        ? { id: unit.id, serial: unit.serial, batchId: unit.batchId }
+        : null,
+      product: product
+        ? {
+            id: product.id,
+            name: product.name,
+            code: product.code,
+            productType: product.productType,
+            imageUrl: product.imageUrl?.trim() || null,
+          }
+        : null,
+      imageUrl: actualImage || illustration,
+      imageSource: actualImage
+        ? 'ACTUAL'
+        : illustration
+          ? 'ILLUSTRATION'
+          : null,
+      status: traceStatus(
+        unit ? 'UNIT' : 'BATCH',
+        batch.status,
+        lifecycle.expiresAt,
+      ),
+      production: {
+        batchId: batch.id,
+        status: batch.status,
+        actualQuantity: batch.actualQuantity,
+      },
+      lifecycle,
+      inputs,
+      timeline:
+        query.includeTimeline === false
+          ? []
+          : [
+              ...inputs
+                .filter((input) => input.receivedAt)
+                .map((input) => ({
+                  type: 'IN_STOCK',
+                  at: input.receivedAt,
+                  lotId: input.lotId,
+                  product: input.product,
+                })),
+              ...[
+                ['MAKE', lifecycle.startedAt],
+                ['READY', lifecycle.readyAt],
+                ['COMPLETED', lifecycle.completedAt],
+                ['EXPIRED_AT', lifecycle.expiresAt],
+              ]
+                .filter(([, at]) => !!at)
+                .map(([type, at]) => ({ type, at })),
+            ],
     };
   }
 
