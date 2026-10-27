@@ -452,6 +452,18 @@ describe('StockTraceService', () => {
       mockDataSource.query.mockResolvedValue([{ kind: 'LOT' }, { kind: 'BATCH' }]);
       await expect(service.getFullTrace({ lotId: 'duplicate' })).rejects.toThrow('TRACE_ID_AMBIGUOUS');
     });
+    it('reports confirmed handover without expiring the historical batch or changing its expiry', async () => {
+      const batch = setupBatch();
+      (batch.details as any).workflowTicketId = 'ticket';
+      const deliveredAt = '2026-10-20T03:00:00Z';
+      mockRepositories.kitchenOperationRepository.findOne.mockResolvedValue({ payload: { partialHandovers: [{
+        deliveredAt, receivedBy: 'Cô Lan', items: [{ batchId: batch.id, quantity: 50 }],
+      }] } });
+      const result = await service.getFullTrace({ lotId: batch.id });
+      expect(result).toMatchObject({ status: 'HANDED_OVER', handover: { deliveredAt },
+        lifecycle: { expiresAt: batch.details.servingExpiresAt, handedOverAt: deliveredAt } });
+      expect(mockRepositories.kitchenOperationRepository.findOne).toHaveBeenCalledWith({ where: { kind: 'task-flow', parentId: 'ticket' } });
+    });
     it('resolves a material lot code to its UUID before fetching the trace', async () => {
       const code = 'LO-78e74975-7024-49d6-87c1-0b112e3e94ff';
       const id = '5a8d861e-301f-4de2-b13a-2991beb29864';

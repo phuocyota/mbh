@@ -1,4 +1,4 @@
-import { traceStatus, portionCount, servingExpiryFromReady } from './production-trace.rules';
+import { traceStatus, portionCount, servingExpiryFromReady, confirmedBatchHandover } from './production-trace.rules';
 import {
   consumeBatchLots,
   createFinishedUnits,
@@ -140,5 +140,29 @@ describe('production traceability', () => {
       createFinishedUnits(m, batch, 'branch', 'staff'),
     ).rejects.toThrow('FINISHED_UNITS_ALREADY_CREATED');
     expect(repo.insert).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('Trace status after confirmed handover', () => {
+  const expiry = '2026-10-19T05:00:00Z';
+  const handedOverAt = '2026-10-19T04:00:00Z';
+  it('keeps already handed-over portions and batches in their historical final status', () => {
+    expect(traceStatus('UNIT', 'COMPLETED', expiry, now, handedOverAt)).toBe('HANDED_OVER');
+    expect(traceStatus('BATCH', 'COMPLETED', expiry, now, handedOverAt)).toBe('HANDED_OVER');
+    expect(traceStatus('LOT', '', '2026-10-18', now, handedOverAt)).toBe('EXPIRED');
+  });
+  it('does not assume completed or transported food has been received', () => {
+    expect(traceStatus('UNIT', 'COMPLETED', expiry, now)).toBe('EXPIRED');
+    expect(traceStatus('BATCH', 'IN_TRANSIT', expiry, now)).toBe('EXPIRED');
+    expect(confirmedBatchHandover({ transport: { dispatchedAt: handedOverAt } }, 'batch', 50)).toBeNull();
+    expect(confirmedBatchHandover({ status: 'HANDED_OVER' }, 'batch', 50)).toBeNull();
+  });
+  it('recognizes only the batch actually handed over in a multi-round ticket', () => {
+    const record = { deliveredAt: handedOverAt, receivedBy: 'Cô Lan', items: [{ batchId: 'batch-a', quantity: 50 }] };
+    const payload = { partialHandovers: [record], handover: { ...record, items: [{ batchId: 'batch-b', quantity: 10 }] } };
+    expect(confirmedBatchHandover(payload, 'batch-a', 50)).toMatchObject({ deliveredAt: handedOverAt, receivedBy: 'Cô Lan' });
+    expect(confirmedBatchHandover(payload, 'batch-b', 50)).toBeNull();
+    expect(confirmedBatchHandover(payload, 'batch-c', 50)).toBeNull();
+    expect(confirmedBatchHandover({ handover: { ...record, deliveredAt: null } }, 'batch-a', 50)).toBeNull();
   });
 });

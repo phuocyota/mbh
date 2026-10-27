@@ -6,7 +6,11 @@ export function traceStatus(
   status: string,
   expiresAt?: string | Date | null,
   now = new Date(),
+  handedOverAt?: string | Date | null,
 ) {
+  // A historical handover is a workflow outcome, not remaining stock to expire.
+  if (kind !== 'LOT' && handedOverAt && Number.isFinite(new Date(handedOverAt).getTime()))
+    return 'HANDED_OVER';
   const expired =
     expiresAt &&
     (kind === 'LOT'
@@ -41,4 +45,22 @@ export function servingExpiryFromReady(
   if (!Number.isFinite(expiry.getTime()))
     throw new BadRequestException('INVALID_RECOMMENDED_USE_MINUTES');
   return expiry.toISOString();
+}
+
+/** A completed/transported batch is not handed over until its own full yield is confirmed. */
+export function confirmedBatchHandover(payload: any, batchId: string, actualQuantity: unknown) {
+  const quantity = Number(actualQuantity);
+  if (!Number.isFinite(quantity) || quantity <= 0) return null;
+  const records = [payload?.handover, ...(Array.isArray(payload?.partialHandovers) ? payload.partialHandovers : [])];
+  for (const record of records) {
+    if (!record || !record.deliveredAt || !Number.isFinite(new Date(record.deliveredAt).getTime()) || !Array.isArray(record.items)) continue;
+    const handed = record.items.filter((item: any) => item?.batchId === batchId)
+      .reduce((sum: number, item: any) => sum + (Number(item.quantity) > 0 ? Number(item.quantity) : 0), 0);
+    if (Number.isFinite(handed) && handed + 0.00005 >= quantity) return {
+      deliveredAt: record.deliveredAt,
+      receivedBy: record.receivedBy || null,
+      receiverPlace: record.receiverPlace || null,
+    };
+  }
+  return null;
 }

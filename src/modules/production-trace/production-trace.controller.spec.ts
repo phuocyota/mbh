@@ -6,6 +6,7 @@ import {
   Product,
   StockLot,
   Stock,
+  StockMovement,
 } from '../../entities';
 
 describe('Production trace API scope and labels', () => {
@@ -18,14 +19,14 @@ describe('Production trace API scope and labels', () => {
     serial: 1,
     expiresAt: new Date('2099-01-01T00:00:00Z'),
   };
-  function harness(branchId = 'branch') {
-    const trace: any = { getFullTrace: jest.fn(async () => ({})) };
+  function harness(branchId = 'branch', expiresAt = unit.expiresAt) {
+    const trace: any = { getBatchHandover: jest.fn(async () => null), getFullTrace: jest.fn(async () => ({})) };
     const db: any = {
       getRepository: (type: any) => {
         if (type === FinishedUnit)
           return {
-            findOneBy: async () => ({ ...unit, branchId }),
-            findAndCount: async () => [[unit], 1],
+            findOneBy: async () => ({ ...unit, branchId, expiresAt }),
+            findAndCount: async () => [[{ ...unit, expiresAt }], 1],
           };
         if (type === KitchenProductionBatch)
           return {
@@ -42,6 +43,7 @@ describe('Production trace API scope and labels', () => {
           return { findOneByOrFail: async () => ({ branchId }) };
         if (type === Product)
           return { findOneBy: async () => ({ name: 'Món ăn' }) };
+        if (type === StockMovement) return { createQueryBuilder: () => ({ where() { return this; }, getMany: async () => [] }) };
         if (type === StockLot)
           return { findOneBy: async () => ({ stockId: 'stock' }) };
         if (type === Stock)
@@ -60,6 +62,12 @@ describe('Production trace API scope and labels', () => {
     expect(a.qrSvg).toContain('<svg');
     expect(a.qrSvg).toBe(second.data[0].qrSvg);
     expect(a.status).toBe('READY');
+  });
+  it('keeps expired-by-clock labels and unit scans handed over after receipt', async () => {
+    const { controller, trace } = harness('branch', new Date(0));
+    trace.getBatchHandover.mockResolvedValue({ deliveredAt: '2026-10-20T03:00:00Z' });
+    expect((await controller.labels(actor, 'batch', {})).data[0].status).toBe('HANDED_OVER');
+    expect((await controller.unit(actor, unit.id)).status).toBe('HANDED_OVER');
   });
   it('rejects foreign batch labels and foreign portion scans', async () => {
     const { controller } = harness('foreign');

@@ -226,6 +226,7 @@ export class ProductionTraceController {
           await this.trace.getFullTrace({ lotId: move.lotId! }),
         );
     }
+    const handover = await this.trace.getBatchHandover(batch);
     return {
       batchId: id,
       productId: batch.productId,
@@ -237,7 +238,10 @@ export class ProductionTraceController {
         'BATCH',
         batch.status,
         batch.details.servingExpiresAt,
+        new Date(),
+        handover?.deliveredAt,
       ),
+      handover,
       productionStatus: batch.status,
       actualQuantity: batch.actualQuantity,
       startedAt: batch.startedAt,
@@ -291,6 +295,7 @@ export class ProductionTraceController {
     const product = await this.db
       .getRepository(Product)
       .findOneBy({ id: batch.productId });
+    const handover = await this.trace.getBatchHandover(batch);
     const labels = await Promise.all(
       units.map(async (unit) => {
         const path = `/production-trace/units/${unit.id}`;
@@ -306,7 +311,10 @@ export class ProductionTraceController {
           productName: product?.name,
           producedAt: batch.completedAt,
           expiresAt: unit.expiresAt,
-          status: traceStatus('UNIT', batch.status, unit.expiresAt),
+          status: traceStatus(
+            'UNIT', batch.status, unit.expiresAt, new Date(), handover?.deliveredAt,
+          ),
+          handover,
           tracePath: path,
           qrPayload: payload,
           qrSvg: await QRCode.toString(payload, {
@@ -333,7 +341,10 @@ export class ProductionTraceController {
       unitId: unit.id,
       serial: unit.serial,
       expiresAt: unit.expiresAt,
-      status: traceStatus('UNIT', batch.productionStatus, unit.expiresAt),
+      status: traceStatus(
+        'UNIT', batch.productionStatus, unit.expiresAt, new Date(), batch.handover?.deliveredAt,
+      ),
+      handover: batch.handover,
       batch,
     };
   }

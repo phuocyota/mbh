@@ -67,3 +67,12 @@ Mỗi phần tử `inputs` có:
 Không lấy nguyên liệu từ công thức hiện tại để suy đoán lô thực tế đã chế biến. Thiếu ngày/ảnh/số liệu thì trả null.
 `includeTimeline=false` ẩn timeline; thông tin lifecycle và đầu vào vẫn được trả để truy xuất thành phẩm.
 Các cờ `includeRecipe`, `includeConsumption`, `includeMovements` giữ nguyên ý nghĩa với truy xuất lô kho; truy xuất mẻ/phần thành phẩm trả lifecycle và đầu vào thực tế, không trả công thức hiện hành.
+
+## Trạng thái sau bàn giao
+
+Thành phẩm có hồ sơ xác nhận bàn giao đủ sản lượng của đúng mẻ trả `status: HANDED_OVER`.
+`handover.deliveredAt` / `lifecycle.handedOverAt` là mốc nhận tại nơi phục vụ; `lifecycle.expiresAt` vẫn giữ nguyên hạn sử dụng đã ghi nhận.
+Khi xem lịch sử sau hạn dùng, không chuyển thành phẩm đã bàn giao thành `EXPIRED` chỉ vì thời gian hiện tại đã qua hạn.
+`COMPLETED` chỉ là hoàn tất chế biến/kiểm tra; khởi hành vận chuyển cũng chưa phải nhận tại nơi phục vụ. Các trường hợp chưa xác nhận bàn giao vẫn kiểm tra hết hạn bình thường.
+Đơn chia nhiều đợt được đối chiếu theo từng `batchId` trong hồ sơ bàn giao, không suy đoán toàn bộ đơn đã giao từ một đợt.
+Không suy diễn “đã sử dụng/đã ăn” từ việc bàn giao. Dữ liệu cũ thiếu hồ sơ bàn giao không tự động được coi là đã bàn giao.

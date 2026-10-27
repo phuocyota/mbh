@@ -29,7 +29,7 @@ import {
 import { FinishedUnit } from '../../entities/finished-unit.entity';
 import { FullTraceQueryDto } from './dto/full-trace-query.dto';
 import { normalizePagination, toPaginationResponse } from '../../common/dto/pagination.dto';
-import { traceStatus } from '../production-trace/production-trace.rules';
+import { traceStatus, confirmedBatchHandover } from '../production-trace/production-trace.rules';
 import { localDate } from '../stock/stock-movement.service';
 
 export interface LotDetails {
@@ -953,6 +953,13 @@ export class StockTraceService {
     };
   }
 
+  async getBatchHandover(batch: KitchenProductionBatch) {
+    const flow = await this.kitchenOperationRepository.findOne({ where: {
+      kind: 'task-flow', parentId: batch.details?.workflowTicketId || batch.id,
+    } });
+    return confirmedBatchHandover(flow?.payload, batch.id, batch.actualQuantity);
+  }
+
   private async getProductionFullTrace(
     batchId: string,
     query: FullTraceQueryDto,
@@ -962,12 +969,13 @@ export class StockTraceService {
       where: { id: batchId },
     });
     if (!batch) throw new NotFoundException('BATCH_NOT_FOUND');
-    const [product, movements] = await Promise.all([
+    const [product, movements, handover] = await Promise.all([
       this.productRepository.findOne({ where: { id: batch.productId } }),
       this.stockMovementRepository.find({
         where: { referenceId: batch.id },
         order: { createdAt: 'ASC' },
       }),
+      this.getBatchHandover(batch),
     ]);
     // Trace actual lots issued to this batch, never infer origins from the current recipe.
     const issued = new Map<
@@ -1066,6 +1074,7 @@ export class StockTraceService {
       readyAt: batch.readyAt || null,
       completedAt: batch.completedAt || null,
       expiresAt: unit?.expiresAt || batch.details?.servingExpiresAt || null,
+      handedOverAt: handover?.deliveredAt || null,
     };
     return {
       generatedAt: new Date().toISOString(),
@@ -1092,7 +1101,10 @@ export class StockTraceService {
         unit ? 'UNIT' : 'BATCH',
         batch.status,
         lifecycle.expiresAt,
+        new Date(),
+        handover?.deliveredAt,
       ),
+      handover,
       production: {
         batchId: batch.id,
         status: batch.status,
@@ -1116,6 +1128,7 @@ export class StockTraceService {
                 ['MAKE', lifecycle.startedAt],
                 ['READY', lifecycle.readyAt],
                 ['COMPLETED', lifecycle.completedAt],
+                ['HANDED_OVER', lifecycle.handedOverAt],
                 ['EXPIRED_AT', lifecycle.expiresAt],
               ]
                 .filter(([, at]) => !!at)
